@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gals Panic — Online Co-op</title>
+<style>
+  :root { --bg:#0b0d16; --panel:#161a2b; --ink:#e8ebf7; --muted:#8b93b5; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:radial-gradient(1200px 800px at 50% -10%, #1a1f38, var(--bg));
+         color:var(--ink); font-family:system-ui,"Segoe UI",sans-serif;
+         display:flex; flex-direction:column; align-items:center; gap:10px; padding:14px; }
+  h1 { margin:2px 0 0; font-size:20px; } h1 span { color:#ff5db1; }
+  #hud { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .chip { background:var(--panel); border:1px solid #232a44; border-radius:12px; padding:7px 12px;
+          display:flex; flex-direction:column; gap:2px; min-width:120px; }
+  .chip .top { display:flex; align-items:center; gap:7px; font-weight:600; font-size:13px; }
+  .chip .dot { width:12px; height:12px; border-radius:4px; box-shadow:0 0 8px currentColor; }
+  .chip .meta { font-size:11px; color:var(--muted); display:flex; justify-content:space-between; }
+  .chip.dead { opacity:.4; filter:grayscale(1); }
+  .chip.me { outline:2px solid #ff5db1; }
+  canvas { background:#05060c; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  #help { color:var(--muted); font-size:12px; text-align:center; max-width:640px; line-height:1.5; }
+  #status { font-size:13px; color:#ffb400; min-height:18px; }
+  kbd { background:#232a44; border-radius:5px; padding:1px 6px; font-size:11px; }
+  button { background:#ff5db1; color:#fff; border:0; border-radius:8px; padding:8px 14px; font-size:14px; cursor:pointer; }
+</style>
+</head>
+<body>
+  <h1>GALS <span>PANIC</span> — Online Co-op</h1>
+  <div id="status">서버 연결 중…</div>
+  <div id="hud"></div>
+  <canvas id="c" width="512" height="512"></canvas>
+  <div id="help">
+    <b>방향키</b>로 이동 — 안전지대에서 빈 공간으로 들어가면 선이 그려지고, 다시 안전지대에 닿으면 안쪽이 점유됩니다.
+    빨간 적이 당신의 선에 닿으면 목숨을 잃어요. 다 함께 <b>80%</b>를 열면 클리어!
+    <div style="margin-top:6px"><button id="restart" style="display:none">다음/재시작 (Enter)</button></div>
+  </div>
+
+<script type="module">
+import { Client } from "https://unpkg.com/colyseus.js@0.15.0/dist/colyseus.js";
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+const restartBtn = document.getElementById("restart");
+
+let room = null, state = null, GW = 64, GH = 64;
+const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
+img.onload = () => { imgReady = true; };
+
+async function connect() {
+  try {
+    const client = new Client("ws://localhost:2567");
+    room = await client.joinOrCreate("game", { name: "Guest" });
+    statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
+    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; });
+    room.state.listen?.("imageId", (v) => { if (v) img.src = `http://localhost:2567/images/${v}_blur.jpg`; });
+  } catch (e) {
+    statusEl.textContent = "서버 연결 실패 — server 폴더에서 npm start 후 새로고침하세요";
+    console.error(e);
+  }
+}
+connect();
+
+// ---- input: send held direction (0..4) on change ----
+const CODE_DIR = {
+  ArrowUp:1, KeyW:1, ArrowDown:2, KeyS:2, ArrowLeft:3, KeyA:3, ArrowRight:4, KeyD:4,
+};
+const pressOrder = [];
+let lastSentDir = -1;
+function currentDir() {
+  let dir = 0;
+  for (const code of pressOrder) if (CODE_DIR[code] != null) dir = CODE_DIR[code];
+  return dir;
+}
+function syncDir() {
+  const d = currentDir();
+  if (d !== lastSentDir && room) { room.send("input", { dir: d }); lastSentDir = d; }
+}
+window.addEventListener("keydown", (e) => {
+  if (CODE_DIR[e.code] != null || e.code === "Enter") e.preventDefault();
+  if (e.code === "Enter") { room?.send("restart"); return; }
+  if (!pressOrder.includes(e.code)) pressOrder.push(e.code);
+  syncDir();
+});
+window.addEventListener("keyup", (e) => {
+  const i = pressOrder.indexOf(e.code); if (i >= 0) pressOrder.splice(i, 1);
+  syncDir();
+});
+restartBtn.onclick = () => room?.send("restart");
+
+// ---- render ----
+function playerColor(owner) {
+  const cs = ["#22d3ee","#f472b6","#a3e635","#fb923c"];
+  return cs[(owner - 1) % cs.length] || "#fff";
+}
+
+function render() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (state && state.cells.length) {
+    const cw = W / GW, ch = H / GH;
+    // grid: claimed reveals art, empty stays dark
+    for (let i = 0; i < GW * GH; i++) {
+      const cx = i % GW, cy = (i / GW) | 0;
+      if (state.cells[i] === 1) {
+        if (imgReady) ctx.drawImage(img, cx*(img.width/GW), cy*(img.height/GH), img.width/GW, img.height/GH,
+                                    cx*cw, cy*ch, cw+1, ch+1);
+        else { ctx.fillStyle = "#2a3350"; ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1); }
+      } else {
+        ctx.fillStyle = "#080a14"; ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1);
+      }
+    }
+    // trails
+    for (let i = 0; i < GW * GH; i++) {
+      const owner = state.trail[i];
+      if (owner) {
+        const cx = i % GW, cy = (i / GW) | 0;
+        ctx.fillStyle = playerColor(owner);
+        ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1);
+      }
+    }
+    // enemies
+    state.enemies.forEach((e) => {
+      ctx.fillStyle = "#ff3b5c";
+      ctx.shadowColor = "#ff3b5c"; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(e.x*cw, e.y*ch, cw*1.4, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
+    });
+    // players
+    state.players.forEach((p) => {
+      if (p.out) return;
+      ctx.fillStyle = "#fff"; ctx.fillRect(p.x*cw-1, p.y*ch-1, cw+2, ch+2);
+      ctx.fillStyle = p.color; ctx.fillRect(p.x*cw, p.y*ch, cw+1, ch+1);
+    });
+    drawHud();
+    if (state.phase === "won" || state.phase === "lost") drawOverlay();
+  }
+  requestAnimationFrame(render);
+}
+
+function drawOverlay() {
+  const W = canvas.width, H = canvas.height;
+  ctx.fillStyle = "rgba(8,10,20,.8)";
+  ctx.fillRect(W/2-180, H/2-70, 360, 140);
+  ctx.textAlign = "center";
+  ctx.fillStyle = state.phase === "won" ? "#a3e635" : "#ff5db1";
+  ctx.font = "bold 34px system-ui";
+  ctx.fillText(state.phase === "won" ? `LEVEL ${state.level} CLEAR!` : "GAME OVER", W/2, H/2-10);
+  ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
+  ctx.fillText("Enter 로 " + (state.phase === "won" ? "다음 레벨" : "재시작"), W/2, H/2+24);
+  ctx.textAlign = "left";
+}
+
+function drawHud() {
+  const hud = document.getElementById("hud");
+  const total = state.totalInterior || 1;
+  const ratio = Math.round(state.claimedInterior / total * 100);
+  let html = "";
+  state.players.forEach((p) => {
+    const me = room && p.id === room.sessionId;
+    const pct = Math.round(p.claimed / total * 100);
+    html += `<div class="chip ${p.out ? "dead" : ""} ${me ? "me" : ""}">
+      <div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}${me?" (나)":""}</div>
+      <div class="meta"><span>${pct}%</span><span>${p.out?"OUT":"♥"+p.lives}</span></div></div>`;
+  });
+  html += `<div class="chip"><div class="top">진행 · Lv ${state.level}</div>
+    <div class="meta"><span>${ratio}%</span><span>목표 80%</span></div></div>`;
+  hud.innerHTML = html;
+  restartBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
+}
+render();
+</script>
+</body>
+</html>

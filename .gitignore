@@ -1,0 +1,5 @@
+node_modules/
+dist/
+server/public/images/*_orig.*
+.env
+.DS_Store

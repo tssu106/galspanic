@@ -90,6 +90,12 @@ export class GameRoom extends Room<GameState> {
       p.lives = sp.lives; p.claimed = sp.claimed; p.out = sp.out ? 1 : 0;
     });
 
+    // the sim may add enemies mid-round as the reveal grows — mirror them
+    while (this.state.enemies.length < this.sim.enemies.length) {
+      const se = this.sim.enemies[this.state.enemies.length];
+      const es = new Enemy(); es.x = se.x; es.y = se.y;
+      this.state.enemies.push(es);
+    }
     // sync enemies (positions only)
     for (let i = 0; i < this.sim.enemies.length && i < this.state.enemies.length; i++) {
       const es = this.state.enemies[i];

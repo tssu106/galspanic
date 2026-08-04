@@ -39,6 +39,8 @@ export class GalSim {
   totalInterior = (COLS - 2 * B) * (ROWS - 2 * B);
   claimedInterior = 0;
   over: null | "won" | "lost" = null;
+  enemySpeed = 8;
+  spawnThresholds: number[] = [];   // reveal marks that add an enemy
 
   // change tracking so the room only syncs cells that actually changed
   gridDirty = new Set<number>();
@@ -73,20 +75,40 @@ export class GalSim {
       p.claimed = 0; p.acc = 0; p.trailCells.length = 0;
     }
 
-    // enemies scale with players & level
+    // enemies scale with players & level, and grow as the picture is revealed
     this.enemies = [];
+    this.enemySpeed = 8 + (level - 1) * 1.5;   // cells per second
+    this.spawnThresholds = [0.20, 0.40, 0.60];
     const active = Math.max(1, this.players.length);
     const count = 1 + active + (level - 1);
-    const speed = 8 + (level - 1) * 1.5;   // cells per second
     for (let i = 0; i < count; i++) {
       const ang = Math.random() * Math.PI * 2;
       this.enemies.push({
         x: COLS / 2 + (Math.random() - 0.5) * 16,
         y: ROWS / 2 + (Math.random() - 0.5) * 12,
-        vx: Math.cos(ang) * speed || speed,
-        vy: Math.sin(ang) * speed || speed,
+        vx: Math.cos(ang) * this.enemySpeed || this.enemySpeed,
+        vy: Math.sin(ang) * this.enemySpeed || this.enemySpeed,
       });
     }
+  }
+
+  // spawn one enemy at a random empty (and trail-free) cell
+  spawnEnemy(): boolean {
+    for (let t = 0; t < 300; t++) {
+      const x = B + Math.floor(Math.random() * (COLS - 2 * B));
+      const y = B + Math.floor(Math.random() * (ROWS - 2 * B));
+      const i = idx(x, y);
+      if (this.grid[i] === EMPTY && this.trail[i] === 0) {
+        const ang = Math.random() * Math.PI * 2;
+        this.enemies.push({
+          x: x + 0.5, y: y + 0.5,
+          vx: Math.cos(ang) * this.enemySpeed || this.enemySpeed,
+          vy: Math.sin(ang) * this.enemySpeed || this.enemySpeed,
+        });
+        return true;
+      }
+    }
+    return false;
   }
 
   addPlayer(sessionId: string, owner: number): SimPlayer {
@@ -158,6 +180,10 @@ export class GalSim {
 
     p.claimed += gained;
     this.claimedInterior += gained;
+    while (this.spawnThresholds.length && this.ratio >= this.spawnThresholds[0]) {
+      this.spawnThresholds.shift();
+      this.spawnEnemy();
+    }
     if (this.ratio >= CLEAR_RATIO) this.over = "won";
   }
 

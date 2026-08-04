@@ -80,6 +80,7 @@ function syncDir() {
 }
 window.addEventListener("keydown", (e) => {
   if (CODE_DIR[e.code] != null || e.code === "Enter") e.preventDefault();
+  if (e.repeat) return;                       // ignore OS key auto-repeat
   if (e.code === "Enter") { room?.send("restart"); return; }
   if (!pressOrder.includes(e.code)) pressOrder.push(e.code);
   syncDir();
@@ -88,6 +89,11 @@ window.addEventListener("keyup", (e) => {
   const i = pressOrder.indexOf(e.code); if (i >= 0) pressOrder.splice(i, 1);
   syncDir();
 });
+// losing focus drops all held keys and tells the server to stop, so the marker
+// never keeps moving in the last direction after a missed keyup.
+function releaseAllKeys(){ pressOrder.length = 0; syncDir(); }
+window.addEventListener("blur", releaseAllKeys);
+document.addEventListener("visibilitychange", () => { if (document.hidden) releaseAllKeys(); });
 restartBtn.onclick = () => room?.send("restart");
 
 // ---- render ----

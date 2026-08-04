@@ -320,6 +320,7 @@ window.addEventListener("keydown", (e) => {
   const handled = ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(e.code)
     || /^(Key|Numpad|Digit)/.test(e.code);
   if (handled) e.preventDefault();
+  if (e.repeat) return;                 // ignore OS key auto-repeat
 
   if (state === "menu") {
     if (e.code === "Digit1"||e.code==="Numpad1") { menuSel=1; newGame(1); }
@@ -344,6 +345,11 @@ window.addEventListener("keyup", (e) => {
   const i = pressOrder.indexOf(e.code);
   if (i >= 0) pressOrder.splice(i,1);
 });
+// losing focus (alt-tab / click away) drops all held keys, so a marker never
+// gets "stuck" moving in the last direction after a missed keyup.
+function releaseAllKeys(){ pressOrder.length = 0; }
+window.addEventListener("blur", releaseAllKeys);
+document.addEventListener("visibilitychange", () => { if (document.hidden) releaseAllKeys(); });
 // resume audio on first interaction (autoplay policy)
 window.addEventListener("pointerdown", () => audio.resume(), { once:false });
 canvas.addEventListener("pointerdown", () => { if (state==="menu") newGame(menuSel); });

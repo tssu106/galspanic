@@ -41,7 +41,7 @@
   </div>
   <div id="help">
     안전지대(칠해진 곳) 위를 걷다 빈 공간으로 들어가면 <b>선</b>이 그려집니다. 선이 다시 안전지대에 닿으면 안쪽이 <b>점유</b>되어 그림이 드러납니다.
-    <br>빨간 적이 당신의 <b>선</b>에 닿으면 목숨을 잃어요. 적을 좁은 곳에 <b>가두면 포획</b>! 화면의 <b>80%</b>를 열면 클리어!
+    <br>빨간 적이 당신의 <b>선</b>에 닿으면 목숨을 잃어요. <b>포수</b>의 탄환은 <b>안전지대에서도</b> 맞으면 사망! 적을 좁은 곳에 <b>가두면 포획</b>! 화면의 <b>80%</b>를 열면 클리어!
     <br>선을 긋는 <b>도중 멈추면</b> 그린 선을 <b>따라 되짚어</b> 시작 지점으로 돌아갑니다. · <kbd>P</kbd> 일시정지 · <kbd>R</kbd> 재시작
   </div>
 
@@ -75,11 +75,13 @@ const PLAYER_DEFS = [
 // behavior: 'bounce' straight-line + wall reflect · 'wander' occasional turns ·
 //           'hunt' mild homing toward the nearest (drawing) player.
 // speed is a multiplier on the level's base enemySpeed. Tougher types unlock by level.
+// gun/fireEvery: a shooter that fires projectiles which kill even on the safe zone.
 const ENEMY_TYPES = [
   { key:"star",   name:"별똥이", color:"#ff3b5c", r:2.2, speed:1.00, behavior:"bounce", shape:"star",     minLevel:1, weight:3 },
   { key:"saw",    name:"톱니",   color:"#f59e0b", r:2.7, speed:1.15, behavior:"bounce", shape:"saw",      minLevel:1, weight:2 },
   { key:"blob",   name:"슬라임", color:"#a855f7", r:3.1, speed:0.70, behavior:"wander", shape:"blob",     minLevel:2, weight:2 },
   { key:"ghost",  name:"유령",   color:"#e0e7ff", r:2.5, speed:0.90, behavior:"wander", shape:"ghost",    minLevel:2, weight:1 },
+  { key:"gunner", name:"포수",   color:"#ef4444", r:2.7, speed:0.55, behavior:"bounce", shape:"turret",   minLevel:2, weight:2, gun:true, fireEvery:2.4 },
   { key:"dart",   name:"추적자", color:"#22d3ee", r:1.9, speed:1.55, behavior:"hunt",   shape:"triangle", minLevel:3, weight:2 },
 ];
 
@@ -126,6 +128,7 @@ class GalGame {
     // Each enemy is one of several archetypes (see ENEMY_TYPES) with its own look
     // and movement; tougher variants unlock as the level climbs.
     this.enemies = [];
+    this.projectiles = [];                           // bullets fired by shooter enemies
     this.enemySpeed = 20 + (level-1)*4;
     this.spawnThresholds = [0.20, 0.40, 0.60];       // add one enemy at each reveal mark
     const enemyCount = 1 + numPlayers + (level-1);
@@ -151,14 +154,20 @@ class GalGame {
     const t = this.pickEnemyType();
     const ang = Math.random()*Math.PI*2;
     const sp = this.enemySpeed * t.speed;
+    // size is derived from speed: the slower a monster, the bigger it is (purely
+    // visual — collisions use the center cell). So star (1.0x) is larger than the
+    // fast saw/dart, and the sluggish slime/gunner are the biggest.
+    const rad = 2.5 / Math.pow(t.speed, 0.7);
     return {
-      type: t.key, name: t.name, color: t.color, r: t.r,
+      type: t.key, name: t.name, color: t.color, r: rad,
       shape: t.shape, behavior: t.behavior, speed: sp,
       x, y,
       vx: Math.cos(ang)*sp || sp,
       vy: Math.sin(ang)*sp || sp,
       spin: Math.random()*6,
       wanderT: 0.4 + Math.random()*1.0,
+      gun: !!t.gun, fireEvery: t.fireEvery || 0, aim: ang,     // shooter state
+      cooldown: (t.fireEvery || 2) * (0.5 + Math.random()*0.8),
     };
   }
 
@@ -255,19 +264,27 @@ class GalGame {
       if (inBounds(ex,ey)) { const c = comp[idx(ex,ey)]; if (c >= 0) enemiesOf[c].push(e); }
     }
 
-    // 4) decide each component's fate
+    // 4) decide each component's fate. Only the single largest enemy-bearing
+    //    region (the "main field") stays open; every smaller enemy region is
+    //    claimed and its enemies captured. So splitting the board in half frees
+    //    the smaller side and traps whatever it contains. A lone enemy boxed into
+    //    a tiny pocket (<= TRAP_RATIO) is captured too, even if it's the only one.
+    let mainId = -1, mainSize = -1;
+    for (let id = 0; id < nComp; id++) {
+      if (enemiesOf[id].length && size[id] > mainSize) { mainSize = size[id]; mainId = id; }
+    }
     const trapThreshold = this.totalInterior * TRAP_RATIO;
     const claimIt = new Uint8Array(nComp);
     const trapped = new Set();
     let trapCount = 0, trapSX = 0, trapSY = 0;
     for (let id = 0; id < nComp; id++) {
       const es = enemiesOf[id];
-      if (es.length === 0) { claimIt[id] = 1; }              // empty pocket -> claim (as before)
-      else if (size[id] <= trapThreshold) {                 // enemy boxed into a small pocket -> trapped!
+      if (es.length === 0) { claimIt[id] = 1; continue; }   // empty pocket -> claim (as before)
+      const keepOpen = (id === mainId) && size[id] > trapThreshold;
+      if (!keepOpen) {                                       // smaller/boxed enemy region -> trapped!
         claimIt[id] = 1;
         for (const e of es) { trapped.add(e); trapSX += e.x; trapSY += e.y; trapCount++; }
       }
-      // else: a large region the enemy still roams freely -> stays open
     }
 
     // 5) claim the doomed components
@@ -381,6 +398,42 @@ class GalGame {
         const p = this.players.find(q => q.id === owner);
         if (p) this.killPlayer(p);
       }
+
+      // shooters aim at and fire on the nearest player
+      if (e.gun) {
+        const tgt = this.nearestTarget(e);
+        if (tgt) e.aim = Math.atan2(tgt.y - e.y, tgt.x - e.x);
+        e.cooldown -= dt;
+        if (e.cooldown <= 0 && tgt) {
+          e.cooldown = e.fireEvery * (0.85 + Math.random()*0.3);
+          const bs = 46;                       // bullet speed (cells/sec)
+          this.projectiles.push({ x:e.x, y:e.y, vx:Math.cos(e.aim)*bs, vy:Math.sin(e.aim)*bs, life:4, r:1.2 });
+          this.onShoot && this.onShoot(e);
+        }
+      }
+    }
+
+    // bullets fly over walls AND the safe zone, killing any player they touch
+    // as well as the owner of any trail (drawing line) they cross.
+    for (let k=this.projectiles.length-1; k>=0; k--) {
+      const pr = this.projectiles[k];
+      pr.x += pr.vx*dt; pr.y += pr.vy*dt; pr.life -= dt;
+      let gone = pr.life <= 0 || pr.x < 0 || pr.y < 0 || pr.x >= COLS || pr.y >= ROWS;
+      if (!gone) {
+        for (const p of this.players) {
+          if (p.out) continue;
+          const dx = p.x - pr.x, dy = p.y - pr.y;
+          if (dx*dx + dy*dy < 2.2*2.2) { this.killPlayer(p); gone = true; break; }
+        }
+      }
+      if (!gone) {                                    // hit a trail cell -> kill its owner
+        const bx = Math.floor(pr.x), by = Math.floor(pr.y);
+        if (inBounds(bx, by)) {
+          const owner = this.trail[idx(bx, by)];
+          if (owner) { const p = this.players.find(q => q.id === owner); if (p) { this.killPlayer(p); gone = true; } }
+        }
+      }
+      if (gone) this.projectiles.splice(k, 1);
     }
   }
 }
@@ -398,57 +451,141 @@ const maskCanvas = document.createElement("canvas");
 maskCanvas.width = COLS*CELL; maskCanvas.height = ROWS*CELL;
 const mctx = maskCanvas.getContext("2d");
 
-// ---- procedural, family-friendly artwork so no external assets are needed
+// ---- procedural artwork: a pretty pastel motif (no external assets). The
+//      palette and the motif itself are chosen from the seed, so every level
+//      reveals a different picture (heart / star / flower / butterfly / gem / moon).
+const MOTIF_COLORS = ["#ff5db1","#ff2d78","#ffd166","#06d6a0","#4cc9f0","#b5179e","#f72585","#ff9f1c","#8338ec"];
+
 function generateArt(seed) {
   const W = artCanvas.width, H = artCanvas.height;
-  let s = seed*9301 + 49297;
-  const rnd = () => { s = (s*9301 + 49297) % 233280; return s/233280; };
+  let s = (seed*2654435761) >>> 0;
+  const rnd = () => { s = (s*1664525 + 1013904223) >>> 0; return s/4294967296; };
+
   const palettes = [
     ["#ff9a9e","#fecfef","#fbc2eb","#a18cd1"],
     ["#f6d365","#fda085","#f093fb","#f5576c"],
     ["#84fab0","#8fd3f4","#a6c1ee","#c2e9fb"],
     ["#fddb92","#d1fdff","#9890e3","#b1f4cf"],
     ["#ff6a88","#ff99ac","#fcb69f","#ffdde1"],
+    ["#a1c4fd","#c2e9fb","#fbc2eb","#f5576c"],
   ];
   const pal = palettes[Math.floor(rnd()*palettes.length)];
   const g = actx.createLinearGradient(0,0,W,H);
   g.addColorStop(0, pal[0]); g.addColorStop(.5, pal[1]); g.addColorStop(1, pal[3]);
   actx.fillStyle = g; actx.fillRect(0,0,W,H);
+
   // soft bokeh
   for (let i=0;i<70;i++){
-    const r = 20+rnd()*120;
+    const r = 20+rnd()*140;
     const grd = actx.createRadialGradient(rnd()*W, rnd()*H, 0, rnd()*W, rnd()*H, r);
     actx.globalAlpha = .10+rnd()*.18;
     grd.addColorStop(0, pal[Math.floor(rnd()*pal.length)]);
     grd.addColorStop(1, "rgba(255,255,255,0)");
-    actx.fillStyle = grd;
-    actx.beginPath(); actx.arc(rnd()*W, rnd()*H, r, 0, Math.PI*2); actx.fill();
+    actx.fillStyle = grd; actx.beginPath(); actx.arc(rnd()*W, rnd()*H, r, 0, 7); actx.fill();
   }
   actx.globalAlpha = 1;
-  // big centered motif (heart)
-  const cx=W/2, cy=H*0.46, sc=Math.min(W,H)*0.34;
-  const hg = actx.createLinearGradient(cx-sc, cy-sc, cx+sc, cy+sc);
-  hg.addColorStop(0,"#ff5db1"); hg.addColorStop(1,"#ff2d78");
-  actx.fillStyle = hg;
-  actx.beginPath();
-  for (let t=0;t<=Math.PI*2;t+=0.02){
-    const hx = 16*Math.pow(Math.sin(t),3);
-    const hy = 13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
-    const px = cx + hx*(sc/16), py = cy - hy*(sc/16);
-    t===0 ? actx.moveTo(px,py) : actx.lineTo(px,py);
-  }
-  actx.closePath();
-  actx.shadowColor="rgba(255,45,120,.6)"; actx.shadowBlur=40; actx.fill(); actx.shadowBlur=0;
+
+  // big centered motif
+  const cx = W/2, cy = H*0.46, sc = Math.min(W,H)*0.34;
+  const c1 = MOTIF_COLORS[Math.floor(rnd()*MOTIF_COLORS.length)];
+  const c2 = MOTIF_COLORS[Math.floor(rnd()*MOTIF_COLORS.length)];
+  const mg = actx.createLinearGradient(cx-sc, cy-sc, cx+sc, cy+sc);
+  mg.addColorStop(0, c1); mg.addColorStop(1, c2);
+  actx.fillStyle = mg;
+  actx.shadowColor = "rgba(255,255,255,.55)"; actx.shadowBlur = 40;
+  const motifs = ["heart","star","flower","butterfly","gem","moon"];
+  drawMotif(motifs[Math.floor(rnd()*motifs.length)], cx, cy, sc, rnd);
+  actx.shadowBlur = 0;
+
   // sparkles
-  actx.fillStyle="rgba(255,255,255,.9)";
-  for (let i=0;i<40;i++){
-    const x=rnd()*W, y=rnd()*H, r=1+rnd()*2.5;
-    actx.beginPath(); actx.arc(x,y,r,0,Math.PI*2); actx.fill();
-  }
+  actx.fillStyle = "rgba(255,255,255,.9)";
+  for (let i=0;i<45;i++){ const x=rnd()*W, y=rnd()*H, r=1+rnd()*2.5;
+    actx.beginPath(); actx.arc(x,y,r,0,7); actx.fill(); }
+
   // caption
-  actx.fillStyle="rgba(255,255,255,.85)";
-  actx.font="bold 34px system-ui, sans-serif"; actx.textAlign="center";
+  actx.fillStyle = "rgba(255,255,255,.85)";
+  actx.font = "bold 34px system-ui, sans-serif"; actx.textAlign = "center";
   actx.fillText("LEVEL "+seed, W/2, H-40);
+  actx.textAlign = "left";
+}
+
+// draw one motif centered at (cx,cy) with radius ~sc, using the current fillStyle
+function drawMotif(kind, cx, cy, sc, rnd) {
+  if (kind === "heart") {
+    actx.beginPath();
+    for (let t=0;t<=Math.PI*2;t+=0.02){
+      const hx = 16*Math.pow(Math.sin(t),3);
+      const hy = 13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
+      const px = cx + hx*(sc/16), py = cy - hy*(sc/16);
+      t===0 ? actx.moveTo(px,py) : actx.lineTo(px,py);
+    }
+    actx.closePath(); actx.fill();
+
+  } else if (kind === "star") {
+    const spikes = 5, outer = sc, inner = sc*0.45;
+    actx.beginPath();
+    for (let k=0;k<spikes*2;k++){
+      const a = -Math.PI/2 + k*Math.PI/spikes;
+      const r = k%2 ? inner : outer;
+      const px = cx+Math.cos(a)*r, py = cy+Math.sin(a)*r;
+      k===0 ? actx.moveTo(px,py) : actx.lineTo(px,py);
+    }
+    actx.closePath(); actx.fill();
+
+  } else if (kind === "flower") {
+    const petals = 6 + Math.floor(rnd()*3);
+    for (let k=0;k<petals;k++){
+      actx.save(); actx.translate(cx,cy); actx.rotate(k/petals*Math.PI*2);
+      actx.beginPath(); actx.ellipse(0,-sc*0.62,sc*0.26,sc*0.62,0,0,7); actx.fill();
+      actx.restore();
+    }
+    const savedShadow = actx.shadowBlur; actx.shadowBlur = 0;
+    actx.fillStyle = "#ffd166";
+    actx.beginPath(); actx.arc(cx,cy,sc*0.30,0,7); actx.fill();
+    actx.shadowBlur = savedShadow;
+
+  } else if (kind === "butterfly") {
+    actx.save(); actx.translate(cx,cy);
+    actx.beginPath(); actx.ellipse(-sc*0.46,-sc*0.34,sc*0.42,sc*0.34,-0.5,0,7); actx.fill();
+    actx.beginPath(); actx.ellipse( sc*0.46,-sc*0.34,sc*0.42,sc*0.34, 0.5,0,7); actx.fill();
+    actx.beginPath(); actx.ellipse(-sc*0.36, sc*0.38,sc*0.34,sc*0.30, 0.5,0,7); actx.fill();
+    actx.beginPath(); actx.ellipse( sc*0.36, sc*0.38,sc*0.34,sc*0.30,-0.5,0,7); actx.fill();
+    const savedShadow = actx.shadowBlur; actx.shadowBlur = 0;
+    actx.fillStyle = "#3a2b4d";
+    actx.beginPath(); actx.ellipse(0,0,sc*0.075,sc*0.72,0,0,7); actx.fill();
+    actx.shadowBlur = savedShadow;
+
+  } else if (kind === "gem") {
+    actx.beginPath();
+    actx.moveTo(cx, cy-sc);
+    actx.lineTo(cx+sc*0.72, cy-sc*0.22);
+    actx.lineTo(cx+sc*0.45, cy+sc);
+    actx.lineTo(cx-sc*0.45, cy+sc);
+    actx.lineTo(cx-sc*0.72, cy-sc*0.22);
+    actx.closePath(); actx.fill();
+    const savedShadow = actx.shadowBlur; actx.shadowBlur = 0;
+    actx.globalAlpha = .35; actx.strokeStyle = "#fff"; actx.lineWidth = sc*0.02;
+    actx.beginPath();
+    actx.moveTo(cx-sc*0.72,cy-sc*0.22); actx.lineTo(cx+sc*0.72,cy-sc*0.22);
+    actx.moveTo(cx, cy-sc); actx.lineTo(cx, cy+sc);
+    actx.moveTo(cx-sc*0.72,cy-sc*0.22); actx.lineTo(cx, cy+sc);
+    actx.moveTo(cx+sc*0.72,cy-sc*0.22); actx.lineTo(cx, cy+sc);
+    actx.stroke(); actx.globalAlpha = 1; actx.shadowBlur = savedShadow;
+
+  } else { // moon (crescent + small star)
+    actx.beginPath();
+    actx.arc(cx, cy, sc, Math.PI*0.35, Math.PI*1.65, false);
+    actx.arc(cx + sc*0.55, cy, sc*0.92, Math.PI*1.55, Math.PI*0.45, true);
+    actx.closePath(); actx.fill();
+    const spikes=5, outer=sc*0.3, inner=sc*0.13, tx=cx+sc*0.9, ty=cy-sc*0.6;
+    actx.beginPath();
+    for (let k=0;k<spikes*2;k++){
+      const a = -Math.PI/2 + k*Math.PI/spikes, r = k%2?inner:outer;
+      const px = tx+Math.cos(a)*r, py = ty+Math.sin(a)*r;
+      k===0 ? actx.moveTo(px,py) : actx.lineTo(px,py);
+    }
+    actx.closePath(); actx.fill();
+  }
 }
 
 // rebuild the dark overlay so only claimed cells reveal the art
@@ -488,6 +625,7 @@ function newGame(numPlayers, level=1) {
   game.onCancel = (p) => {
     audio.blip(300, .10, "triangle"); audio.blip(200, .12, "triangle");  // descending "undo"
   };
+  game.onShoot = () => audio.blip(440, .05, "square");
   game.onDeath = () => audio.blip(120, .18, "square");
   game.onEnd   = (r) => { state = "over"; audio.blip(r==='won'?740:90, .4, r==='won'?"triangle":"sawtooth"); };
   state = "playing";
@@ -604,6 +742,18 @@ function render(now) {
   // enemies
   for (const e of game.enemies) drawEnemy(e);
 
+  // projectiles (glowing bullets that ignore walls and the safe zone)
+  for (const pr of game.projectiles) {
+    const x = pr.x*CELL, y = pr.y*CELL, R = pr.r*CELL;
+    ctx.save();
+    ctx.fillStyle = "#ffe066";
+    ctx.shadowColor = "#ff4d2e"; ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(x - R*0.25, y - R*0.25, R*0.4, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
   // players
   for (const p of game.players) {
     if (p.out) continue;
@@ -695,6 +845,18 @@ function drawEnemy(e) {
     }
     ctx.closePath(); ctx.fill();
     ctx.globalAlpha = 1; ctx.shadowBlur = 0; eyes(R);
+  } else if (e.shape === "turret") {
+    // barrel pointing at the current aim, then a round body on top
+    ctx.rotate(e.aim || 0);
+    ctx.fillStyle = "#7f1d1d";
+    ctx.fillRect(0, -R*0.26, R*1.7, R*0.52);
+    ctx.rotate(-(e.aim || 0));
+    ctx.fillStyle = e.color;
+    ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#3f0d0d";
+    ctx.beginPath(); ctx.arc(0, 0, R*0.55, 0, 7); ctx.fill();
+    eyes(R);
   } else {
     // classic star
     ctx.rotate(e.spin);

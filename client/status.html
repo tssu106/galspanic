@@ -59,7 +59,10 @@
   <div class="cards">
     <div class="card"><div class="k">로컬 동일화면 co-op</div><div class="v ok">✅ 완성 · 서버 불필요</div></div>
     <div class="card"><div class="k">온라인 서버 권위 모드</div><div class="v ok">✅ 동작 · Colyseus</div></div>
-    <div class="card"><div class="k">몬스터 다양화 <span class="new">NEW</span></div><div class="v">5종 아키타입 + 고유 AI</div></div>
+    <div class="card"><div class="k">몬스터 다양화 <span class="new">NEW</span></div><div class="v">6종 아키타입 + 고유 AI</div></div>
+    <div class="card"><div class="k">투사체 포수 <span class="new">NEW</span></div><div class="v">안전지대도 탄에 맞으면 사망</div></div>
+    <div class="card"><div class="k">몬스터 포획(트랩) <span class="new">NEW</span></div><div class="v">작은 영역에 가두면 포획+점수</div></div>
+    <div class="card"><div class="k">레벨별 그림 변경 <span class="new">NEW</span></div><div class="v">하트·별·꽃·나비·보석·초승달</div></div>
     <div class="card"><div class="k">이미지 4배 확대 <span class="new">NEW</span></div><div class="v">800×600 → 1600×1200</div></div>
   </div>
 
@@ -83,6 +86,7 @@
       <tr><td><span class="dot" style="color:#f59e0b;background:#f59e0b"></span>톱니 (saw)</td><td>주황 톱니바퀴</td><td>1.15×</td><td><code>bounce</code> 직선 반사</td><td>1+</td></tr>
       <tr><td><span class="dot" style="color:#a855f7;background:#a855f7"></span>슬라임 (blob)</td><td>보라 젤리(꿈틀)</td><td>0.7×</td><td><code>wander</code> 무작위 전환</td><td>2+</td></tr>
       <tr><td><span class="dot" style="color:#e0e7ff;background:#e0e7ff"></span>유령 (ghost)</td><td>반투명 유령</td><td>0.9×</td><td><code>wander</code> 무작위 전환</td><td>2+</td></tr>
+      <tr><td><span class="dot" style="color:#ef4444;background:#ef4444"></span>포수 (gunner)</td><td>빨간 터렛(포신)</td><td>0.55×</td><td><code>bounce</code> + 투사체 발사</td><td>2+</td></tr>
       <tr><td><span class="dot" style="color:#22d3ee;background:#22d3ee"></span>추적자 (dart)</td><td>청록 삼각 화살</td><td>1.55×</td><td><code>hunt</code> 플레이어 추적</td><td>3+</td></tr>
     </tbody>
   </table>
@@ -91,19 +95,27 @@
     <li><b>wander</b>: 0.6~1.8초마다 진행 방향을 무작위로 틀어 예측 불가.</li>
     <li><b>hunt</b>: 가장 가까운 플레이어(특히 선을 긋는 중인 플레이어)를 향해 약하게 조준 → 선 긋는 동안 압박.</li>
     <li>이동 속도 크기는 항상 보존되고 <b>방향만</b> 바뀌어 조준/방황이 자연스럽다.</li>
+    <li><b>크기 = 속도 반비례</b>: 느린 몬스터일수록 크게 그려진다(<code>r = 2.5 / speed^0.7</code>, 순수 시각적). 별똥이는 빠른 톱니·추적자보다 크고, 굼뜬 슬라임·포수가 가장 크다.</li>
   </ul>
 
-  <h3>2) 몬스터 포획 (트랩 메커니즘)</h3>
-  <p>원작 Qix처럼 <b>적을 좁은 곳에 몰아넣는</b> 플레이에 보상을 준다.</p>
+  <h3>2) 투사체 포수 (gunner)</h3>
+  <p>느리게 돌아다니며 가장 가까운 플레이어를 조준해 약 2.4초마다 <b>탄환을 발사</b>한다.</p>
   <ul>
-    <li>선을 이어 <b>적을 작은 빈 영역(내부 면적의 10% 이하)에 완전히 가두면</b> → 그 구역 즉시 점유 + 갇힌 적 <b>제거</b> + <b>포획 보너스 +400점</b>(마리당).</li>
-    <li>여러 마리를 한 번에 가두면 모두 잡히고 보너스도 합산.</li>
-    <li>구현: 점유 시점에 빈칸을 <b>연결 요소</b>로 분해 → 적 없는 폭은 기존처럼 점유, 적이 든 <b>작은</b> 폭은 트랩, 적이 든 <b>넓은</b> 영역은 그대로 개방.</li>
-    <li>피드백: <code>포획! +400</code> 플로팅 팝업 + 효과음, HUD/결과창에 <code>🕸</code> 포획 수 표시. 순위는 <b>점수(점유 면적 + 포획 보너스)</b> 순.</li>
+    <li>탄환은 <b>벽과 안전지대를 무시</b>하고 직선으로 날아가, 맞으면 사망 — <b>안전지대에 서 있어도, 직접 맞아도, 그리는 중인 선(trail)에 맞아도</b> 그 선의 주인이 죽는다.</li>
+    <li>안전지대 캠핑을 막고, 선을 긋는 동안 추가 위협이 된다. 탄환은 화면 밖으로 나가거나 수명(4초)이 다하면 소멸.</li>
+    <li><code>this.projectiles</code> 로 관리, <code>updateEnemies</code> 에서 이동·충돌 처리. 피드백: 발사 효과음 + 빛나는 탄환.</li>
+  </ul>
+
+  <h3>3) 몬스터 포획 (트랩 메커니즘)</h3>
+  <p>원작 Qix처럼 <b>적을 몰아넣고 영역을 갈라내는</b> 플레이에 보상을 준다.</p>
+  <ul>
+    <li>점유 시점에 빈칸을 <b>연결 요소</b>로 분해 → <b>가장 큰 적 영역(메인 필드) 하나만</b> 열린 채 남고, 그보다 <b>작은 적 영역은 전부 점유 + 그 안의 적 포획</b>. 적 없는 폭은 기존처럼 점유.</li>
+    <li>즉 <b>화면을 반으로 가르면 비율이 작은 쪽이 통째로 밝혀지고</b> 그쪽 적이 포획된다. 단독 적을 작은 폭(<code>TRAP_RATIO≤10%</code>)에 가두는 것도 포획.</li>
+    <li>포획 보너스 <b>+400점</b>(마리당, 동시 포획 합산). 피드백: <code>포획! +400</code> 팝업 + 효과음, HUD/결과창 <code>🕸</code> 표시. 순위는 <b>점수(점유 면적 + 포획 보너스)</b> 순.</li>
     <li>밸런스 상수: <code>TRAP_RATIO=0.10</code>, <code>TRAP_BONUS=400</code> (튜닝 가능).</li>
   </ul>
 
-  <h3>3) 선 긋기 중 멈춤 = 되짚기</h3>
+  <h3>4) 선 긋기 중 멈춤 = 되짚기</h3>
   <p>빈 공간을 파먹는 도중에는 <b>계속 움직여야</b> 한다. 긴장감을 위한 장치.</p>
   <ul>
     <li>선을 긋는 중(안전지대 밖) <b>키 입력이 멈추면</b> <code>STALL_MS=400ms</code> 후 → 그린 선을 <b>따라 역순으로 되짚어 걸어서</b> 시작 지점까지 돌아간다(밟은 만큼 삭제, 점유 안 함).</li>
@@ -112,11 +124,11 @@
     <li>구현: <code>startRetreat(p)</code> → 이동 타이머마다 <code>retreatStep(p)</code> 로 trail 끝 셀부터 한 칸씩 되밟아 삭제.</li>
   </ul>
 
-  <h3>4) 이미지 4배 확대</h3>
+  <h3>5) 이미지 4배 확대 & 레벨별 그림 변경</h3>
   <ul>
     <li>셀 크기 <code>CELL 5 → 10</code> (그리드 해상도 160×120 유지) → 캔버스 <b>1600×1200</b> (면적 4배).</li>
-    <li>절차적 아트가 2배 해상도로 그려져 더 선명하다.</li>
-    <li><code>max-width:100%</code>로 뷰포트를 넘지 않게 축소 렌더 → 어떤 화면에서도 가로 스크롤 없이 크게 표시.</li>
+    <li>절차적 아트가 2배 해상도로 그려져 더 선명하다. <code>max-width:100%</code>로 뷰포트를 넘지 않게 축소 렌더.</li>
+    <li>숨은 그림은 레벨(시드)에 따라 <b>하트·별·꽃·나비·보석·초승달</b> 중 하나 + 파스텔 팔레트 랜덤 → 매 판 다른 그림. (<code>generateArt</code>/<code>drawMotif</code>, 외부 이미지 없음)</li>
   </ul>
 
   <h2>아키텍처</h2>
@@ -136,7 +148,7 @@ server/src/
 
   <h2>남은 로드맵</h2>
   <ol>
-    <li><b>온라인 엔진(<code>GalSim.ts</code>)에 5종 몬스터·이미지 확대 동기화</b> — 현재 신규 변경은 <code>local.html</code>에만 반영됨.</li>
+    <li><b>온라인 엔진(<code>GalSim.ts</code>)에 신규 기능 이식</b> — 6종 몬스터·투사체 포수·트랩(반 가르기)·되짚기·이미지 확대·레벨별 그림은 현재 <code>local.html</code>에만 반영됨.</li>
     <li>서버 타일 스트리밍으로 이미지 완전 보호.</li>
     <li>라인 위를 달리는 보조 적(Sparx) 추가로 원작 난이도 재현.</li>
     <li>클리어 후 "이 그림 뭐게?" 맞히기 보너스.</li>

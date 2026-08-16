@@ -41,8 +41,8 @@
   </div>
   <div id="help">
     안전지대(칠해진 곳) 위를 걷다 빈 공간으로 들어가면 <b>선</b>이 그려집니다. 선이 다시 안전지대에 닿으면 안쪽이 <b>점유</b>되어 그림이 드러납니다.
-    <br>빨간 적이 당신의 <b>선</b>에 닿으면 목숨을 잃어요. 화면의 <b>80%</b>를 열면 클리어! ·
-    <kbd>P</kbd> 일시정지 · <kbd>R</kbd> 재시작
+    <br>빨간 적이 당신의 <b>선</b>에 닿으면 목숨을 잃어요. 적을 좁은 곳에 <b>가두면 포획</b>! 화면의 <b>80%</b>를 열면 클리어!
+    <br>선을 긋는 <b>도중 멈추면</b> 그린 선을 <b>따라 되짚어</b> 시작 지점으로 돌아갑니다. · <kbd>P</kbd> 일시정지 · <kbd>R</kbd> 재시작
   </div>
 
 <script>
@@ -61,6 +61,9 @@ const B = 3;                              // border thickness (claimed ring)
 const EMPTY = 0, CLAIMED = 1;
 const TARGET = 0.80;                      // clear ratio
 const MOVE_MS = 26;                       // player step interval
+const STALL_MS = 400;                     // stop moving mid-draw this long -> the line is cancelled
+const TRAP_RATIO = 0.10;                  // enemy boxed into an empty pocket <=10% of interior = trapped
+const TRAP_BONUS = 400;                   // capture bonus points per trapped monster (tunable)
 const PLAYER_DEFS = [
   { name:"P1", color:"#22d3ee", keys:{ ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0] } },
   { name:"P2", color:"#f472b6", keys:{ KeyW:[0,-1], KeyS:[0,1], KeyA:[-1,0], KeyD:[1,0] } },
@@ -112,7 +115,9 @@ class GalGame {
         id: i+1, name: def.name, color: def.color, keymap: def.keys,
         x: sx, y: sy, spawnX: sx, spawnY: sy,
         drawing: false, lives: 3, out: false, claimed: 0,
-        acc: 0, trailCells: [],
+        traps: 0, bonus: 0,                 // monsters captured & bonus points earned
+        acc: 0, idle: 0, retreating: false, trailCells: [], // idle = ms stalled while drawing
+        drawOriginX: sx, drawOriginY: sy,   // safe cell a line started from (retrace target)
       });
     }
 
@@ -200,6 +205,7 @@ class GalGame {
       p.x = nx; p.y = ny;
       if (p.drawing) { this.closeArea(p); p.drawing = false; }
     } else {                                          // drawing into empty space
+      if (!p.drawing) { p.drawOriginX = p.x; p.drawOriginY = p.y; p.idle = 0; } // p.x/y is the safe cell we leave
       p.drawing = true;
       p.x = nx; p.y = ny;
       this.trail[ni] = p.id;
@@ -207,7 +213,10 @@ class GalGame {
     }
   }
 
-  // player's trail reconnected to safe zone -> claim enclosed empty regions
+  // player's trail reconnected to safe zone -> claim enclosed empty regions.
+  // Empty pockets with no enemy are claimed as usual. If a player boxes an enemy
+  // into a small pocket (a "trap"), that pocket is claimed, the enemy is removed,
+  // and the closer earns a capture bonus.
   closeArea(p) {
     let gained = 0;
     // 1) trail becomes solid wall
@@ -217,28 +226,64 @@ class GalGame {
     }
     p.trailCells.length = 0;
 
-    // 2) flood from every enemy across EMPTY cells -> "reachable" stays empty
-    const reach = new Uint8Array(N);
+    // 2) label connected components of the remaining EMPTY cells
+    const comp = new Int32Array(N); comp.fill(-1);
+    const size = []; const enemiesOf = [];
+    let nComp = 0;
     const stack = [];
-    for (const e of this.enemies) {
-      const ex = Math.floor(e.x), ey = Math.floor(e.y);
-      if (inBounds(ex,ey) && this.grid[idx(ex,ey)] === EMPTY && !reach[idx(ex,ey)]) {
-        reach[idx(ex,ey)] = 1; stack.push(ex,ey);
+    for (let s = 0; s < N; s++) {
+      if (this.grid[s] !== EMPTY || comp[s] !== -1) continue;
+      const id = nComp++;
+      comp[s] = id; stack.length = 0; stack.push(s);
+      let count = 0;
+      while (stack.length) {
+        const cur = stack.pop(); count++;
+        const cx = cur % COLS, cy = (cur / COLS) | 0;
+        const nb = [[cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]];
+        for (const [ax,ay] of nb) {
+          if (!inBounds(ax,ay)) continue;
+          const ai = idx(ax,ay);
+          if (this.grid[ai] === EMPTY && comp[ai] === -1) { comp[ai] = id; stack.push(ai); }
+        }
       }
-    }
-    while (stack.length) {
-      const y = stack.pop(), x = stack.pop();
-      const nb = [[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
-      for (const [ax,ay] of nb) {
-        if (!inBounds(ax,ay)) continue;
-        const ai = idx(ax,ay);
-        if (this.grid[ai] === EMPTY && !reach[ai]) { reach[ai] = 1; stack.push(ax,ay); }
-      }
+      size[id] = count; enemiesOf[id] = [];
     }
 
-    // 3) any empty cell the enemies can't reach gets claimed
-    for (let i=0; i<N; i++) {
-      if (this.grid[i] === EMPTY && !reach[i]) { this.grid[i] = CLAIMED; gained++; }
+    // 3) map each enemy to the component it sits in
+    for (const e of this.enemies) {
+      const ex = Math.floor(e.x), ey = Math.floor(e.y);
+      if (inBounds(ex,ey)) { const c = comp[idx(ex,ey)]; if (c >= 0) enemiesOf[c].push(e); }
+    }
+
+    // 4) decide each component's fate
+    const trapThreshold = this.totalInterior * TRAP_RATIO;
+    const claimIt = new Uint8Array(nComp);
+    const trapped = new Set();
+    let trapCount = 0, trapSX = 0, trapSY = 0;
+    for (let id = 0; id < nComp; id++) {
+      const es = enemiesOf[id];
+      if (es.length === 0) { claimIt[id] = 1; }              // empty pocket -> claim (as before)
+      else if (size[id] <= trapThreshold) {                 // enemy boxed into a small pocket -> trapped!
+        claimIt[id] = 1;
+        for (const e of es) { trapped.add(e); trapSX += e.x; trapSY += e.y; trapCount++; }
+      }
+      // else: a large region the enemy still roams freely -> stays open
+    }
+
+    // 5) claim the doomed components
+    for (let i = 0; i < N; i++) {
+      if (this.grid[i] === EMPTY && comp[i] >= 0 && claimIt[comp[i]]) { this.grid[i] = CLAIMED; gained++; }
+    }
+
+    // 6) capture: delete trapped enemies and award the bonus to the closer
+    if (trapCount > 0) {
+      this.enemies = this.enemies.filter(e => !trapped.has(e));
+      p.traps += trapCount;
+      p.bonus += TRAP_BONUS * trapCount;
+      this.onTrap && this.onTrap({
+        x: trapSX/trapCount, y: trapSY/trapCount,
+        count: trapCount, bonus: TRAP_BONUS * trapCount, color: p.color,
+      });
     }
 
     p.claimed += gained;
@@ -253,11 +298,39 @@ class GalGame {
     if (this.ratio >= TARGET) { this.over = 'won'; this.onEnd && this.onEnd('won'); }
   }
 
+  // player stalled mid-draw: begin retracing the drawn line back to its start.
+  // The line is not claimed and no life is lost — the player walks back along
+  // the trail (retreatStep), erasing it cell by cell, until reaching the origin.
+  startRetreat(p) {
+    if (!p.drawing || !p.trailCells.length) { p.drawing = false; return; }
+    p.drawing = false;
+    p.retreating = true;
+    p.idle = 0; p.acc = 0;
+    this.onCancel && this.onCancel(p);
+  }
+
+  // one step of the retrace: leave the tip cell (erasing it) and step back along
+  // the trail toward the origin. Ends when the whole line has been walked back.
+  retreatStep(p) {
+    if (!p.trailCells.length) {                     // already home
+      p.retreating = false; p.x = p.drawOriginX; p.y = p.drawOriginY; return;
+    }
+    const tip = p.trailCells.pop();
+    this.trail[tip] = 0;                            // erase the cell we're leaving (stays EMPTY)
+    if (p.trailCells.length) {
+      const back = p.trailCells[p.trailCells.length-1];
+      p.x = back % COLS; p.y = (back / COLS) | 0;   // step onto the previous trail cell
+    } else {
+      p.x = p.drawOriginX; p.y = p.drawOriginY;     // last hop back onto the safe zone
+      p.retreating = false;
+    }
+  }
+
   killPlayer(p) {
     for (const i of p.trailCells) this.trail[i] = 0;
     p.trailCells.length = 0;
-    p.drawing = false;
-    p.x = p.spawnX; p.y = p.spawnY; p.acc = 0;
+    p.drawing = false; p.retreating = false;
+    p.x = p.spawnX; p.y = p.spawnY; p.acc = 0; p.idle = 0;
     p.lives--;
     this.onDeath && this.onDeath(p);
     if (p.lives <= 0) {
@@ -396,6 +469,7 @@ let state = "menu";          // menu | playing | paused | over
 let menuSel = 2;             // chosen player count on the menu
 
 const pressOrder = [];       // codes currently held, in press order
+const flashes = [];          // floating capture popups {x,y,text,color,life,ttl}
 const audio = makeAudio();
 
 function newGame(numPlayers, level=1) {
@@ -405,6 +479,16 @@ function newGame(numPlayers, level=1) {
   game.dirty = false;
   game.onClaim = () => audio.blip(520, .05);
   game.onEnemySpawn = () => audio.blip(300, .12, "sawtooth");
+  game.onTrap = (info) => {
+    audio.blip(680, .06, "square"); audio.blip(1020, .11, "square");  // bright zap
+    flashes.push({ x: info.x*CELL, y: info.y*CELL, color: info.color,
+      text: info.count > 1 ? `포획 x${info.count}! +${info.bonus}` : `포획! +${info.bonus}`,
+      life: 1.2, ttl: 1.2 });
+  };
+  game.onCancel = (p) => {
+    audio.blip(300, .10, "triangle"); audio.blip(200, .12, "triangle");  // descending "undo"
+    flashes.push({ x: p.x*CELL, y: p.y*CELL, text: "취소", color: "#94a3b8", life: .7, ttl: .7 });
+  };
   game.onDeath = () => audio.blip(120, .18, "square");
   game.onEnd   = (r) => { state = "over"; audio.blip(r==='won'?740:90, .4, r==='won'?"triangle":"sawtooth"); };
   state = "playing";
@@ -465,16 +549,33 @@ function frame(now) {
     // players move on a fixed step timer
     for (const p of game.players) {
       if (p.out) continue;
+
+      // retracing a cancelled line back to its start (uncontrollable until home)
+      if (p.retreating) {
+        p.acc += dt*1000;
+        let guard = 0;
+        while (p.acc >= MOVE_MS && guard++ < 6) { p.acc -= MOVE_MS; game.retreatStep(p); if (!p.retreating) break; }
+        continue;
+      }
+
+      const held = dirFor(p);
+      // stalling mid-draw (no direction held) starts retracing the unfinished line
+      if (p.drawing) {
+        if (held) p.idle = 0;
+        else { p.idle += dt*1000; if (p.idle >= STALL_MS) { game.startRetreat(p); continue; } }
+      } else p.idle = 0;
+
       p.acc += dt*1000;
       let guard = 0;
       while (p.acc >= MOVE_MS && guard++ < 4) {
         p.acc -= MOVE_MS;
-        const d = dirFor(p);
-        if (d) game.step(p, d[0], d[1]);
+        if (held) game.step(p, held[0], held[1]);
       }
     }
     game.updateEnemies(dt);
     if (game.dirty) { rebuildMask(game); game.dirty = false; }
+    // age out capture popups
+    for (let i = flashes.length-1; i >= 0; i--) { flashes[i].life -= dt; if (flashes[i].life <= 0) flashes.splice(i,1); }
   }
 
   render(now);
@@ -512,6 +613,19 @@ function render(now) {
     ctx.fillRect(x-1, y-1, CELL+2, CELL+2);
     ctx.fillStyle = p.color;
     ctx.fillRect(x, y, CELL, CELL);
+  }
+
+  // floating capture popups
+  for (const f of flashes) {
+    const a = Math.max(0, f.life/f.ttl);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = "center";
+    ctx.font = "bold 40px system-ui, sans-serif";
+    ctx.fillStyle = f.color;
+    ctx.shadowColor = f.color; ctx.shadowBlur = 16;
+    ctx.fillText(f.text, f.x, f.y - (1-a)*40);
+    ctx.restore();
   }
 
   if (state === "paused") drawCenter("일시정지", "P 를 눌러 계속");
@@ -638,14 +752,16 @@ function drawOver() {
   ctx.font = "16px system-ui, sans-serif"; ctx.fillStyle="#c9d0f0";
   ctx.fillText(`공개율 ${Math.round(game.ratio*100)}%`, canvas.width/2, canvas.height/2 - 40);
 
-  // ranking by claimed area
-  const ranked = [...game.players].sort((a,b)=>b.claimed-a.claimed);
+  // ranking by score (claimed area + capture bonus)
+  const score = q => q.claimed + q.bonus;
+  const ranked = [...game.players].sort((a,b)=>score(b)-score(a));
   ctx.font = "18px system-ui, sans-serif";
   let y = canvas.height/2 - 8;
   ranked.forEach((p,i)=>{
     const pct = Math.round(p.claimed/game.totalInterior*100);
+    const tr = p.traps ? `  ·  🕸${p.traps}` : "";
     ctx.fillStyle = p.color;
-    ctx.fillText(`${i+1}위  ${p.name}  ·  ${pct}%  ·  ♥${Math.max(0,p.lives)}`, canvas.width/2, y);
+    ctx.fillText(`${i+1}위  ${p.name}  ·  ${pct}%${tr}  ·  ♥${Math.max(0,p.lives)}`, canvas.width/2, y);
     y += 30;
   });
   ctx.fillStyle = "#8b93b5"; ctx.font = "14px system-ui, sans-serif";
@@ -676,7 +792,7 @@ function requestHud() {
       el.className = "chip"; el.dataset.pid = p.id;
       el.innerHTML = `<div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}</div>
         <div class="bar"><i style="background:${p.color}"></i></div>
-        <div class="meta"><span class="pct">0%</span><span class="lives">♥♥♥</span></div>`;
+        <div class="meta"><span class="pct">0%</span><span class="traps"></span><span class="lives">♥♥♥</span></div>`;
       hudEl.appendChild(el);
     }
     // overall progress chip
@@ -695,6 +811,7 @@ function requestHud() {
     const pct = Math.round(p.claimed/game.totalInterior*100);
     el.querySelector(".pct").textContent = pct + "%";
     el.querySelector(".bar > i").style.width = Math.min(100,pct) + "%";
+    el.querySelector(".traps").textContent = p.traps ? "🕸 " + p.traps : "";
     el.querySelector(".lives").textContent = p.out ? "OUT" : "♥".repeat(Math.max(0,p.lives));
   }
   const ovpct = Math.round(game.ratio*100);

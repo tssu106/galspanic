@@ -25,8 +25,10 @@
   .chip .bar > i { display:block; height:100%; width:0; border-radius:4px; }
   .chip .meta { font-size:11px; color:var(--muted); display:flex; justify-content:space-between; }
   .chip.dead { opacity:.4; filter:grayscale(1); }
-  #stage { position:relative; }
-  canvas { display:block; background:#05060c; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  #stage { position:relative; width:100%; display:flex; justify-content:center; }
+  /* internal resolution is 4x (1600x1200); scale down to fit the viewport but stay crisp */
+  canvas { display:block; background:#05060c; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.5);
+           max-width:100%; height:auto; image-rendering:auto; }
   #help { color:var(--muted); font-size:12px; text-align:center; max-width:820px; line-height:1.5; }
   kbd { background:#232a44; border-radius:5px; padding:1px 6px; font-size:11px; color:#cfd6f5; }
 </style>
@@ -35,7 +37,7 @@
   <h1>GALS <span>PANIC</span> — Local Co-op</h1>
   <div id="hud"></div>
   <div id="stage">
-    <canvas id="c" width="800" height="600"></canvas>
+    <canvas id="c" width="1600" height="1200"></canvas>
   </div>
   <div id="help">
     안전지대(칠해진 곳) 위를 걷다 빈 공간으로 들어가면 <b>선</b>이 그려집니다. 선이 다시 안전지대에 닿으면 안쪽이 <b>점유</b>되어 그림이 드러납니다.
@@ -52,8 +54,8 @@
    ========================================================================= */
 
 // ---- constants ----
-const CELL = 5;
-const COLS = 160, ROWS = 120;            // 800 x 600 play field
+const CELL = 10;                          // 4x larger picture (was 5) -> 1600 x 1200
+const COLS = 160, ROWS = 120;            // grid stays 160 x 120, cells are just bigger
 const N = COLS * ROWS;
 const B = 3;                              // border thickness (claimed ring)
 const EMPTY = 0, CLAIMED = 1;
@@ -64,6 +66,18 @@ const PLAYER_DEFS = [
   { name:"P2", color:"#f472b6", keys:{ KeyW:[0,-1], KeyS:[0,1], KeyA:[-1,0], KeyD:[1,0] } },
   { name:"P3", color:"#a3e635", keys:{ KeyI:[0,-1], KeyK:[0,1], KeyJ:[-1,0], KeyL:[1,0] } },
   { name:"P4", color:"#fb923c", keys:{ Numpad8:[0,-1], Numpad5:[0,1], Numpad4:[-1,0], Numpad6:[1,0] } },
+];
+
+// ---- enemy archetypes (변종 몬스터) ----
+// behavior: 'bounce' straight-line + wall reflect · 'wander' occasional turns ·
+//           'hunt' mild homing toward the nearest (drawing) player.
+// speed is a multiplier on the level's base enemySpeed. Tougher types unlock by level.
+const ENEMY_TYPES = [
+  { key:"star",   name:"별똥이", color:"#ff3b5c", r:2.2, speed:1.00, behavior:"bounce", shape:"star",     minLevel:1, weight:3 },
+  { key:"saw",    name:"톱니",   color:"#f59e0b", r:2.7, speed:1.15, behavior:"bounce", shape:"saw",      minLevel:1, weight:2 },
+  { key:"blob",   name:"슬라임", color:"#a855f7", r:3.1, speed:0.70, behavior:"wander", shape:"blob",     minLevel:2, weight:2 },
+  { key:"ghost",  name:"유령",   color:"#e0e7ff", r:2.5, speed:0.90, behavior:"wander", shape:"ghost",    minLevel:2, weight:1 },
+  { key:"dart",   name:"추적자", color:"#22d3ee", r:1.9, speed:1.55, behavior:"hunt",   shape:"triangle", minLevel:3, weight:2 },
 ];
 
 const idx = (x,y) => y*COLS + x;
@@ -104,20 +118,43 @@ class GalGame {
 
     // enemies bounce inside the empty field. Count scales with players & level,
     // and grows further as more of the picture is revealed (see spawnThresholds).
+    // Each enemy is one of several archetypes (see ENEMY_TYPES) with its own look
+    // and movement; tougher variants unlock as the level climbs.
     this.enemies = [];
     this.enemySpeed = 20 + (level-1)*4;
     this.spawnThresholds = [0.20, 0.40, 0.60];       // add one enemy at each reveal mark
     const enemyCount = 1 + numPlayers + (level-1);
     for (let i=0; i<enemyCount; i++) {
-      const ang = Math.random()*Math.PI*2;
-      this.enemies.push({
-        x: COLS/2 + (Math.random()-.5)*40,
-        y: ROWS/2 + (Math.random()-.5)*30,
-        vx: Math.cos(ang)*this.enemySpeed || this.enemySpeed,
-        vy: Math.sin(ang)*this.enemySpeed || this.enemySpeed,
-        r: 2.2, spin: Math.random()*6,
-      });
+      this.enemies.push(this.makeEnemy(
+        COLS/2 + (Math.random()-.5)*40,
+        ROWS/2 + (Math.random()-.5)*30,
+      ));
     }
+  }
+
+  // pick an archetype available at the current level, weighted by rarity
+  pickEnemyType() {
+    const avail = ENEMY_TYPES.filter(t => t.minLevel <= this.level);
+    let total = 0; for (const t of avail) total += t.weight;
+    let r = Math.random()*total;
+    for (const t of avail) { r -= t.weight; if (r <= 0) return t; }
+    return avail[avail.length-1];
+  }
+
+  // build one enemy of a (randomly chosen) archetype at (x,y)
+  makeEnemy(x, y) {
+    const t = this.pickEnemyType();
+    const ang = Math.random()*Math.PI*2;
+    const sp = this.enemySpeed * t.speed;
+    return {
+      type: t.key, name: t.name, color: t.color, r: t.r,
+      shape: t.shape, behavior: t.behavior, speed: sp,
+      x, y,
+      vx: Math.cos(ang)*sp || sp,
+      vy: Math.sin(ang)*sp || sp,
+      spin: Math.random()*6,
+      wanderT: 0.4 + Math.random()*1.0,
+    };
   }
 
   // spawn one enemy at a random empty (and trail-free) cell
@@ -127,18 +164,24 @@ class GalGame {
       const y = B + Math.floor(Math.random()*(ROWS-2*B));
       const i = idx(x,y);
       if (this.grid[i] === EMPTY && this.trail[i] === 0) {
-        const ang = Math.random()*Math.PI*2;
-        this.enemies.push({
-          x: x+0.5, y: y+0.5,
-          vx: Math.cos(ang)*this.enemySpeed || this.enemySpeed,
-          vy: Math.sin(ang)*this.enemySpeed || this.enemySpeed,
-          r: 2.2, spin: Math.random()*6,
-        });
+        this.enemies.push(this.makeEnemy(x+0.5, y+0.5));
         this.onEnemySpawn && this.onEnemySpawn();
         return true;
       }
     }
     return false;
+  }
+
+  // nearest live player to an enemy; a player who is currently drawing wins ties
+  nearestTarget(e) {
+    let best=null, bestD=Infinity, draw=null, drawD=Infinity;
+    for (const p of this.players) {
+      if (p.out) continue;
+      const d = (p.x-e.x)*(p.x-e.x) + (p.y-e.y)*(p.y-e.y);
+      if (p.drawing && d < drawD) { drawD = d; draw = p; }
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    return draw || best;
   }
 
   get ratio() { return this.claimedInterior / this.totalInterior; }
@@ -228,6 +271,29 @@ class GalGame {
     if (this.over) return;
     for (const e of this.enemies) {
       e.spin += dt*8;
+
+      // per-archetype steering (speed magnitude is preserved; only heading changes)
+      if (e.behavior === "wander") {
+        e.wanderT -= dt;
+        if (e.wanderT <= 0) {
+          e.wanderT = 0.6 + Math.random()*1.2;
+          const a = Math.atan2(e.vy, e.vx) + (Math.random()-0.5)*1.7;
+          const sp = Math.hypot(e.vx, e.vy) || e.speed;
+          e.vx = Math.cos(a)*sp; e.vy = Math.sin(a)*sp;
+        }
+      } else if (e.behavior === "hunt") {
+        const target = this.nearestTarget(e);
+        if (target) {
+          const dx = target.x - e.x, dy = target.y - e.y;
+          const d = Math.hypot(dx, dy) || 1;
+          const sp = Math.hypot(e.vx, e.vy) || e.speed;
+          e.vx += (dx/d)*sp*dt*1.8;              // nudge toward the prey
+          e.vy += (dy/d)*sp*dt*1.8;
+          const cur = Math.hypot(e.vx, e.vy) || 1; // renormalize to keep constant speed
+          e.vx = e.vx/cur*sp; e.vy = e.vy/cur*sp;
+        }
+      }
+
       let nx = e.x + e.vx*dt;
       if (this.isWall(Math.floor(nx), Math.floor(e.y))) e.vx = -e.vx;
       else e.x = nx;
@@ -454,25 +520,75 @@ function render(now) {
   requestHud();
 }
 
-function drawEnemy(e) {
-  const cx = e.x*CELL, cy = e.y*CELL, R = e.r*CELL;
-  ctx.save();
-  ctx.translate(cx, cy); ctx.rotate(e.spin);
-  ctx.fillStyle = "#ff3b5c";
-  ctx.shadowColor = "#ff3b5c"; ctx.shadowBlur = 14;
+// draw a spiky polygon (star / saw) centered at the current origin
+function spikes(points, R, inner) {
   ctx.beginPath();
-  for (let k=0;k<8;k++){
-    const a = k*Math.PI/4;
-    const r = k%2 ? R : R*0.55;
+  for (let k=0;k<points*2;k++){
+    const a = k*Math.PI/points;
+    const r = k%2 ? R : R*inner;
     const px = Math.cos(a)*r, py = Math.sin(a)*r;
     k===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
   }
-  ctx.closePath(); ctx.fill();
-  ctx.shadowBlur = 0;
+  ctx.closePath();
+}
+
+function eyes(R) {
   ctx.fillStyle = "#fff";
   ctx.beginPath(); ctx.arc(-R*0.2,-R*0.15,R*0.18,0,7); ctx.arc(R*0.25,-R*0.15,R*0.18,0,7); ctx.fill();
   ctx.fillStyle = "#111";
   ctx.beginPath(); ctx.arc(-R*0.2,-R*0.15,R*0.09,0,7); ctx.arc(R*0.25,-R*0.15,R*0.09,0,7); ctx.fill();
+}
+
+function drawEnemy(e) {
+  const cx = e.x*CELL, cy = e.y*CELL, R = e.r*CELL;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = e.color;
+  ctx.shadowColor = e.color; ctx.shadowBlur = 14;
+
+  if (e.shape === "triangle") {
+    // dart points the way it's moving
+    ctx.rotate(Math.atan2(e.vy, e.vx) + Math.PI/2);
+    ctx.beginPath();
+    ctx.moveTo(0, -R*1.1); ctx.lineTo(R*0.85, R*0.8); ctx.lineTo(-R*0.85, R*0.8);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0; eyes(R*0.8);
+  } else if (e.shape === "saw") {
+    ctx.rotate(e.spin);
+    spikes(11, R, 0.72); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#1a1206";
+    ctx.beginPath(); ctx.arc(0,0,R*0.4,0,7); ctx.fill();
+    ctx.rotate(-e.spin); eyes(R);
+  } else if (e.shape === "blob") {
+    // wobbly slime blob
+    ctx.beginPath();
+    for (let a=0;a<=Math.PI*2+0.01;a+=0.25){
+      const rr = R*(1 + 0.14*Math.sin(a*3 + e.spin));
+      const px = Math.cos(a)*rr, py = Math.sin(a)*rr*0.9;
+      a===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0; eyes(R);
+  } else if (e.shape === "ghost") {
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.arc(0, -R*0.1, R, Math.PI, 0);           // dome
+    const feet = 4, w = R*2/feet;
+    for (let f=0; f<feet; f++){
+      const x0 = R - f*w;
+      ctx.lineTo(x0, R*0.7);
+      ctx.quadraticCurveTo(x0 - w/2, R*1.0, x0 - w, R*0.7);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0; eyes(R);
+  } else {
+    // classic star
+    ctx.rotate(e.spin);
+    spikes(4, R, 0.55); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.rotate(-e.spin); eyes(R);
+  }
   ctx.restore();
 }
 

@@ -487,7 +487,6 @@ function newGame(numPlayers, level=1) {
   };
   game.onCancel = (p) => {
     audio.blip(300, .10, "triangle"); audio.blip(200, .12, "triangle");  // descending "undo"
-    flashes.push({ x: p.x*CELL, y: p.y*CELL, text: "취소", color: "#94a3b8", life: .7, ttl: .7 });
   };
   game.onDeath = () => audio.blip(120, .18, "square");
   game.onEnd   = (r) => { state = "over"; audio.blip(r==='won'?740:90, .4, r==='won'?"triangle":"sawtooth"); };

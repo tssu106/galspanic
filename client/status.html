@@ -59,6 +59,7 @@
   <div class="cards">
     <div class="card"><div class="k">로컬 동일화면 co-op</div><div class="v ok">✅ 완성 · 서버 불필요</div></div>
     <div class="card"><div class="k">온라인 서버 권위 모드</div><div class="v ok">✅ 동작 · Colyseus</div></div>
+    <div class="card"><div class="k">외곽선 이동 규칙 <span class="new">NEW</span></div><div class="v">점유 영역은 외곽선만, 빈 공간 자유</div></div>
     <div class="card"><div class="k">몬스터 다양화 <span class="new">NEW</span></div><div class="v">6종 아키타입 + 고유 AI</div></div>
     <div class="card"><div class="k">투사체 포수 <span class="new">NEW</span></div><div class="v">안전지대도 탄에 맞으면 사망</div></div>
     <div class="card"><div class="k">몬스터 포획(트랩) <span class="new">NEW</span></div><div class="v">작은 영역에 가두면 포획+점수</div></div>
@@ -68,7 +69,7 @@
 
   <h2>게임 규칙</h2>
   <ol>
-    <li>안전지대(칠해진 곳)에서 빈 공간으로 들어가면 <b>선(trail)</b>이 그려진다.</li>
+    <li>플레이어는 <b>점유된 그림 영역에서는 외곽선만</b> 이동한다(내부 관통 불가). 빈(미점유) 공간으로는 자유롭게 들어가 <b>선(trail)</b>을 긋는다.</li>
     <li>선이 다시 안전지대에 닿으면, 적이 닿을 수 없는 빈 영역이 <b>한 번에 점유</b>(flood-fill)되어 숨은 그림이 드러난다.</li>
     <li>돌아다니는 <b>적</b>이 당신의 선에 닿으면 그 선의 주인이 사망(목숨 −1, 부활).</li>
     <li>내부의 <b>80%</b>를 열면 클리어. 점유 면적으로 기여도/순위 산정.</li>
@@ -77,7 +78,16 @@
 
   <h2>이번 업데이트</h2>
 
-  <h3>1) 몬스터 다양화 — 5종 아키타입</h3>
+  <h3>0) 외곽선 이동 규칙</h3>
+  <p>원작 Qix처럼 플레이어는 <b>채워진 그림의 외곽선만</b> 탈 수 있다.</p>
+  <ul>
+    <li>점유(claimed) 영역에서는 <b>빈칸과 8방향으로 맞닿은 프론티어 셀</b>로만 이동 — 내부를 가로지르지 못한다.</li>
+    <li><b>빈(미점유) 공간으로 들어가는 것은 자유</b>(선 긋기). 이동 제한은 점유 영역에만 적용.</li>
+    <li>8방향 인접 판정이라 코너에서도 외곽선이 끊기지 않고 연결된다. 프론티어를 벗어난 예외 상황에선 탈출 허용(갇힘 방지).</li>
+    <li>구현: <code>isBorder(x,y)</code> + <code>step()</code> 의 claimed 분기 가드.</li>
+  </ul>
+
+  <h3>1) 몬스터 다양화 — 6종 아키타입</h3>
   <p>각 적은 고유한 외형·속도·행동 AI를 가지며, 레벨이 오를수록 위험한 변종이 등장한다. 등장 확률은 가중치(weight)로 조절.</p>
   <table>
     <thead><tr><th>이름</th><th>외형</th><th>속도</th><th>행동</th><th>등장 레벨</th></tr></thead>

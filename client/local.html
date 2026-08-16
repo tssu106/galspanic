@@ -40,7 +40,7 @@
     <canvas id="c" width="1600" height="1200"></canvas>
   </div>
   <div id="help">
-    안전지대(칠해진 곳) 위를 걷다 빈 공간으로 들어가면 <b>선</b>이 그려집니다. 선이 다시 안전지대에 닿으면 안쪽이 <b>점유</b>되어 그림이 드러납니다.
+    안전지대는 <b>외곽선만</b> 걸을 수 있고(내부 관통 불가), 빈 공간으로 들어가면 <b>선</b>이 그려집니다. 선이 다시 안전지대에 닿으면 안쪽이 <b>점유</b>되어 그림이 드러납니다.
     <br>빨간 적이 당신의 <b>선</b>에 닿으면 목숨을 잃어요. <b>포수</b>의 탄환은 <b>안전지대에서도</b> 맞으면 사망! 적을 좁은 곳에 <b>가두면 포획</b>! 화면의 <b>80%</b>를 열면 클리어!
     <br>선을 긋는 <b>도중 멈추면</b> 그린 선을 <b>따라 되짚어</b> 시작 지점으로 돌아갑니다. · <kbd>P</kbd> 일시정지 · <kbd>R</kbd> 재시작
   </div>
@@ -202,6 +202,20 @@ class GalGame {
 
   isWall(x,y) { return !inBounds(x,y) || this.grid[idx(x,y)] === CLAIMED; }
 
+  // a claimed cell is on the "frontier" if any of its 8 neighbours is empty.
+  // Players may only walk the frontier of the filled picture (not its interior);
+  // 8-adjacency keeps the border path connected around corners.
+  isBorder(x, y) {
+    if (!inBounds(x,y) || this.grid[idx(x,y)] !== CLAIMED) return false;
+    for (let dy=-1; dy<=1; dy++)
+      for (let dx=-1; dx<=1; dx++) {
+        if (!dx && !dy) continue;
+        const ax=x+dx, ay=y+dy;
+        if (inBounds(ax,ay) && this.grid[idx(ax,ay)] === EMPTY) return true;
+      }
+    return false;
+  }
+
   // attempt one grid step for a player in direction (dx,dy)
   step(p, dx, dy) {
     if (this.over || p.out) return;
@@ -211,6 +225,10 @@ class GalGame {
     const ni = idx(nx,ny);
     if (this.trail[ni] !== 0) return;                 // blocked by any trail
     if (this.grid[ni] === CLAIMED) {                  // stepping onto safe zone
+      // on the filled area a player may only travel the frontier, never cut
+      // through the interior. (Moving into empty space to draw is unrestricted.)
+      // The escape hatch (already off-frontier) prevents getting permanently stuck.
+      if (!p.drawing && this.isBorder(p.x, p.y) && !this.isBorder(nx, ny)) return;
       p.x = nx; p.y = ny;
       if (p.drawing) { this.closeArea(p); p.drawing = false; }
     } else {                                          // drawing into empty space

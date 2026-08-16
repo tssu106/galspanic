@@ -59,6 +59,7 @@
   <div class="cards">
     <div class="card"><div class="k">로컬 동일화면 co-op</div><div class="v ok">✅ 완성 · 서버 불필요</div></div>
     <div class="card"><div class="k">온라인 서버 권위 모드</div><div class="v ok">✅ 동작 · Colyseus</div></div>
+    <div class="card"><div class="k">분할 화면·플레이어별 카메라 <span class="new">NEW</span></div><div class="v">인원수 분할 + 각자 중앙 추적 줌</div></div>
     <div class="card"><div class="k">외곽선 이동 규칙 <span class="new">NEW</span></div><div class="v">점유 영역은 외곽선만, 빈 공간 자유</div></div>
     <div class="card"><div class="k">몬스터 다양화 <span class="new">NEW</span></div><div class="v">6종 아키타입 + 고유 AI</div></div>
     <div class="card"><div class="k">투사체 포수 <span class="new">NEW</span></div><div class="v">안전지대도 탄에 맞으면 사망</div></div>
@@ -77,6 +78,15 @@
   <p class="sub">조작(로컬) — P1 방향키 · P2 <code>WASD</code> · P3 <code>IJKL</code> · P4 숫자패드 <code>8/5/4/6</code> · <code>P</code> 일시정지 · <code>R</code> 재시작</p>
 
   <h2>이번 업데이트</h2>
+
+  <h3>0-b) 분할 화면 + 플레이어별 카메라</h3>
+  <p>이미지를 크게 보고, 각 플레이어가 자기 위치를 중심으로 보게 한다.</p>
+  <ul>
+    <li>인원수에 따라 캔버스 분할: <b>1인 전체 · 2인 좌우 · 3~4인 2×2 격자</b>.</li>
+    <li>각 패널은 <b>그 플레이어를 중앙에 두고 따라가는 줌 카메라</b>(회전 없음). 전체 필드 대비 이미지가 <b>약 4배(면적) 확대</b>되어 보인다.</li>
+    <li>패널마다 소유 플레이어 색 테두리 + 이름표, 자기 마커엔 흰 링. 카메라는 월드 경계를 넘지 않게 클램프(<code>VIEW_MIN=60</code>).</li>
+    <li>구현: <code>computePanels()</code>/<code>drawPanel()</code>(clip+scale 카메라)/<code>drawWorld()</code>. 월드 그리드(160×120)는 그대로라 게임 길이 불변.</li>
+  </ul>
 
   <h3>0) 외곽선 이동 규칙</h3>
   <p>원작 Qix처럼 플레이어는 <b>채워진 그림의 외곽선만</b> 탈 수 있다.</p>

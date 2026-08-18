@@ -1,5 +1,5 @@
 import { Schema, MapSchema, ArraySchema, type } from "@colyseus/schema";
-import { GRID_W, GRID_H } from "./constants";
+import { GRID_W, GRID_H, MOVE_MS } from "./constants";
 
 // A player's marker. The server owns the truth; clients only send input.
 export class Player extends Schema {
@@ -32,6 +32,9 @@ export class GameState extends Schema {
   @type("number") claimedInterior: number = 0;
   @type("number") totalInterior: number = 0;
   @type("number") level: number = 1;
+
+  // Authoritative move cadence (ms/cell) — clients mirror it for local prediction.
+  @type("number") moveMs: number = MOVE_MS;
 
   // "lobby" | "playing" | "won" | "lost"
   @type("string") phase: string = "lobby";

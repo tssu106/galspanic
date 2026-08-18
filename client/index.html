@@ -38,7 +38,18 @@
   </div>
 
 <script type="module">
-import { Client } from "https://unpkg.com/colyseus.js@0.15.0/dist/colyseus.js";
+import { Client } from "https://esm.sh/colyseus.js@0.15.0";
+
+// 서버 주소를 "이 페이지를 연 origin" 기준으로 자동 결정.
+// - 게임 서버(2567)가 이 페이지를 직접 서빙하는 경우(권장): 같은 origin으로 접속.
+//   → ngrok/cloudflare 터널 하나(https)로 외부 사용자도 그대로 접속됨. https면 wss로 승격.
+// - file:// 로 직접 열었거나 별도 8080 정적 서버로 연 개발용 fallback: 같은 호스트의 :2567.
+const WS_URL = (() => {
+  if (location.protocol === "https:") return `wss://${location.host}`;
+  if (location.protocol === "http:" && location.port !== "8080") return `ws://${location.host}`;
+  return `ws://${location.hostname || "localhost"}:2567`;   // file:// or dev 8080 static server
+})();
+const HTTP_URL = WS_URL.replace(/^ws/, "http");
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -46,16 +57,17 @@ const statusEl = document.getElementById("status");
 const restartBtn = document.getElementById("restart");
 
 let room = null, state = null, GW = 64, GH = 64;
+let MOVE_MS = 45;   // authoritative step cadence (ms/cell); overwritten from state.moveMs
 const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
 img.onload = () => { imgReady = true; };
 
 async function connect() {
   try {
-    const client = new Client("ws://localhost:2567");
+    const client = new Client(WS_URL);
     room = await client.joinOrCreate("game", { name: "Guest" });
     statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
-    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; });
-    room.state.listen?.("imageId", (v) => { if (v) img.src = `http://localhost:2567/images/${v}_blur.jpg`; });
+    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; if (s.moveMs) MOVE_MS = s.moveMs; });
+    room.state.listen?.("imageId", (v) => { if (v) img.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
   } catch (e) {
     statusEl.textContent = "서버 연결 실패 — server 폴더에서 npm start 후 새로고침하세요";
     console.error(e);
@@ -102,7 +114,49 @@ function playerColor(owner) {
   return cs[(owner - 1) % cs.length] || "#fff";
 }
 
+// ---- interpolation + local prediction ----
+// Server sends discrete grid positions at ~30Hz. We (a) smooth every entity toward
+// its latest server position so motion isn't jerky, and (b) predict our OWN marker
+// locally so it responds to keypresses without waiting a network round-trip.
+const DIR_DELTA = { 0:[0,0], 1:[0,-1], 2:[0,1], 3:[-1,0], 4:[1,0] };
+const TAU = 0.05;                    // smoothing time-constant (s); small = snappy
+const enemyView = [];                // smoothed enemy positions, index-aligned
+const otherView = new Map();         // sessionId -> smoothed pos for remote players
+let me = null;                       // predicted local marker {x,y,acc}
+let meView = null;                   // smoothed pixel-space position of my marker
+let lastFrame = performance.now();
+
+function ease(cur, tgt, dt) { return cur + (tgt - cur) * (1 - Math.exp(-dt / TAU)); }
+// ease toward target, but hard-snap on big jumps (respawn / round reset / enemy spawn)
+function follow(v, tx, ty, dt) {
+  if (Math.abs(v.x - tx) + Math.abs(v.y - ty) > 6) { v.x = tx; v.y = ty; }
+  else { v.x = ease(v.x, tx, dt); v.y = ease(v.y, ty, dt); }
+}
+
+// Mirror the server's movement rule so the local marker can step on its own.
+function predBlocked(x, y) {
+  if (x < 0 || y < 0 || x >= GW || y >= GH) return true;   // out of bounds
+  return state.trail[y*GW + x] !== 0;                       // any trail blocks (matches server)
+}
+function predictLocal(dt) {
+  const sp = room && state.players.get(room.sessionId);
+  if (!sp) { me = null; return; }
+  if (sp.out || state.phase !== "playing") { me = { x: sp.x, y: sp.y, acc: 0 }; return; }
+  if (!me) me = { x: sp.x, y: sp.y, acc: 0 };
+  // reconcile: trust prediction while it stays close; snap on real divergence
+  if (Math.abs(me.x - sp.x) + Math.abs(me.y - sp.y) >= 3) { me.x = sp.x; me.y = sp.y; me.acc = 0; }
+  const [dx, dy] = DIR_DELTA[currentDir()] || [0, 0];
+  me.acc += dt * 1000;
+  let guard = 0;
+  while (me.acc >= MOVE_MS && guard++ < 4) {
+    me.acc -= MOVE_MS;
+    if (dx || dy) { const nx = me.x + dx, ny = me.y + dy; if (!predBlocked(nx, ny)) { me.x = nx; me.y = ny; } }
+  }
+}
+
 function render() {
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
   if (state && state.cells.length) {
@@ -127,18 +181,34 @@ function render() {
         ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1);
       }
     }
-    // enemies
-    state.enemies.forEach((e) => {
-      ctx.fillStyle = "#ff3b5c";
-      ctx.shadowColor = "#ff3b5c"; ctx.shadowBlur = 10;
-      ctx.beginPath(); ctx.arc(e.x*cw, e.y*ch, cw*1.4, 0, 7); ctx.fill();
+    // enemies — interpolate toward server positions
+    state.enemies.forEach((e, i) => {
+      const v = enemyView[i] || (enemyView[i] = { x: e.x, y: e.y });
+      follow(v, e.x, e.y, dt);
+      ctx.fillStyle = "#ff3b5c"; ctx.shadowColor = "#ff3b5c"; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(v.x*cw, v.y*ch, cw*1.4, 0, 7); ctx.fill();
       ctx.shadowBlur = 0;
     });
-    // players
+    enemyView.length = state.enemies.length;
+    // predict my marker before drawing players
+    predictLocal(dt);
+    // players — my marker follows the local prediction; others interpolate
     state.players.forEach((p) => {
-      if (p.out) return;
-      ctx.fillStyle = "#fff"; ctx.fillRect(p.x*cw-1, p.y*ch-1, cw+2, ch+2);
-      ctx.fillStyle = p.color; ctx.fillRect(p.x*cw, p.y*ch, cw+1, ch+1);
+      if (p.out) { otherView.delete(p.id); return; }
+      const isMe = room && p.id === room.sessionId;
+      let vx, vy;
+      if (isMe && me) {
+        if (!meView) meView = { x: me.x, y: me.y };
+        follow(meView, me.x, me.y, dt);
+        vx = meView.x; vy = meView.y;
+      } else {
+        let v = otherView.get(p.id);
+        if (!v) { v = { x: p.x, y: p.y }; otherView.set(p.id, v); }
+        follow(v, p.x, p.y, dt);
+        vx = v.x; vy = v.y;
+      }
+      ctx.fillStyle = "#fff"; ctx.fillRect(vx*cw-1, vy*ch-1, cw+2, ch+2);
+      ctx.fillStyle = p.color; ctx.fillRect(vx*cw, vy*ch, cw+1, ch+1);
     });
     drawHud();
     if (state.phase === "won" || state.phase === "lost") drawOverlay();

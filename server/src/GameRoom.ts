@@ -1,7 +1,7 @@
 import { Room, Client } from "@colyseus/core";
 import { GameState, Player, Enemy } from "./schema";
 import { GalSim } from "./GalSim";
-import { TICK_MS, MAX_PLAYERS, IMAGE_POOL, DIRS } from "./constants";
+import { TICK_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS } from "./constants";
 
 const COLORS = ["#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
 
@@ -11,9 +11,14 @@ export class GameRoom extends Room<GameState> {
 
   onCreate() {
     this.setState(new GameState());
+    // Broadcast state patches at the sim rate (~30Hz) instead of the 50ms/20Hz
+    // default, so positions update as fast as they're computed → far less jitter.
+    this.setPatchRate(TICK_MS);
     this.sim = new GalSim(1);
     this.initGridSchema();
     this.startRound(1);
+    // tell clients the authoritative step cadence so their prediction matches exactly
+    this.state.moveMs = MOVE_MS;
 
     // Client sends a held direction code (0..4). Server is authoritative.
     this.onMessage("input", (client, msg: { dir: number }) => {

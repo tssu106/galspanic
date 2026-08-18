@@ -58,7 +58,8 @@ const restartBtn = document.getElementById("restart");
 
 let room = null, state = null, GW = 64, GH = 64;
 const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
-img.onload = () => { imgReady = true; };
+let imgVersion = 0;   // bumps on every (re)load so the cached grid layer rebuilds
+img.onload = () => { imgReady = true; imgVersion++; };
 
 async function connect() {
   try {
@@ -114,12 +115,11 @@ function playerColor(owner) {
 }
 
 // ---- interpolation ----
-// Server sends discrete grid positions at ~30Hz. We render every marker by easing
-// its drawn position toward the latest server position, so motion glides instead of
-// stepping cell-to-cell. The local marker eases too, but only ever LAGS the server
-// (never runs ahead), so it stays tucked at the head of its own trail — no floating
-// or snap-back. (True client-side prediction was tried and removed: on LAN the round
-// trip it hides is negligible while its artifacts are not.)
+// The server sends discrete grid positions. Rendering them raw looks stepped, so we
+// smooth motion on the client: enemies (which update every tick) use exponential
+// easing; players (which jump a whole cell every MOVE_MS) use constant-velocity linear
+// interpolation — see below. (Client-side prediction was tried and removed: on LAN the
+// round trip it hides is negligible while its float-ahead/snap-back artifacts are not.)
 const TAU = 0.05;                    // enemies: exponential smoothing (they update ~60Hz)
 const enemyView = [];                // smoothed enemy positions, index-aligned
 let lastFrame = performance.now();
@@ -159,6 +159,29 @@ function playerPos(tr, now) {
   const l = s[s.length - 1]; return { x: l.x, y: l.y };
 }
 
+// The grid (claimed art vs dark empty) only changes on a claim — rare — but drawing it
+// is the one cost that scales (up to GW*GH drawImage slices once a photo is revealed).
+// So we cache it on an offscreen canvas and rebuild ONLY when it actually changed, then
+// blit once per frame. Trails/enemies/players (which move) are still drawn live on top.
+const gridCanvas = document.createElement("canvas");
+const gctx = gridCanvas.getContext("2d");
+let gridBuilt = false, lastClaimed = -1, lastLevel = -1, lastImgVer = -1, lastGW = 0, lastGH = 0;
+function rebuildGrid() {
+  const W = canvas.width, H = canvas.height, cw = W / GW, ch = H / GH;
+  if (gridCanvas.width !== W || gridCanvas.height !== H) { gridCanvas.width = W; gridCanvas.height = H; }
+  for (let i = 0; i < GW * GH; i++) {
+    const cx = i % GW, cy = (i / GW) | 0;
+    if (state.cells[i] === 1) {
+      if (imgReady) gctx.drawImage(img, cx*(img.width/GW), cy*(img.height/GH), img.width/GW, img.height/GH,
+                                   cx*cw, cy*ch, cw+1, ch+1);
+      else { gctx.fillStyle = "#2a3350"; gctx.fillRect(cx*cw, cy*ch, cw+1, ch+1); }
+    } else {
+      gctx.fillStyle = "#080a14"; gctx.fillRect(cx*cw, cy*ch, cw+1, ch+1);
+    }
+  }
+  gridBuilt = true;
+}
+
 function render() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
@@ -166,17 +189,14 @@ function render() {
   ctx.clearRect(0, 0, W, H);
   if (state && state.cells.length) {
     const cw = W / GW, ch = H / GH;
-    // grid: claimed reveals art, empty stays dark
-    for (let i = 0; i < GW * GH; i++) {
-      const cx = i % GW, cy = (i / GW) | 0;
-      if (state.cells[i] === 1) {
-        if (imgReady) ctx.drawImage(img, cx*(img.width/GW), cy*(img.height/GH), img.width/GW, img.height/GH,
-                                    cx*cw, cy*ch, cw+1, ch+1);
-        else { ctx.fillStyle = "#2a3350"; ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1); }
-      } else {
-        ctx.fillStyle = "#080a14"; ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1);
-      }
+    // rebuild the cached grid layer only when it changed (claim / new level / image load / resize)
+    if (state.claimedInterior !== lastClaimed || state.level !== lastLevel ||
+        imgVersion !== lastImgVer || GW !== lastGW || GH !== lastGH) {
+      rebuildGrid();
+      lastClaimed = state.claimedInterior; lastLevel = state.level;
+      lastImgVer = imgVersion; lastGW = GW; lastGH = GH;
     }
+    if (gridBuilt) ctx.drawImage(gridCanvas, 0, 0);   // one blit instead of GW*GH draws
     // trails
     for (let i = 0; i < GW * GH; i++) {
       const owner = state.trail[i];

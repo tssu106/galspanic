@@ -19,7 +19,8 @@
   .chip .meta { font-size:11px; color:var(--muted); display:flex; justify-content:space-between; }
   .chip.dead { opacity:.4; filter:grayscale(1); }
   .chip.me { outline:2px solid #ff5db1; }
-  canvas { background:#05060c; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  canvas { background:#05060c; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.5);
+           width:min(92vw, 88vh, 760px); height:min(92vw, 88vh, 760px); }
   #help { color:var(--muted); font-size:12px; text-align:center; max-width:640px; line-height:1.5; }
   #status { font-size:13px; color:#ffb400; min-height:18px; }
   kbd { background:#232a44; border-radius:5px; padding:1px 6px; font-size:11px; }
@@ -30,7 +31,7 @@
   <h1>GALS <span>PANIC</span> — Online Co-op</h1>
   <div id="status">서버 연결 중…</div>
   <div id="hud"></div>
-  <canvas id="c" width="512" height="512"></canvas>
+  <canvas id="c" width="720" height="720"></canvas>
   <div id="help">
     <b>방향키</b>로 이동 — 안전지대에서 빈 공간으로 들어가면 선이 그려지고, 다시 안전지대에 닿으면 안쪽이 점유됩니다.
     빨간 적이 당신의 선에 닿으면 목숨을 잃어요. 다 함께 <b>80%</b>를 열면 클리어!

@@ -131,32 +131,26 @@ function follow(v, tx, ty, dt, tau = TAU) {
   else { v.x = ease(v.x, tx, dt, tau); v.y = ease(v.y, ty, dt, tau); }
 }
 
-// Players move a whole cell every MOVE_MS (~45ms). Exponential easing there "arrives
-// then pauses" → the stepping you feel. Instead we render players slightly in the past
-// and LINEARLY interpolate between the two cells bracketing that render time, giving a
-// constant-velocity glide with no pauses.
-const INTERP_DELAY = 55;             // ms; must exceed the step interval to avoid starving
-const pbuf = new Map();              // id -> { s:[{t,x,y}], lx, ly }
-function samplePlayer(id, x, y, now) {
-  let tr = pbuf.get(id);
-  if (!tr) { tr = { s: [{ t: now, x, y }], lx: x, ly: y }; pbuf.set(id, tr); return tr; }
-  if (x !== tr.lx || y !== tr.ly) {
-    if (Math.abs(x - tr.lx) + Math.abs(y - tr.ly) > 6) tr.s = [];   // teleport → snap
-    tr.s.push({ t: now, x, y }); tr.lx = x; tr.ly = y;
-    if (tr.s.length > 12) tr.s.shift();
+// Players jump a whole cell every MOVE_MS (~45ms). We glide the marker toward the CURRENT
+// server cell over exactly one step, so it lags the head by at most one cell and settles
+// right on it at rest. The remaining sub-cell gap is hidden by NOT drawing each player's
+// newest (head) trail cell — the moving marker stands in for the line's tip, and each
+// cell solidifies into the line as the marker passes it (like the arcade line growing).
+const STEP_MS = 45;                  // matches server MOVE_MS
+const pmove = new Map();             // id -> { px, py, cx, cy, t0 }
+function playerRenderPos(id, sx, sy, now) {
+  let m = pmove.get(id);
+  if (!m) { m = { px: sx, py: sy, cx: sx, cy: sy, t0: now - 1e4 }; pmove.set(id, m); return { x: sx, y: sy }; }
+  const glide = (state.moveMs || STEP_MS);
+  if (sx !== m.cx || sy !== m.cy) {                 // server advanced to a new cell
+    // interpolate strictly from the previous cell to the current one → lag never exceeds
+    // one cell. On a >1-cell jump (frame hitch / respawn) snap instead of a long slide.
+    if (Math.abs(sx - m.cx) + Math.abs(sy - m.cy) > 1) { m.px = sx; m.py = sy; }
+    else { m.px = m.cx; m.py = m.cy; }
+    m.cx = sx; m.cy = sy; m.t0 = now;
   }
-  return tr;
-}
-function playerPos(tr, now) {
-  const s = tr.s, rt = now - INTERP_DELAY;
-  if (!s.length) return null;
-  if (s.length === 1 || rt >= s[s.length - 1].t) { const l = s[s.length - 1]; return { x: l.x, y: l.y }; }
-  if (rt <= s[0].t) return { x: s[0].x, y: s[0].y };
-  for (let i = 1; i < s.length; i++) {
-    if (s[i].t >= rt) { const a = s[i - 1], b = s[i], u = (rt - a.t) / ((b.t - a.t) || 1);
-      return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u }; }
-  }
-  const l = s[s.length - 1]; return { x: l.x, y: l.y };
+  const u = Math.min(1, (now - m.t0) / glide);
+  return { x: m.px + (m.cx - m.px) * u, y: m.py + (m.cy - m.py) * u };
 }
 
 // The grid (claimed art vs dark empty) only changes on a claim — rare — but drawing it
@@ -197,10 +191,12 @@ function render() {
       lastImgVer = imgVersion; lastGW = GW; lastGH = GH;
     }
     if (gridBuilt) ctx.drawImage(gridCanvas, 0, 0);   // one blit instead of GW*GH draws
-    // trails
+    // trails — skip each player's newest (head) cell; the moving marker is the line's tip
+    const heads = new Set();
+    state.players.forEach((p) => { if (!p.out) heads.add(p.y * GW + p.x); });
     for (let i = 0; i < GW * GH; i++) {
       const owner = state.trail[i];
-      if (owner) {
+      if (owner && !heads.has(i)) {
         const cx = i % GW, cy = (i / GW) | 0;
         ctx.fillStyle = playerColor(owner);
         ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1);
@@ -215,11 +211,10 @@ function render() {
       ctx.shadowBlur = 0;
     });
     enemyView.length = state.enemies.length;
-    // players — constant-velocity linear interpolation between grid steps (own + remote)
+    // players — glide toward the current server cell so the marker stays on its line's tip
     state.players.forEach((p) => {
-      if (p.out) { pbuf.delete(p.id); return; }
-      const tr = samplePlayer(p.id, p.x, p.y, now);
-      const pos = playerPos(tr, now) || { x: p.x, y: p.y };
+      if (p.out) { pmove.delete(p.id); return; }
+      const pos = playerRenderPos(p.id, p.x, p.y, now);
       const vx = pos.x, vy = pos.y;
       ctx.fillStyle = "#fff"; ctx.fillRect(vx*cw-1, vy*ch-1, cw+2, ch+2);
       ctx.fillStyle = p.color; ctx.fillRect(vx*cw, vy*ch, cw+1, ch+1);

@@ -1,8 +1,7 @@
-// Grid dimensions. 256x256 = 65536 cells. Camera is off (fixed full-map view), so
-// the whole field shows at once with very small cells (~2.8px on a 720 canvas).
-// Initial full sync is large (~130KB) but deltas during play stay small.
-export const GRID_W = 256;
-export const GRID_H = 256;
+// Grid dimensions. 128x128 = 16384 cells. Camera is off (fixed full-map view), so
+// the whole field shows at once with small cells (~5.6px on a 720 canvas).
+export const GRID_W = 128;
+export const GRID_H = 128;
 
 // Claimed border ring thickness.
 export const BORDER = 2;

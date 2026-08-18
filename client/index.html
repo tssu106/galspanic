@@ -340,13 +340,20 @@ function render() {
       lastClaimed = state.claimedInterior; lastLevel = state.level;
       lastImgVer = imgVersion; lastGW = GW; lastGH = GH;
     }
-    // camera disabled — fixed full-map view. My own marker still uses client-side
-    // prediction (myPos); we just don't move/zoom the view around it.
+    // ---- self-centered camera: ~VIEW cells across, follows my predicted marker ----
     let me = null;
     if (room) state.players.forEach((p) => { if (p.id === room.sessionId) me = p; });
-    let myPos = null;
-    if (me && !me.out) myPos = myRenderPos(me, now, dt);   // predicted (call once/frame)
-    ctx.save();   // identity transform: whole grid fills the canvas
+    let camS = 1, camX = 0, camY = 0, myPos = null;
+    if (me && !me.out) {
+      const VIEW = Math.min(GW, GH, 32);            // cells across the shorter side
+      camS = Math.min(GW, GH) / VIEW;               // zoom factor (2x on the 64 grid)
+      myPos = myRenderPos(me, now, dt);             // predicted (call once/frame)
+      const vpx = W / camS, vpy = H / camS;
+      camX = Math.max(0, Math.min(myPos.x*cw + cw/2 - vpx/2, W - vpx));
+      camY = Math.max(0, Math.min(myPos.y*ch + ch/2 - vpy/2, H - vpy));
+    }
+    ctx.save();
+    ctx.translate(-camX*camS, -camY*camS); ctx.scale(camS, camS);
 
     if (gridBuilt) ctx.drawImage(gridCanvas, 0, 0);   // one blit instead of GW*GH draws
     // trails — draw ONLY the active trail cells (built on each patch), so per-frame

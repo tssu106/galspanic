@@ -1,7 +1,7 @@
-// Grid dimensions. 128x128 = 16384 cells. Camera is off (fixed full-map view), so
-// the whole field shows at once with small cells (~5.6px on a 720 canvas).
-export const GRID_W = 128;
-export const GRID_H = 128;
+// Grid dimensions. 64x64 = 4096 cells — the smooth, playable size (smaller grid =
+// fewer cells to sync and draw). Camera is off (fixed full-map view).
+export const GRID_W = 64;
+export const GRID_H = 64;
 
 // Claimed border ring thickness.
 export const BORDER = 2;

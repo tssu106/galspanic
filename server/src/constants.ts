@@ -1,6 +1,8 @@
-// Grid dimensions. 64x64 = 4096 cells — light enough for delta sync online.
-export const GRID_W = 64;
-export const GRID_H = 64;
+// Grid dimensions. 96x96 = 9216 cells — a bigger playfield; still fine for delta
+// sync (only changed cells go over the wire during play). The client zooms less
+// now (see VIEW in index.html) so the larger map reads well.
+export const GRID_W = 96;
+export const GRID_H = 96;
 
 // Claimed border ring thickness.
 export const BORDER = 2;

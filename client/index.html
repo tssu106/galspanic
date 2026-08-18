@@ -255,8 +255,8 @@ function render() {
     if (room) state.players.forEach((p) => { if (p.id === room.sessionId) me = p; });
     let camS = 1, camX = 0, camY = 0;
     if (me && !me.out) {
-      const VIEW = Math.min(GW, GH, 32);            // cells across the shorter side
-      camS = Math.min(GW, GH) / VIEW;               // zoom factor (~2x)
+      const VIEW = Math.min(GW, GH, 60);            // cells across the shorter side
+      camS = Math.min(GW, GH) / VIEW;               // zoom factor (~1.6x on the 96 grid)
       const mp = playerRenderPos(me.id, me.x, me.y, now);
       const vpx = W / camS, vpy = H / camS;
       camX = Math.max(0, Math.min(mp.x*cw + cw/2 - vpx/2, W - vpx));

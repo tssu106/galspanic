@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gals Panic — 진행 현황</title>
+<style>
+  :root { --bg:#0b0d16; --panel:#161a2b; --ink:#e8ebf7; --muted:#8b93b5; --line:#232a44; --pink:#ff5db1; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body {
+    background: radial-gradient(1200px 800px at 50% -10%, #1a1f38, var(--bg));
+    color:var(--ink); font-family: system-ui, "Segoe UI", sans-serif;
+    line-height:1.6; padding:32px 16px 80px; min-height:100vh;
+  }
+  .wrap { max-width:960px; margin:0 auto; }
+  h1 { font-size:30px; margin:0 0 4px; letter-spacing:.5px; }
+  h1 span { color:var(--pink); }
+  .sub { color:var(--muted); font-size:14px; margin-bottom:8px; }
+  .updated { display:inline-block; background:var(--panel); border:1px solid var(--line);
+             border-radius:999px; padding:4px 12px; font-size:12px; color:var(--muted); }
+  h2 { font-size:20px; margin:38px 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+  h3 { font-size:16px; margin:24px 0 8px; color:#cfd6f5; }
+  a { color:#7cc7ff; }
+  code { background:#0c0f1c; border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:13px; }
+  pre { background:#0c0f1c; border:1px solid var(--line); border-radius:12px; padding:14px 16px;
+        overflow-x:auto; font-size:13px; }
+  pre code { background:none; border:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:14px; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--line); padding:8px 12px; text-align:left; vertical-align:top; }
+  th { background:var(--panel); color:#cfd6f5; white-space:nowrap; }
+  tr:nth-child(even) td { background:rgba(22,26,43,.4); }
+  ol,ul { padding-left:22px; }
+  li { margin:4px 0; }
+  .ok { color:#a3e635; font-weight:600; }
+  .new { background:var(--pink); color:#fff; border-radius:5px; padding:1px 7px; font-size:11px; font-weight:700; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin:14px 0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+  .card .k { font-size:12px; color:var(--muted); }
+  .card .v { font-size:15px; font-weight:600; margin-top:2px; }
+  .dot { display:inline-block; width:11px; height:11px; border-radius:4px; box-shadow:0 0 8px currentColor; vertical-align:middle; margin-right:6px; }
+  .toplinks a { margin-right:14px; font-size:13px; }
+  footer { color:var(--muted); font-size:12px; margin-top:40px; border-top:1px solid var(--line); padding-top:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>GALS <span>PANIC</span> — 진행 현황</h1>
+  <div class="sub">원작 아케이드 갈스패닉(Qix 계열) 웹 이식 · 개발 상태 요약</div>
+  <span class="updated">마지막 업데이트: 2026-08-16</span>
+
+  <div class="toplinks" style="margin-top:16px;">
+    ▶ <a href="local.html">로컬 co-op 실행</a>
+    <a href="index.html">온라인 클라이언트</a>
+    <a href="../PROGRESS.md">PROGRESS.md 원문</a>
+  </div>
+
+  <h2>한눈에 보기</h2>
+  <div class="cards">
+    <div class="card"><div class="k">로컬 동일화면 co-op</div><div class="v ok">✅ 완성 · 서버 불필요</div></div>
+    <div class="card"><div class="k">온라인 서버 권위 모드</div><div class="v ok">✅ 동작 · Colyseus</div></div>
+    <div class="card"><div class="k">분할 화면·플레이어별 카메라 <span class="new">NEW</span></div><div class="v">인원수 분할 + 각자 중앙 추적 줌</div></div>
+    <div class="card"><div class="k">외곽선 이동 규칙 <span class="new">NEW</span></div><div class="v">점유 영역은 외곽선만, 빈 공간 자유</div></div>
+    <div class="card"><div class="k">몬스터 다양화 <span class="new">NEW</span></div><div class="v">6종 아키타입 + 고유 AI</div></div>
+    <div class="card"><div class="k">투사체 포수 <span class="new">NEW</span></div><div class="v">안전지대도 탄에 맞으면 사망</div></div>
+    <div class="card"><div class="k">몬스터 포획(트랩) <span class="new">NEW</span></div><div class="v">작은 영역에 가두면 포획+점수</div></div>
+    <div class="card"><div class="k">레벨별 그림 변경 <span class="new">NEW</span></div><div class="v">하트·별·꽃·나비·보석·초승달</div></div>
+    <div class="card"><div class="k">이미지 4배 확대 <span class="new">NEW</span></div><div class="v">800×600 → 1600×1200</div></div>
+  </div>
+
+  <h2>게임 규칙</h2>
+  <ol>
+    <li>플레이어는 <b>점유된 그림 영역에서는 외곽선만</b> 이동한다(내부 관통 불가). 빈(미점유) 공간으로는 자유롭게 들어가 <b>선(trail)</b>을 긋는다.</li>
+    <li>선이 다시 안전지대에 닿으면, 적이 닿을 수 없는 빈 영역이 <b>한 번에 점유</b>(flood-fill)되어 숨은 그림이 드러난다.</li>
+    <li>돌아다니는 <b>적</b>이 당신의 선에 닿으면 그 선의 주인이 사망(목숨 −1, 부활).</li>
+    <li>내부의 <b>80%</b>를 열면 클리어. 점유 면적으로 기여도/순위 산정.</li>
+  </ol>
+  <p class="sub">조작(로컬) — P1 방향키 · P2 <code>WASD</code> · P3 <code>IJKL</code> · P4 숫자패드 <code>8/5/4/6</code> · <code>P</code> 일시정지 · <code>R</code> 재시작</p>
+
+  <h2>이번 업데이트</h2>
+
+  <h3>0-b) 분할 화면 + 플레이어별 카메라</h3>
+  <p>이미지를 크게 보고, 각 플레이어가 자기 위치를 중심으로 보게 한다.</p>
+  <ul>
+    <li>인원수에 따라 캔버스 분할: <b>1인 전체 · 2인 좌우 · 3~4인 2×2 격자</b>.</li>
+    <li>각 패널은 <b>그 플레이어를 중앙에 두고 따라가는 줌 카메라</b>(회전 없음). 전체 필드 대비 이미지가 <b>약 4배(면적) 확대</b>되어 보인다.</li>
+    <li>패널마다 소유 플레이어 색 테두리 + 이름표, 자기 마커엔 흰 링. 카메라는 월드 경계를 넘지 않게 클램프(<code>VIEW_MIN=60</code>).</li>
+    <li>구현: <code>computePanels()</code>/<code>drawPanel()</code>(clip+scale 카메라)/<code>drawWorld()</code>. 월드 그리드(160×120)는 그대로라 게임 길이 불변.</li>
+  </ul>
+
+  <h3>0) 외곽선 이동 규칙</h3>
+  <p>원작 Qix처럼 플레이어는 <b>채워진 그림의 외곽선만</b> 탈 수 있다.</p>
+  <ul>
+    <li>점유(claimed) 영역에서는 <b>빈칸과 8방향으로 맞닿은 프론티어 셀</b>로만 이동 — 내부를 가로지르지 못한다.</li>
+    <li><b>빈(미점유) 공간으로 들어가는 것은 자유</b>(선 긋기). 이동 제한은 점유 영역에만 적용.</li>
+    <li>8방향 인접 판정이라 코너에서도 외곽선이 끊기지 않고 연결된다. 프론티어를 벗어난 예외 상황에선 탈출 허용(갇힘 방지).</li>
+    <li>구현: <code>isBorder(x,y)</code> + <code>step()</code> 의 claimed 분기 가드.</li>
+  </ul>
+
+  <h3>1) 몬스터 다양화 — 6종 아키타입</h3>
+  <p>각 적은 고유한 외형·속도·행동 AI를 가지며, 레벨이 오를수록 위험한 변종이 등장한다. 등장 확률은 가중치(weight)로 조절.</p>
+  <table>
+    <thead><tr><th>이름</th><th>외형</th><th>속도</th><th>행동</th><th>등장 레벨</th></tr></thead>
+    <tbody>
+      <tr><td><span class="dot" style="color:#ff3b5c;background:#ff3b5c"></span>별똥이 (star)</td><td>빨간 4각 별</td><td>1.0×</td><td><code>bounce</code> 직선 반사</td><td>1+</td></tr>
+      <tr><td><span class="dot" style="color:#f59e0b;background:#f59e0b"></span>톱니 (saw)</td><td>주황 톱니바퀴</td><td>1.15×</td><td><code>bounce</code> 직선 반사</td><td>1+</td></tr>
+      <tr><td><span class="dot" style="color:#a855f7;background:#a855f7"></span>슬라임 (blob)</td><td>보라 젤리(꿈틀)</td><td>0.7×</td><td><code>wander</code> 무작위 전환</td><td>2+</td></tr>
+      <tr><td><span class="dot" style="color:#e0e7ff;background:#e0e7ff"></span>유령 (ghost)</td><td>반투명 유령</td><td>0.9×</td><td><code>wander</code> 무작위 전환</td><td>2+</td></tr>
+      <tr><td><span class="dot" style="color:#ef4444;background:#ef4444"></span>포수 (gunner)</td><td>빨간 터렛(포신)</td><td>0.55×</td><td><code>bounce</code> + 투사체 발사</td><td>4+</td></tr>
+      <tr><td><span class="dot" style="color:#22d3ee;background:#22d3ee"></span>추적자 (dart)</td><td>청록 삼각 화살</td><td>1.55×</td><td><code>hunt</code> 플레이어 추적</td><td>3+</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li><b>bounce</b>: 원작 Qix처럼 벽에 튕기며 직진.</li>
+    <li><b>wander</b>: 0.6~1.8초마다 진행 방향을 무작위로 틀어 예측 불가.</li>
+    <li><b>hunt</b>: 가장 가까운 플레이어(특히 선을 긋는 중인 플레이어)를 향해 약하게 조준 → 선 긋는 동안 압박.</li>
+    <li>이동 속도 크기는 항상 보존되고 <b>방향만</b> 바뀌어 조준/방황이 자연스럽다.</li>
+    <li><b>크기 = 속도 반비례</b>: 느린 몬스터일수록 크게 그려진다(<code>r = 2.5 / speed^0.7</code>, 순수 시각적). 별똥이는 빠른 톱니·추적자보다 크고, 굼뜬 슬라임·포수가 가장 크다.</li>
+  </ul>
+
+  <h3>2) 투사체 포수 (gunner)</h3>
+  <p><b>레벨 4부터</b> 등장. 느리게 돌아다니며 가장 가까운 플레이어를 조준해 약 2.4초마다 <b>탄환을 발사</b>한다.</p>
+  <ul>
+    <li>탄환은 <b>벽과 안전지대를 무시</b>하고 직선으로 날아가, 맞으면 사망 — <b>안전지대에 서 있어도, 직접 맞아도, 그리는 중인 선(trail)에 맞아도</b> 그 선의 주인이 죽는다.</li>
+    <li>안전지대 캠핑을 막고, 선을 긋는 동안 추가 위협이 된다. 탄환은 화면 밖으로 나가거나 수명(4초)이 다하면 소멸.</li>
+    <li><code>this.projectiles</code> 로 관리, <code>updateEnemies</code> 에서 이동·충돌 처리. 피드백: 발사 효과음 + 빛나는 탄환.</li>
+  </ul>
+
+  <h3>3) 몬스터 포획 (트랩 메커니즘)</h3>
+  <p>원작 Qix처럼 <b>적을 몰아넣고 영역을 갈라내는</b> 플레이에 보상을 준다.</p>
+  <ul>
+    <li>점유 시점에 빈칸을 <b>연결 요소</b>로 분해 → <b>가장 큰 적 영역(메인 필드) 하나만</b> 열린 채 남고, 그보다 <b>작은 적 영역은 전부 점유 + 그 안의 적 포획</b>. 적 없는 폭은 기존처럼 점유.</li>
+    <li>즉 <b>화면을 반으로 가르면 비율이 작은 쪽이 통째로 밝혀지고</b> 그쪽 적이 포획된다. 단독 적을 작은 폭(<code>TRAP_RATIO≤10%</code>)에 가두는 것도 포획.</li>
+    <li>포획 보너스 <b>+400점</b>(마리당, 동시 포획 합산). 피드백: <code>포획! +400</code> 팝업 + 효과음, HUD/결과창 <code>🕸</code> 표시. 순위는 <b>점수(점유 면적 + 포획 보너스)</b> 순.</li>
+    <li>밸런스 상수: <code>TRAP_RATIO=0.10</code>, <code>TRAP_BONUS=400</code> (튜닝 가능).</li>
+  </ul>
+
+  <h3>4) 선 긋기 중 멈춤 = 되짚기</h3>
+  <p>빈 공간을 파먹는 도중에는 <b>계속 움직여야</b> 한다. 긴장감을 위한 장치.</p>
+  <ul>
+    <li>선을 긋는 중(안전지대 밖) <b>키 입력이 멈추면</b> <code>STALL_MS=400ms</code> 후 → 그린 선을 <b>따라 역순으로 되짚어 걸어서</b> 시작 지점까지 돌아간다(밟은 만큼 삭제, 점유 안 함).</li>
+    <li>목숨은 잃지 않음. 되짚는 중에는 조작 불가이며, 남은 선은 적에게 닿으면 사망하므로 위험 부담이 있다.</li>
+    <li>방향 전환 사이 짧은 공백은 400ms 여유로 흡수. 피드백: 하강 효과음 + 선이 되짚어 사라지는 애니메이션.</li>
+    <li>구현: <code>startRetreat(p)</code> → 이동 타이머마다 <code>retreatStep(p)</code> 로 trail 끝 셀부터 한 칸씩 되밟아 삭제.</li>
+  </ul>
+
+  <h3>5) 이미지 4배 확대 & 레벨별 그림 변경</h3>
+  <ul>
+    <li>셀 크기 <code>CELL 5 → 10</code> (그리드 해상도 160×120 유지) → 캔버스 <b>1600×1200</b> (면적 4배).</li>
+    <li>절차적 아트가 2배 해상도로 그려져 더 선명하다. <code>max-width:100%</code>로 뷰포트를 넘지 않게 축소 렌더.</li>
+    <li>숨은 그림은 레벨(시드)에 따라 <b>하트·별·꽃·나비·보석·초승달</b> 중 하나 + 파스텔 팔레트 랜덤 → 매 판 다른 그림. (<code>generateArt</code>/<code>drawMotif</code>, 외부 이미지 없음)</li>
+  </ul>
+
+  <h2>아키텍처</h2>
+<pre><code>client/
+  local.html    로컬 멀티 (엔진+렌더+입력 all-in-one, 서버 불필요)
+  index.html    온라인 클라이언트 (입력만 전송, 동기화 상태 렌더)
+  status.html   ← 이 진행 현황 뷰 페이지 (신규)
+server/src/
+  GalSim.ts     서버 권위 Qix 시뮬레이션 (DOM-free)
+  GameRoom.ts   ~30Hz 틱 루프 → Colyseus 델타 동기화
+  schema.ts     동기화 상태(grid/trail/players/enemies/phase/level)
+  constants.ts  그리드/보더/속도/목표치</code></pre>
+  <ul>
+    <li><b>서버 권위</b>: 클라는 방향 코드(0~4)만 전송, 서버 <code>GalSim</code>이 이동·충돌·점유 계산 → 치트 방지.</li>
+    <li><b>이미지 보안</b>: 원본 풀해상도 미전송, 흐린 버전만 배포하고 열린 셀만 선명하게.</li>
+  </ul>
+
+  <h2>남은 로드맵</h2>
+  <ol>
+    <li><b>온라인 엔진(<code>GalSim.ts</code>)에 신규 기능 이식</b> — 6종 몬스터·투사체 포수·트랩(반 가르기)·되짚기·이미지 확대·레벨별 그림은 현재 <code>local.html</code>에만 반영됨.</li>
+    <li>서버 타일 스트리밍으로 이미지 완전 보호.</li>
+    <li>라인 위를 달리는 보조 적(Sparx) 추가로 원작 난이도 재현.</li>
+    <li>클리어 후 "이 그림 뭐게?" 맞히기 보너스.</li>
+    <li>로비/방 코드, 관전자, 8인 이상 확장(보더 스폰 분산).</li>
+  </ol>
+
+  <footer>이 페이지는 <code>PROGRESS.md</code>의 요약 뷰입니다. 세부 원문은 저장소 루트의 <a href="../PROGRESS.md">PROGRESS.md</a>를 참고하세요.</footer>
+</div>
+</body>
+</html>

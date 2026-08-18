@@ -347,7 +347,11 @@ function render() {
     if (me && !me.out) {
       const VIEW = Math.min(GW, GH, 32);            // cells across the shorter side
       camS = Math.min(GW, GH) / VIEW;               // zoom factor (2x on the 64 grid)
-      myPos = myRenderPos(me, now, dt);             // predicted (call once/frame)
+      // On low latency (localhost/LAN) prediction only adds snap-back jitter, so
+      // render my own marker with the same smooth server interpolation as everyone
+      // else. (Prediction is worth re-enabling only for a high-latency remote server,
+      // and then only with sequence-based reconciliation to avoid the bounce.)
+      myPos = playerRenderPos(me.id, me.x, me.y, now);
       const vpx = W / camS, vpy = H / camS;
       camX = Math.max(0, Math.min(myPos.x*cw + cw/2 - vpx/2, W - vpx));
       camY = Math.max(0, Math.min(myPos.y*ch + ch/2 - vpy/2, H - vpy));

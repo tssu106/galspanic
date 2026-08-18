@@ -67,7 +67,7 @@ async function connect() {
     const client = new Client(WS_URL);
     room = await client.joinOrCreate("game", { name: "Guest" });
     statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
-    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; });
+    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; captureSnapshot(); });
     room.state.listen?.("imageId", (v) => { if (v) img.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
     // capture popups: server broadcasts one per trapped-monster batch
     room.onMessage("trap", (ev) => {
@@ -189,6 +189,38 @@ function ease(cur, tgt, dt, tau) { return cur + (tgt - cur) * (1 - Math.exp(-dt 
 function follow(v, tx, ty, dt, tau = TAU) {
   if (Math.abs(v.x - tx) + Math.abs(v.y - ty) > 6) { v.x = tx; v.y = ty; }
   else { v.x = ease(v.x, tx, dt, tau); v.y = ease(v.y, ty, dt, tau); }
+}
+
+// ---- snapshot-buffer interpolation for enemies (the standard "render in the past") ----
+// Each server patch is buffered with a receive timestamp; enemies are drawn at
+// (now - SNAP_DELAY) by interpolating between the two snapshots bracketing that time.
+// This absorbs update jitter far better than easing toward the latest value, at the
+// cost of showing enemies a few tens of ms in the past.
+const SNAP_DELAY = 80;               // ms interpolation buffer
+const snaps = [];                    // [{ t, ex:[x0,y0,x1,y1,...] }]
+function captureSnapshot() {
+  if (!state) return;
+  const ex = [];
+  state.enemies.forEach((e) => { ex.push(e.x, e.y); });
+  snaps.push({ t: performance.now(), ex });
+  const cutoff = performance.now() - 1000;
+  while (snaps.length > 3 && snaps[0].t < cutoff) snaps.shift();
+}
+function enemyBracket(renderT) {
+  if (snaps.length === 0) return null;
+  let i = snaps.length - 1;
+  while (i > 0 && snaps[i].t > renderT) i--;
+  const a = snaps[i], b = snaps[i + 1] || a;
+  const span = b.t - a.t;
+  const alpha = span > 0 ? Math.max(0, Math.min(1, (renderT - a.t) / span)) : 1;
+  return { a: a.ex, b: b.ex, alpha };
+}
+// interpolated position for enemy index i (fallback to live x,y; snap on reindex/respawn)
+function enemyPos(br, i, live) {
+  if (!br || br.a.length <= i*2+1 || br.b.length <= i*2+1) return live;
+  const ax = br.a[i*2], ay = br.a[i*2+1], bx = br.b[i*2], by = br.b[i*2+1];
+  if (Math.abs(bx - ax) + Math.abs(by - ay) > 6) return { x: bx, y: by };
+  return { x: ax + (bx - ax) * br.alpha, y: ay + (by - ay) * br.alpha };
 }
 
 // Players jump a whole cell every MOVE_MS (~45ms). We glide the marker toward the CURRENT
@@ -325,14 +357,13 @@ function render() {
         ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1);
       }
     }
-    // enemies — interpolate toward server positions, draw by archetype
+    // enemies — snapshot-buffer interpolation (render ~SNAP_DELAY ms in the past)
     const spin = now / 120;
+    const br = enemyBracket(now - SNAP_DELAY);
     state.enemies.forEach((e, i) => {
-      const v = enemyView[i] || (enemyView[i] = { x: e.x, y: e.y });
-      follow(v, e.x, e.y, dt);
+      const v = enemyPos(br, i, e);
       drawEnemy(v.x*cw, v.y*ch, e, (e.r || 1) * cw, spin);
     });
-    enemyView.length = state.enemies.length;
     // gunner bullets — ignore walls & safe zone; lethal on any contact
     state.projectiles.forEach((pr) => {
       const x = pr.x*cw, y = pr.y*ch, R = cw*0.9;

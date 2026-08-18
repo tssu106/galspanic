@@ -1,8 +1,8 @@
-// Grid dimensions. 64x64 = 4096 cells — light for delta sync online. (Reverted the
-// 96x96 experiment: the enlarged map wasn't wanted; the client camera barely zooms
-// at this size, so the whole field reads at once.)
-export const GRID_W = 64;
-export const GRID_H = 64;
+// Grid dimensions. 256x256 = 65536 cells. Camera is off (fixed full-map view), so
+// the whole field shows at once with very small cells (~2.8px on a 720 canvas).
+// Initial full sync is large (~130KB) but deltas during play stay small.
+export const GRID_W = 256;
+export const GRID_H = 256;
 
 // Claimed border ring thickness.
 export const BORDER = 2;

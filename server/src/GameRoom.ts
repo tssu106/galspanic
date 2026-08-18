@@ -1,6 +1,7 @@
 import { Room, Client } from "@colyseus/core";
-import { GameState, Player, Enemy } from "./schema";
+import { GameState, Player, Enemy, Projectile } from "./schema";
 import { GalSim } from "./GalSim";
+import type { SimEnemy } from "./GalSim";
 import { TICK_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS } from "./constants";
 
 const COLORS = ["#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
@@ -57,12 +58,10 @@ export class GameRoom extends Room<GameState> {
     this.sim.gridDirty.clear();
     this.sim.trailDirty.clear();
 
-    // rebuild enemy schema list
+    // rebuild enemy + projectile schema lists
     this.state.enemies.splice(0, this.state.enemies.length);
-    for (const e of this.sim.enemies) {
-      const es = new Enemy(); es.x = e.x; es.y = e.y;
-      this.state.enemies.push(es);
-    }
+    for (const e of this.sim.enemies) this.state.enemies.push(this.makeEnemySchema(e));
+    this.state.projectiles.splice(0, this.state.projectiles.length);
 
     this.state.level = level;
     this.state.claimedInterior = 0;
@@ -72,8 +71,17 @@ export class GameRoom extends Room<GameState> {
     // reflect reset player stats
     this.sim.players.forEach((sp) => {
       const p = this.state.players.get(sp.sessionId);
-      if (p) { p.x = sp.x; p.y = sp.y; p.lives = sp.lives; p.claimed = 0; p.out = 0; p.drawing = 0; }
+      if (p) {
+        p.x = sp.x; p.y = sp.y; p.lives = sp.lives; p.claimed = 0; p.out = 0;
+        p.drawing = 0; p.retreating = 0; p.traps = 0; p.bonus = 0;
+      }
     });
+  }
+
+  private makeEnemySchema(e: SimEnemy): Enemy {
+    const es = new Enemy();
+    es.x = e.x; es.y = e.y; es.kind = e.kind; es.shape = e.shape; es.r = e.r; es.aim = e.aim;
+    return es;
   }
 
   tick(dt: number) {
@@ -92,19 +100,36 @@ export class GameRoom extends Room<GameState> {
       if (!p) return;
       p.x = sp.x; p.y = sp.y;
       p.drawing = sp.drawing ? 1 : 0;
+      p.retreating = sp.retreating ? 1 : 0;
       p.lives = sp.lives; p.claimed = sp.claimed; p.out = sp.out ? 1 : 0;
+      p.traps = sp.traps; p.bonus = sp.bonus;
     });
 
-    // the sim may add enemies mid-round as the reveal grows — mirror them
-    while (this.state.enemies.length < this.sim.enemies.length) {
-      const se = this.sim.enemies[this.state.enemies.length];
-      const es = new Enemy(); es.x = se.x; es.y = se.y;
-      this.state.enemies.push(es);
+    // enemies can grow (reveal spawns) or shrink (captures) — match the list length
+    while (this.state.enemies.length < this.sim.enemies.length)
+      this.state.enemies.push(this.makeEnemySchema(this.sim.enemies[this.state.enemies.length]));
+    while (this.state.enemies.length > this.sim.enemies.length)
+      this.state.enemies.pop();
+    for (let i = 0; i < this.sim.enemies.length; i++) {
+      const se = this.sim.enemies[i]!, es = this.state.enemies[i]!;
+      es.x = se.x; es.y = se.y; es.aim = se.aim;
+      if (es.kind !== se.kind) { es.kind = se.kind; es.shape = se.shape; es.r = se.r; }
     }
-    // sync enemies (positions only)
-    for (let i = 0; i < this.sim.enemies.length && i < this.state.enemies.length; i++) {
-      const es = this.state.enemies[i];
-      if (es) { es.x = this.sim.enemies[i].x; es.y = this.sim.enemies[i].y; }
+
+    // projectiles: match length and copy positions
+    while (this.state.projectiles.length < this.sim.projectiles.length)
+      this.state.projectiles.push(new Projectile());
+    while (this.state.projectiles.length > this.sim.projectiles.length)
+      this.state.projectiles.pop();
+    for (let i = 0; i < this.sim.projectiles.length; i++) {
+      const sp = this.sim.projectiles[i]!, ps = this.state.projectiles[i]!;
+      ps.x = sp.x; ps.y = sp.y;
+    }
+
+    // broadcast capture events for client popups/sound, then clear
+    if (this.sim.captureEvents.length) {
+      for (const ev of this.sim.captureEvents) this.broadcast("trap", ev);
+      this.sim.captureEvents.length = 0;
     }
 
     this.state.claimedInterior = this.sim.claimedInterior;

@@ -68,6 +68,13 @@ async function connect() {
     statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
     room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; });
     room.state.listen?.("imageId", (v) => { if (v) img.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
+    // capture popups: server broadcasts one per trapped-monster batch
+    room.onMessage("trap", (ev) => {
+      flashes.push({
+        x: ev.x, y: ev.y, color: playerColor(ev.owner), life: 1.2, ttl: 1.2,
+        text: ev.count > 1 ? `포획 x${ev.count}! +${ev.bonus}` : `포획! +${ev.bonus}`,
+      });
+    });
   } catch (e) {
     statusEl.textContent = "서버 연결 실패 — server 폴더에서 npm start 후 새로고침하세요";
     console.error(e);
@@ -112,6 +119,58 @@ restartBtn.onclick = () => room?.send("restart");
 function playerColor(owner) {
   const cs = ["#22d3ee","#f472b6","#a3e635","#fb923c"];
   return cs[(owner - 1) % cs.length] || "#fff";
+}
+
+// monster archetype colors (kind -> color); shape comes from the synced e.shape
+const KIND_COLOR = {
+  star:"#ff3b5c", saw:"#f59e0b", blob:"#a855f7", ghost:"#e0e7ff", gunner:"#ef4444", dart:"#22d3ee",
+};
+const flashes = [];   // capture popups {x,y,text,color,life,ttl}, fed by the "trap" broadcast
+
+function spikePath(points, R, inner) {
+  ctx.beginPath();
+  for (let k = 0; k < points*2; k++) {
+    const a = k*Math.PI/points, r = k%2 ? R : R*inner;
+    const x = Math.cos(a)*r, y = Math.sin(a)*r;
+    k === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+function enemyEyes(R) {
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(-R*0.2,-R*0.15,R*0.2,0,7); ctx.arc(R*0.25,-R*0.15,R*0.2,0,7); ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.beginPath(); ctx.arc(-R*0.2,-R*0.15,R*0.1,0,7); ctx.arc(R*0.25,-R*0.15,R*0.1,0,7); ctx.fill();
+}
+// draw one enemy at screen px (px,py); shape/kind/r/aim come from the synced schema
+function drawEnemy(px, py, e, R, spin) {
+  const color = KIND_COLOR[e.kind] || "#ff3b5c";
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 8;
+  if (e.shape === "triangle") {
+    ctx.save(); ctx.rotate((e.aim||0) + Math.PI/2);
+    ctx.beginPath(); ctx.moveTo(0,-R*1.1); ctx.lineTo(R*0.85,R*0.8); ctx.lineTo(-R*0.85,R*0.8); ctx.closePath(); ctx.fill();
+    ctx.restore(); ctx.shadowBlur = 0; enemyEyes(R*0.85);
+  } else if (e.shape === "saw") {
+    ctx.save(); ctx.rotate(spin); spikePath(11, R, 0.72); ctx.fill(); ctx.restore();
+    ctx.shadowBlur = 0; ctx.fillStyle = "#1a1206"; ctx.beginPath(); ctx.arc(0,0,R*0.4,0,7); ctx.fill(); enemyEyes(R);
+  } else if (e.shape === "blob") {
+    ctx.beginPath();
+    for (let a=0;a<=Math.PI*2+0.01;a+=0.4){ const rr=R*(1+0.14*Math.sin(a*3+spin)); const x=Math.cos(a)*rr,y=Math.sin(a)*rr*0.9; a===0?ctx.moveTo(x,y):ctx.lineTo(x,y);} ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0; enemyEyes(R);
+  } else if (e.shape === "ghost") {
+    ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(0,-R*0.1,R,Math.PI,0);
+    const feet=4, w=R*2/feet; for(let f=0;f<feet;f++){const x0=R-f*w; ctx.lineTo(x0,R*0.7); ctx.quadraticCurveTo(x0-w/2,R,x0-w,R*0.7);} ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0; enemyEyes(R);
+  } else if (e.shape === "turret") {
+    ctx.save(); ctx.rotate(e.aim||0); ctx.fillStyle="#7f1d1d"; ctx.fillRect(0,-R*0.26,R*1.7,R*0.52); ctx.restore();
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0,0,R,0,7); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.fillStyle = "#3f0d0d"; ctx.beginPath(); ctx.arc(0,0,R*0.55,0,7); ctx.fill(); enemyEyes(R);
+  } else {
+    ctx.save(); ctx.rotate(spin); spikePath(4, R, 0.55); ctx.fill(); ctx.restore(); ctx.shadowBlur = 0; enemyEyes(R);
+  }
+  ctx.restore();
 }
 
 // ---- interpolation ----
@@ -202,15 +261,23 @@ function render() {
         ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1);
       }
     }
-    // enemies — interpolate toward server positions
+    // enemies — interpolate toward server positions, draw by archetype
+    const spin = now / 120;
     state.enemies.forEach((e, i) => {
       const v = enemyView[i] || (enemyView[i] = { x: e.x, y: e.y });
       follow(v, e.x, e.y, dt);
-      ctx.fillStyle = "#ff3b5c"; ctx.shadowColor = "#ff3b5c"; ctx.shadowBlur = 10;
-      ctx.beginPath(); ctx.arc(v.x*cw, v.y*ch, cw*1.4, 0, 7); ctx.fill();
-      ctx.shadowBlur = 0;
+      drawEnemy(v.x*cw, v.y*ch, e, (e.r || 1) * cw, spin);
     });
     enemyView.length = state.enemies.length;
+    // gunner bullets — ignore walls & safe zone; lethal on any contact
+    state.projectiles.forEach((pr) => {
+      const x = pr.x*cw, y = pr.y*ch, R = cw*0.9;
+      ctx.save();
+      ctx.fillStyle = "#ffe066"; ctx.shadowColor = "#ff4d2e"; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x-R*0.25, y-R*0.25, R*0.4, 0, 7); ctx.fill();
+      ctx.restore();
+    });
     // players — glide toward the current server cell so the marker stays on its line's tip
     state.players.forEach((p) => {
       if (p.out) { pmove.delete(p.id); return; }
@@ -219,6 +286,18 @@ function render() {
       ctx.fillStyle = "#fff"; ctx.fillRect(vx*cw-1, vy*ch-1, cw+2, ch+2);
       ctx.fillStyle = p.color; ctx.fillRect(vx*cw, vy*ch, cw+1, ch+1);
     });
+    // capture popups
+    for (let i = flashes.length-1; i >= 0; i--) {
+      const f = flashes[i]; f.life -= dt;
+      if (f.life <= 0) { flashes.splice(i, 1); continue; }
+      const a = f.life / f.ttl;
+      ctx.save();
+      ctx.globalAlpha = a; ctx.textAlign = "center";
+      ctx.font = "bold 18px system-ui, sans-serif";
+      ctx.fillStyle = f.color; ctx.shadowColor = f.color; ctx.shadowBlur = 10;
+      ctx.fillText(f.text, f.x*cw, f.y*ch - (1-a)*20);
+      ctx.restore();
+    }
     drawHud();
     if (state.phase === "won" || state.phase === "lost") drawOverlay();
   }
@@ -246,9 +325,10 @@ function drawHud() {
   state.players.forEach((p) => {
     const me = room && p.id === room.sessionId;
     const pct = Math.round(p.claimed / total * 100);
+    const traps = p.traps ? `🕸${p.traps}` : "";
     html += `<div class="chip ${p.out ? "dead" : ""} ${me ? "me" : ""}">
       <div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}${me?" (나)":""}</div>
-      <div class="meta"><span>${pct}%</span><span>${p.out?"OUT":"♥"+p.lives}</span></div></div>`;
+      <div class="meta"><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div></div>`;
   });
   html += `<div class="chip"><div class="top">진행 · Lv ${state.level}</div>
     <div class="meta"><span>${ratio}%</span><span>목표 80%</span></div></div>`;

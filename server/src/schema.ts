@@ -10,13 +10,26 @@ export class Player extends Schema {
   @type("number") x: number = 0;        // grid coords
   @type("number") y: number = 0;
   @type("number") drawing: number = 0;  // 0/1 — currently laying a trail
+  @type("number") retreating: number = 0; // 0/1 — retracing a stalled line
   @type("number") lives: number = 3;
   @type("number") claimed: number = 0;  // interior cells this player has claimed
+  @type("number") traps: number = 0;    // monsters captured
+  @type("number") bonus: number = 0;    // capture bonus points
   @type("number") out: number = 0;      // 0/1 — eliminated this round
 }
 
-// An enemy marker (position only; velocity stays server-side).
+// An enemy marker. Position + aim sync; archetype look (kind/shape/size) too.
 export class Enemy extends Schema {
+  @type("number") x: number = 0;
+  @type("number") y: number = 0;
+  @type("string") kind: string = "star";  // archetype key -> client color/shape
+  @type("string") shape: string = "star";
+  @type("number") r: number = 1;           // radius in cells (size = slower is bigger)
+  @type("number") aim: number = 0;         // facing angle (gunner barrel / dart nose)
+}
+
+// A gunner's bullet (position only; it ignores walls and kills even on safe zone).
+export class Projectile extends Schema {
   @type("number") x: number = 0;
   @type("number") y: number = 0;
 }
@@ -44,4 +57,5 @@ export class GameState extends Schema {
 
   @type({ map: Player }) players = new MapSchema<Player>();
   @type([Enemy]) enemies = new ArraySchema<Enemy>();
+  @type([Projectile]) projectiles = new ArraySchema<Projectile>();
 }

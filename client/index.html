@@ -67,7 +67,7 @@ async function connect() {
     const client = new Client(WS_URL);
     room = await client.joinOrCreate("game", { name: "Guest" });
     statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
-    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; captureSnapshot(); });
+    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; captureSnapshot(); syncTrail(); });
     room.state.listen?.("imageId", (v) => { if (v) img.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
     // capture popups: server broadcasts one per trapped-monster batch
     room.onMessage("trap", (ev) => {
@@ -198,6 +198,17 @@ function follow(v, tx, ty, dt, tau = TAU) {
 // cost of showing enemies a few tens of ms in the past.
 const SNAP_DELAY = 80;               // ms interpolation buffer
 const snaps = [];                    // [{ t, ex:[x0,y0,x1,y1,...] }]
+
+// Active trail cells as a flat [index, owner, index, owner, ...] list, rebuilt on
+// each server patch. Rendering iterates this (O(trail length)) instead of scanning
+// all GW*GH cells every frame — so per-frame cost no longer grows with map size.
+let trailList = [];
+function syncTrail() {
+  if (!state) return;
+  const n = GW * GH, t = state.trail, list = [];
+  for (let i = 0; i < n; i++) { const o = t[i]; if (o) { list.push(i, o); } }
+  trailList = list;
+}
 function captureSnapshot() {
   if (!state) return;
   const ex = [];
@@ -338,16 +349,17 @@ function render() {
     ctx.save();   // identity transform: whole grid fills the canvas
 
     if (gridBuilt) ctx.drawImage(gridCanvas, 0, 0);   // one blit instead of GW*GH draws
-    // trails — skip each player's newest (head) cell; the moving marker is the line's tip
+    // trails — draw ONLY the active trail cells (built on each patch), so per-frame
+    // cost is O(trail length), independent of map size. Skip each player's newest
+    // (head) cell; the moving marker stands in for the line's tip.
     const heads = new Set();
     state.players.forEach((p) => { if (!p.out) heads.add(p.y * GW + p.x); });
-    for (let i = 0; i < GW * GH; i++) {
-      const owner = state.trail[i];
-      if (owner && !heads.has(i)) {
-        const cx = i % GW, cy = (i / GW) | 0;
-        ctx.fillStyle = playerColor(owner);
-        ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1);
-      }
+    for (let k = 0; k < trailList.length; k += 2) {
+      const i = trailList[k];
+      if (heads.has(i)) continue;
+      const cx = i % GW, cy = (i / GW) | 0;
+      ctx.fillStyle = playerColor(trailList[k + 1]);
+      ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1);
     }
     // enemies — snapshot-buffer interpolation (render ~SNAP_DELAY ms in the past)
     const spin = now / 120;

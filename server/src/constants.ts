@@ -9,7 +9,7 @@ export const BORDER = 2;
 export const CLEAR_RATIO = 0.8;
 
 // Simulation cadence (server-authoritative).
-export const TICK_MS = 33;    // ~30 Hz physics/broadcast
+export const TICK_MS = 16;    // ~60 Hz physics/broadcast (was 33/30Hz)
 export const MOVE_MS = 45;    // player advances one cell every 45ms while holding a direction
 
 // Up to 4 concurrent markers (four corner spawns), matching the local build.

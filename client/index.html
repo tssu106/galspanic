@@ -57,7 +57,6 @@ const statusEl = document.getElementById("status");
 const restartBtn = document.getElementById("restart");
 
 let room = null, state = null, GW = 64, GH = 64;
-let MOVE_MS = 45;   // authoritative step cadence (ms/cell); overwritten from state.moveMs
 const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
 img.onload = () => { imgReady = true; };
 
@@ -66,7 +65,7 @@ async function connect() {
     const client = new Client(WS_URL);
     room = await client.joinOrCreate("game", { name: "Guest" });
     statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
-    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; if (s.moveMs) MOVE_MS = s.moveMs; });
+    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; });
     room.state.listen?.("imageId", (v) => { if (v) img.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
   } catch (e) {
     statusEl.textContent = "서버 연결 실패 — server 폴더에서 npm start 후 새로고침하세요";
@@ -114,44 +113,50 @@ function playerColor(owner) {
   return cs[(owner - 1) % cs.length] || "#fff";
 }
 
-// ---- interpolation + local prediction ----
-// Server sends discrete grid positions at ~30Hz. We (a) smooth every entity toward
-// its latest server position so motion isn't jerky, and (b) predict our OWN marker
-// locally so it responds to keypresses without waiting a network round-trip.
-const DIR_DELTA = { 0:[0,0], 1:[0,-1], 2:[0,1], 3:[-1,0], 4:[1,0] };
-const TAU = 0.05;                    // smoothing time-constant (s); small = snappy
+// ---- interpolation ----
+// Server sends discrete grid positions at ~30Hz. We render every marker by easing
+// its drawn position toward the latest server position, so motion glides instead of
+// stepping cell-to-cell. The local marker eases too, but only ever LAGS the server
+// (never runs ahead), so it stays tucked at the head of its own trail — no floating
+// or snap-back. (True client-side prediction was tried and removed: on LAN the round
+// trip it hides is negligible while its artifacts are not.)
+const TAU = 0.05;                    // enemies: exponential smoothing (they update ~60Hz)
 const enemyView = [];                // smoothed enemy positions, index-aligned
-const otherView = new Map();         // sessionId -> smoothed pos for remote players
-let me = null;                       // predicted local marker {x,y,acc}
-let meView = null;                   // smoothed pixel-space position of my marker
 let lastFrame = performance.now();
 
-function ease(cur, tgt, dt) { return cur + (tgt - cur) * (1 - Math.exp(-dt / TAU)); }
+function ease(cur, tgt, dt, tau) { return cur + (tgt - cur) * (1 - Math.exp(-dt / tau)); }
 // ease toward target, but hard-snap on big jumps (respawn / round reset / enemy spawn)
-function follow(v, tx, ty, dt) {
+function follow(v, tx, ty, dt, tau = TAU) {
   if (Math.abs(v.x - tx) + Math.abs(v.y - ty) > 6) { v.x = tx; v.y = ty; }
-  else { v.x = ease(v.x, tx, dt); v.y = ease(v.y, ty, dt); }
+  else { v.x = ease(v.x, tx, dt, tau); v.y = ease(v.y, ty, dt, tau); }
 }
 
-// Mirror the server's movement rule so the local marker can step on its own.
-function predBlocked(x, y) {
-  if (x < 0 || y < 0 || x >= GW || y >= GH) return true;   // out of bounds
-  return state.trail[y*GW + x] !== 0;                       // any trail blocks (matches server)
-}
-function predictLocal(dt) {
-  const sp = room && state.players.get(room.sessionId);
-  if (!sp) { me = null; return; }
-  if (sp.out || state.phase !== "playing") { me = { x: sp.x, y: sp.y, acc: 0 }; return; }
-  if (!me) me = { x: sp.x, y: sp.y, acc: 0 };
-  // reconcile: trust prediction while it stays close; snap on real divergence
-  if (Math.abs(me.x - sp.x) + Math.abs(me.y - sp.y) >= 3) { me.x = sp.x; me.y = sp.y; me.acc = 0; }
-  const [dx, dy] = DIR_DELTA[currentDir()] || [0, 0];
-  me.acc += dt * 1000;
-  let guard = 0;
-  while (me.acc >= MOVE_MS && guard++ < 4) {
-    me.acc -= MOVE_MS;
-    if (dx || dy) { const nx = me.x + dx, ny = me.y + dy; if (!predBlocked(nx, ny)) { me.x = nx; me.y = ny; } }
+// Players move a whole cell every MOVE_MS (~45ms). Exponential easing there "arrives
+// then pauses" → the stepping you feel. Instead we render players slightly in the past
+// and LINEARLY interpolate between the two cells bracketing that render time, giving a
+// constant-velocity glide with no pauses.
+const INTERP_DELAY = 55;             // ms; must exceed the step interval to avoid starving
+const pbuf = new Map();              // id -> { s:[{t,x,y}], lx, ly }
+function samplePlayer(id, x, y, now) {
+  let tr = pbuf.get(id);
+  if (!tr) { tr = { s: [{ t: now, x, y }], lx: x, ly: y }; pbuf.set(id, tr); return tr; }
+  if (x !== tr.lx || y !== tr.ly) {
+    if (Math.abs(x - tr.lx) + Math.abs(y - tr.ly) > 6) tr.s = [];   // teleport → snap
+    tr.s.push({ t: now, x, y }); tr.lx = x; tr.ly = y;
+    if (tr.s.length > 12) tr.s.shift();
   }
+  return tr;
+}
+function playerPos(tr, now) {
+  const s = tr.s, rt = now - INTERP_DELAY;
+  if (!s.length) return null;
+  if (s.length === 1 || rt >= s[s.length - 1].t) { const l = s[s.length - 1]; return { x: l.x, y: l.y }; }
+  if (rt <= s[0].t) return { x: s[0].x, y: s[0].y };
+  for (let i = 1; i < s.length; i++) {
+    if (s[i].t >= rt) { const a = s[i - 1], b = s[i], u = (rt - a.t) / ((b.t - a.t) || 1);
+      return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u }; }
+  }
+  const l = s[s.length - 1]; return { x: l.x, y: l.y };
 }
 
 function render() {
@@ -190,23 +195,12 @@ function render() {
       ctx.shadowBlur = 0;
     });
     enemyView.length = state.enemies.length;
-    // predict my marker before drawing players
-    predictLocal(dt);
-    // players — my marker follows the local prediction; others interpolate
+    // players — constant-velocity linear interpolation between grid steps (own + remote)
     state.players.forEach((p) => {
-      if (p.out) { otherView.delete(p.id); return; }
-      const isMe = room && p.id === room.sessionId;
-      let vx, vy;
-      if (isMe && me) {
-        if (!meView) meView = { x: me.x, y: me.y };
-        follow(meView, me.x, me.y, dt);
-        vx = meView.x; vy = meView.y;
-      } else {
-        let v = otherView.get(p.id);
-        if (!v) { v = { x: p.x, y: p.y }; otherView.set(p.id, v); }
-        follow(v, p.x, p.y, dt);
-        vx = v.x; vy = v.y;
-      }
+      if (p.out) { pbuf.delete(p.id); return; }
+      const tr = samplePlayer(p.id, p.x, p.y, now);
+      const pos = playerPos(tr, now) || { x: p.x, y: p.y };
+      const vx = pos.x, vy = pos.y;
       ctx.fillStyle = "#fff"; ctx.fillRect(vx*cw-1, vy*ch-1, cw+2, ch+2);
       ctx.fillStyle = p.color; ctx.fillRect(vx*cw, vy*ch, cw+1, ch+1);
     });

@@ -7,6 +7,7 @@ const inBounds = (x: number, y: number) => x >= 0 && y >= 0 && x < COLS && y < R
 
 // tuning (mirrors client/local.html, scaled for the 64x64 online grid)
 const STALL_MS = 400;      // stop moving mid-draw this long -> the line retraces
+const RETRACE_MS = 16;     // ms per cell while retracing back to origin (faster than MOVE_MS)
 const TRAP_RATIO = 0.10;   // an enemy boxed into a region <=10% of interior is captured
 const TRAP_BONUS = 400;    // capture bonus points per trapped monster
 const BULLET_SPEED = 20;   // cells/sec for gunner projectiles
@@ -350,9 +351,10 @@ export class GalSim {
     for (const p of this.players) {
       if (p.out) continue;
       if (p.retreating) {
+        // retrace faster than normal movement so the marker snaps back quickly
         p.acc += dtSec * 1000;
         let guard = 0;
-        while (p.acc >= MOVE_MS && guard++ < 6) { p.acc -= MOVE_MS; this.retreatStep(p); if (!p.retreating) break; }
+        while (p.acc >= RETRACE_MS && guard++ < 12) { p.acc -= RETRACE_MS; this.retreatStep(p); if (!p.retreating) break; }
         continue;
       }
       const held = p.heldDir;

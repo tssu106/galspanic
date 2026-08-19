@@ -248,7 +248,7 @@ function enemyPos(br, i, live) {
 // right on it at rest. The remaining sub-cell gap is hidden by NOT drawing each player's
 // newest (head) trail cell — the moving marker stands in for the line's tip, and each
 // cell solidifies into the line as the marker passes it (like the arcade line growing).
-const STEP_MS = 40;                  // fallback for state.moveMs (matches server MOVE_MS)
+const STEP_MS = 48;                  // fallback for state.moveMs (matches server MOVE_MS)
 const pmove = new Map();             // id -> { px, py, cx, cy, t0 }
 function playerRenderPos(id, sx, sy, now) {
   let m = pmove.get(id);

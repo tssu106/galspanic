@@ -11,11 +11,11 @@ export const CLEAR_RATIO = 0.85;
 
 // Simulation cadence (server-authoritative). 50Hz keeps host load LOW (server + its browser
 // share one machine; higher rates felt stuck) while client interpolation keeps motion smooth.
-export const SIM_MS = 20;     // 50 Hz physics
-export const PATCH_MS = 20;   // 50 Hz state broadcast (no point broadcasting faster than the sim)
-export const MOVE_MS = 40;    // one cell per 40ms = exactly 2 sim ticks (2 x SIM_MS) → regular
-                              // cadence, constant-velocity glide (no micro-stutter). ~25 cells/s,
-                              // a comfortable middle (32ms felt too fast, 45ms too slow).
+export const SIM_MS = 24;     // ~42 Hz physics
+export const PATCH_MS = 24;   // ~42 Hz state broadcast (matches the sim)
+export const MOVE_MS = 48;    // one cell per 48ms = exactly 2 sim ticks (SIM_MS x 2) → regular
+                              // cadence, smooth constant-velocity glide. ~21 cells/s (a bit slower).
+                              // Rule of thumb: keep SIM_MS = MOVE_MS / 2 so a cell is always 2 ticks.
 
 // After clearing a stage, auto-advance to the next one over this countdown (client shows a bar).
 export const WIN_COUNTDOWN_MS = 5000;

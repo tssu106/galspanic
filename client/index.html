@@ -317,8 +317,8 @@ function render() {
     if (room) state.players.forEach((p) => { if (p.id === room.sessionId) me = p; });
     let camS = 1, camX = 0, camY = 0, myPos = null;
     if (me && !me.out) {
-      const VIEW = Math.min(GW, GH, 32);            // cells across the shorter side
-      camS = Math.min(GW, GH) / VIEW;               // zoom factor (2x on the 64 grid)
+      const VIEW = Math.min(GW, GH, 44);            // cells across the shorter side (higher = zoomed out)
+      camS = Math.min(GW, GH) / VIEW;               // zoom factor (~1.45x on the 64 grid)
       // On low latency (localhost/LAN) prediction only adds snap-back jitter, so
       // render my own marker with the same smooth server interpolation as everyone
       // else. (Prediction is worth re-enabling only for a high-latency remote server,

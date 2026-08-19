@@ -62,6 +62,7 @@ const B = 3;                              // border thickness (claimed ring)
 const EMPTY = 0, CLAIMED = 1;
 const TARGET = 0.85;                      // clear ratio
 const MOVE_MS = 26;                       // player step interval
+const RETRACE_MS = 9;                     // ms per cell while retracing to origin (~3x faster than MOVE_MS)
 const STALL_MS = 400;                     // stop moving mid-draw this long -> the line is cancelled
 const TRAP_RATIO = 0.10;                  // enemy boxed into an empty pocket <=10% of interior = trapped
 const TRAP_BONUS = 400;                   // capture bonus points per trapped monster (tunable)
@@ -731,11 +732,12 @@ function frame(now) {
     for (const p of game.players) {
       if (p.out) continue;
 
-      // retracing a cancelled line back to its start (uncontrollable until home)
+      // retracing a cancelled line back to its start (uncontrollable until home).
+      // Steps at the faster RETRACE_MS so the marker snaps back quickly.
       if (p.retreating) {
         p.acc += dt*1000;
         let guard = 0;
-        while (p.acc >= MOVE_MS && guard++ < 6) { p.acc -= MOVE_MS; game.retreatStep(p); if (!p.retreating) break; }
+        while (p.acc >= RETRACE_MS && guard++ < 12) { p.acc -= RETRACE_MS; game.retreatStep(p); if (!p.retreating) break; }
         continue;
       }
 

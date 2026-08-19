@@ -58,6 +58,10 @@ export class GameState extends Schema {
   // Public id of the current image (client fetches a BLURRED version only).
   @type("string") imageId: string = "";
 
+  // Id of the NEXT stage's image, published when a stage is won so the client can
+  // preload it during the countdown → the next stage starts with no loading hitch.
+  @type("string") nextImageId: string = "";
+
   @type({ map: Player }) players = new MapSchema<Player>();
   @type([Enemy]) enemies = new ArraySchema<Enemy>();
   @type([Projectile]) projectiles = new ArraySchema<Projectile>();

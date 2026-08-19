@@ -144,7 +144,12 @@ export class GameRoom extends Room<GameState> {
     this.state.claimedInterior = this.sim.claimedInterior;
     if (this.sim.over) {
       this.state.phase = this.sim.over;   // "won" | "lost"
-      if (this.sim.over === "won") { this.wonElapsed = 0; this.state.nextIn = WIN_COUNTDOWN_MS / 1000; }
+      if (this.sim.over === "won") {
+        this.wonElapsed = 0;
+        this.state.nextIn = WIN_COUNTDOWN_MS / 1000;
+        // publish the next stage's image now so clients can preload it during the countdown
+        this.state.nextImageId = IMAGE_POOL[this.sim.level % IMAGE_POOL.length];
+      }
     }
   }
 

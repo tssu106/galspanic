@@ -61,6 +61,9 @@ let room = null, state = null, GW = 64, GH = 64;
 const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
 let imgVersion = 0;   // bumps on every (re)load so the cached grid layer rebuilds
 img.onload = () => { imgReady = true; imgVersion++; };
+// hidden image used only to warm the browser cache for the NEXT stage during the
+// between-stage countdown, so switching to it at round start has no loading hitch.
+const preImg = new Image(); preImg.crossOrigin = "anonymous";
 
 async function connect() {
   try {
@@ -73,6 +76,8 @@ async function connect() {
     // the main thread (which was making input feel ~1s late on the host).
     room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; });
     room.state.listen?.("imageId", (v) => { if (v) img.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
+    // preload the next stage's image during the countdown → next round starts hitch-free
+    room.state.listen?.("nextImageId", (v) => { if (v) preImg.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
     // capture popups: server broadcasts one per trapped-monster batch
     room.onMessage("trap", (ev) => {
       flashes.push({

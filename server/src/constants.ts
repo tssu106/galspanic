@@ -9,15 +9,13 @@ export const BORDER = 2;
 // Clear the round when this fraction of the *interior* is claimed.
 export const CLEAR_RATIO = 0.85;
 
-// Simulation cadence (server-authoritative). Sim and broadcast are DECOUPLED so they can
-// be tuned independently. Kept at ~60Hz: raising to 120/90Hz overloaded the HOST (which
-// runs the server AND its browser on one machine) and made input feel stuck/very slow.
-export const SIM_MS = 16;     // ~60 Hz physics
-export const PATCH_MS = 16;   // ~60 Hz state broadcast
-export const MOVE_MS = 32;    // one cell per 32ms = exactly 2 sim ticks (2 x SIM_MS).
-                              // Aligning to the tick makes the step cadence regular, so the
-                              // client glide is constant-velocity (no micro-stutter). 26ms
-                              // wasn't a tick multiple, so cells moved every 16/32ms → uneven.
+// Simulation cadence (server-authoritative). 50Hz keeps host load LOW (server + its browser
+// share one machine; higher rates felt stuck) while client interpolation keeps motion smooth.
+export const SIM_MS = 20;     // 50 Hz physics
+export const PATCH_MS = 20;   // 50 Hz state broadcast (no point broadcasting faster than the sim)
+export const MOVE_MS = 40;    // one cell per 40ms = exactly 2 sim ticks (2 x SIM_MS) → regular
+                              // cadence, constant-velocity glide (no micro-stutter). ~25 cells/s,
+                              // a comfortable middle (32ms felt too fast, 45ms too slow).
 
 // After clearing a stage, auto-advance to the next one over this countdown (client shows a bar).
 export const WIN_COUNTDOWN_MS = 5000;

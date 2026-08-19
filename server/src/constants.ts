@@ -14,8 +14,10 @@ export const CLEAR_RATIO = 0.85;
 // runs the server AND its browser on one machine) and made input feel stuck/very slow.
 export const SIM_MS = 16;     // ~60 Hz physics
 export const PATCH_MS = 16;   // ~60 Hz state broadcast
-export const MOVE_MS = 26;    // player advances one cell every 26ms — matches the snappy
-                              // local build (45ms felt sluggish online)
+export const MOVE_MS = 32;    // one cell per 32ms = exactly 2 sim ticks (2 x SIM_MS).
+                              // Aligning to the tick makes the step cadence regular, so the
+                              // client glide is constant-velocity (no micro-stutter). 26ms
+                              // wasn't a tick multiple, so cells moved every 16/32ms → uneven.
 
 // After clearing a stage, auto-advance to the next one over this countdown (client shows a bar).
 export const WIN_COUNTDOWN_MS = 5000;

@@ -34,7 +34,7 @@
   <canvas id="c" width="720" height="720"></canvas>
   <div id="help">
     <b>방향키</b>로 이동 — 안전지대에서 빈 공간으로 들어가면 선이 그려지고, 다시 안전지대에 닿으면 안쪽이 점유됩니다.
-    빨간 적이 당신의 선에 닿으면 목숨을 잃어요. 다 함께 <b>80%</b>를 열면 클리어!
+    빨간 적이 당신의 선에 닿으면 목숨을 잃어요. 다 함께 <b>85%</b>를 열면 클리어!
     <div style="margin-top:6px"><button id="restart" style="display:none">다음/재시작 (Enter)</button></div>
   </div>
 
@@ -67,7 +67,11 @@ async function connect() {
     const client = new Client(WS_URL);
     room = await client.joinOrCreate("game", { name: "Guest" });
     statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
-    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; captureSnapshot(); syncTrail(); });
+    // Keep this handler TRIVIAL: just latch the latest state. The heavy per-update work
+    // (scanning the 4096-cell trail array, capturing enemy snapshots) is done once per
+    // render frame instead — so a burst of queued patches can't pile up scans and stall
+    // the main thread (which was making input feel ~1s late on the host).
+    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; });
     room.state.listen?.("imageId", (v) => { if (v) img.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
     // capture popups: server broadcasts one per trapped-monster batch
     room.onMessage("trap", (ev) => {
@@ -148,7 +152,7 @@ function drawEnemy(px, py, e, R, spin) {
   const color = KIND_COLOR[e.kind] || "#ff3b5c";
   ctx.save();
   ctx.translate(px, py);
-  ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 8;
+  ctx.fillStyle = color;   // shadowBlur removed — it's a canvas perf killer (per-enemy gaussian blur)
   if (e.shape === "triangle") {
     ctx.save(); ctx.rotate((e.aim||0) + Math.PI/2);
     ctx.beginPath(); ctx.moveTo(0,-R*1.1); ctx.lineTo(R*0.85,R*0.8); ctx.lineTo(-R*0.85,R*0.8); ctx.closePath(); ctx.fill();
@@ -244,64 +248,24 @@ const pmove = new Map();             // id -> { px, py, cx, cy, t0 }
 function playerRenderPos(id, sx, sy, now) {
   let m = pmove.get(id);
   if (!m) { m = { px: sx, py: sy, cx: sx, cy: sy, t0: now - 1e4 }; pmove.set(id, m); return { x: sx, y: sy }; }
-  const glide = (state.moveMs || STEP_MS);
-  if (sx !== m.cx || sy !== m.cy) {                 // server advanced to a new cell
-    // interpolate strictly from the previous cell to the current one → lag never exceeds
-    // one cell. On a >1-cell jump (frame hitch / respawn) snap instead of a long slide.
-    if (Math.abs(sx - m.cx) + Math.abs(sy - m.cy) > 1) { m.px = sx; m.py = sy; }
-    else { m.px = m.cx; m.py = m.cy; }
+  const glide = (state.moveMs || STEP_MS);   // glide one full step → constant-velocity, no pause
+  if (sx !== m.cx || sy !== m.cy) {           // server advanced to a new cell
+    if (Math.abs(sx - m.cx) + Math.abs(sy - m.cy) > 1) {   // teleport / respawn → snap
+      m.px = sx; m.py = sy;
+    } else {
+      // Continue from the CURRENT displayed position (not the old target cell) so motion
+      // is seamless even when the previous glide hadn't finished — the marker keeps
+      // tracking the latest cell smoothly, with no mid-step jump or "arrive-then-pause".
+      const u = Math.min(1, (now - m.t0) / glide);
+      m.px = m.px + (m.cx - m.px) * u;
+      m.py = m.py + (m.cy - m.py) * u;
+    }
     m.cx = sx; m.cy = sy; m.t0 = now;
   }
   const u = Math.min(1, (now - m.t0) / glide);
   return { x: m.px + (m.cx - m.px) * u, y: m.py + (m.cy - m.py) * u };
 }
 
-// ---- client-side prediction + soft reconciliation for MY OWN marker ----
-// On localhost this is a no-op (no latency to hide); on a real remote server it
-// makes my movement instant instead of waiting a round-trip. I predict the same
-// grid steps the server will take from my held direction, then reconcile against
-// the authoritative position: follow the server when idle/retracing, cap how far
-// prediction may lead, and hard-snap on a big divergence (block / kill / respawn).
-const DIR_VEC = { 0:[0,0], 1:[0,-1], 2:[0,1], 3:[-1,0], 4:[1,0] };
-const pred = { cx:0, cy:0, px:0, py:0, t0:0, acc:0, init:false };
-function borderLocal(x, y) {
-  if (x<0||y<0||x>=GW||y>=GH || state.cells[y*GW+x] !== 1) return false;
-  for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
-    if (!dx && !dy) continue; const ax=x+dx, ay=y+dy;
-    if (ax>=0&&ay>=0&&ax<GW&&ay<GH && state.cells[ay*GW+ax] === 0) return true;
-  }
-  return false;
-}
-function predStep(dir, now) {
-  const d = DIR_VEC[dir]; const nx = pred.cx+d[0], ny = pred.cy+d[1];
-  if (nx<0||ny<0||nx>=GW||ny>=GH) return;
-  const ni = ny*GW+nx;
-  if (state.trail[ni] !== 0) return;                          // blocked by a trail
-  const drawing = state.cells[pred.cy*GW+pred.cx] === 0;      // on empty => mid-draw
-  if (state.cells[ni] === 1 && !drawing && borderLocal(pred.cx,pred.cy) && !borderLocal(nx,ny)) return; // frontier rule
-  pred.px = pred.cx; pred.py = pred.cy; pred.cx = nx; pred.cy = ny; pred.t0 = now;
-}
-function myRenderPos(myp, now, dt) {
-  const moveMs = state.moveMs || STEP_MS;
-  if (!pred.init) { pred.cx=pred.px=myp.x; pred.cy=pred.py=myp.y; pred.t0=now-moveMs; pred.init=true; }
-  const dir = currentDir();
-  const far = Math.abs(pred.cx-myp.x) + Math.abs(pred.cy-myp.y);
-  if (far > 8) {                                    // hard desync (kill/respawn): snap, no slide
-    pred.cx=pred.px=myp.x; pred.cy=pred.py=myp.y; pred.t0=now-moveMs; pred.acc=0;
-  } else if (dir === 0) {                           // idle/retrace/external: glide toward server
-    if (pred.cx!==myp.x || pred.cy!==myp.y) { pred.px=pred.cx; pred.py=pred.cy; pred.cx=myp.x; pred.cy=myp.y; pred.t0=now; }
-    pred.acc = 0;
-  } else {                                          // predicting my own input
-    pred.acc += dt*1000;
-    let guard = 0;
-    while (pred.acc >= moveMs && guard++ < 4) {
-      pred.acc -= moveMs;
-      if (Math.abs(pred.cx-myp.x) + Math.abs(pred.cy-myp.y) < 3) predStep(dir, now); // cap the lead
-    }
-  }
-  const u = Math.min(1, (now - pred.t0) / moveMs);
-  return { x: pred.px + (pred.cx-pred.px)*u, y: pred.py + (pred.cy-pred.py)*u };
-}
 
 // The grid (claimed art vs dark empty) only changes on a claim — rare — but drawing it
 // is the one cost that scales (up to GW*GH drawImage slices once a photo is revealed).
@@ -333,6 +297,9 @@ function render() {
   ctx.clearRect(0, 0, W, H);
   if (state && state.cells.length) {
     const cw = W / GW, ch = H / GH;
+    // per-frame (not per-patch): capped so queued patches can't pile up scans and stall
+    captureSnapshot();   // enemy snapshot for interpolation
+    syncTrail();         // rebuild the active-trail list from the grid
     // rebuild the cached grid layer only when it changed (claim / new level / image load / resize)
     if (state.claimedInterior !== lastClaimed || state.level !== lastLevel ||
         imgVersion !== lastImgVer || GW !== lastGW || GH !== lastGH) {
@@ -344,8 +311,6 @@ function render() {
     // prediction (myPos); we just don't move/zoom the view around it.
     let me = null;
     if (room) state.players.forEach((p) => { if (p.id === room.sessionId) me = p; });
-    let myPos = null;
-    if (me && !me.out) myPos = myRenderPos(me, now, dt);   // predicted (call once/frame)
     ctx.save();   // identity transform: whole grid fills the canvas
 
     if (gridBuilt) ctx.drawImage(gridCanvas, 0, 0);   // one blit instead of GW*GH draws
@@ -372,17 +337,17 @@ function render() {
     state.projectiles.forEach((pr) => {
       const x = pr.x*cw, y = pr.y*ch, R = cw*0.9;
       ctx.save();
-      ctx.fillStyle = "#ffe066"; ctx.shadowColor = "#ff4d2e"; ctx.shadowBlur = 12;
+      ctx.fillStyle = "#ffe066";
       ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
       ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x-R*0.25, y-R*0.25, R*0.4, 0, 7); ctx.fill();
       ctx.restore();
     });
-    // players — glide toward the current server cell so the marker stays on its line's tip
+    // players — every marker glides at constant velocity toward the latest server cell,
+    // continuously tracking it for smooth motion. (Path prediction stays out: with a
+    // server-owned trail it detaches the marker from its line on direction changes.)
     state.players.forEach((p) => {
       if (p.out) { pmove.delete(p.id); return; }
-      // my own marker uses the predicted position (already computed for the camera);
-      // everyone else uses server interpolation.
-      const pos = (p === me && myPos) ? myPos : playerRenderPos(p.id, p.x, p.y, now);
+      const pos = playerRenderPos(p.id, p.x, p.y, now);
       const vx = pos.x, vy = pos.y;
       ctx.fillStyle = "#fff"; ctx.fillRect(vx*cw-1, vy*ch-1, cw+2, ch+2);
       ctx.fillStyle = p.color; ctx.fillRect(vx*cw, vy*ch, cw+1, ch+1);
@@ -395,7 +360,7 @@ function render() {
       ctx.save();
       ctx.globalAlpha = a; ctx.textAlign = "center";
       ctx.font = "bold 18px system-ui, sans-serif";
-      ctx.fillStyle = f.color; ctx.shadowColor = f.color; ctx.shadowBlur = 10;
+      ctx.fillStyle = f.color;
       ctx.fillText(f.text, f.x*cw, f.y*ch - (1-a)*20);
       ctx.restore();
     }
@@ -406,16 +371,29 @@ function render() {
   requestAnimationFrame(render);
 }
 
+const WIN_COUNTDOWN_S = 5;   // matches the server's between-stage countdown
 function drawOverlay() {
   const W = canvas.width, H = canvas.height;
-  ctx.fillStyle = "rgba(8,10,20,.8)";
-  ctx.fillRect(W/2-180, H/2-70, 360, 140);
+  const won = state.phase === "won";
+  ctx.fillStyle = "rgba(8,10,20,.82)";
+  ctx.fillRect(W/2-190, H/2-80, 380, won ? 176 : 140);
   ctx.textAlign = "center";
-  ctx.fillStyle = state.phase === "won" ? "#a3e635" : "#ff5db1";
+  ctx.fillStyle = won ? "#a3e635" : "#ff5db1";
   ctx.font = "bold 34px system-ui";
-  ctx.fillText(state.phase === "won" ? `LEVEL ${state.level} CLEAR!` : "GAME OVER", W/2, H/2-10);
-  ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
-  ctx.fillText("Enter 로 " + (state.phase === "won" ? "다음 레벨" : "재시작"), W/2, H/2+24);
+  ctx.fillText(won ? `LEVEL ${state.level} CLEAR!` : "GAME OVER", W/2, H/2-22);
+  if (won) {
+    const remain = Math.max(0, state.nextIn || 0);
+    const prog = Math.min(1, Math.max(0, 1 - remain / WIN_COUNTDOWN_S));   // bar fills over the countdown
+    const bw = 300, bh = 14, bx = W/2 - bw/2, by = H/2 + 6;
+    ctx.fillStyle = "#1b2138"; ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = "#a3e635"; ctx.fillRect(bx, by, bw * prog, bh);
+    ctx.strokeStyle = "#3a4670"; ctx.strokeRect(bx, by, bw, bh);
+    ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
+    ctx.fillText(`다음 스테이지까지 ${Math.ceil(remain)}초`, W/2, by + bh + 24);
+  } else {
+    ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
+    ctx.fillText("Enter 로 재시작", W/2, H/2 + 24);
+  }
   ctx.textAlign = "left";
 }
 
@@ -433,7 +411,7 @@ function drawHud() {
       <div class="meta"><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div></div>`;
   });
   html += `<div class="chip"><div class="top">진행 · Lv ${state.level}</div>
-    <div class="meta"><span>${ratio}%</span><span>목표 80%</span></div></div>`;
+    <div class="meta"><span>${ratio}%</span><span>목표 85%</span></div></div>`;
   hud.innerHTML = html;
   restartBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
 }

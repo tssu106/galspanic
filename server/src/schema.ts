@@ -49,6 +49,9 @@ export class GameState extends Schema {
   // Authoritative move cadence (ms/cell) — clients mirror it for local prediction.
   @type("number") moveMs: number = MOVE_MS;
 
+  // Seconds left on the between-stage countdown (only meaningful while phase === "won").
+  @type("number") nextIn: number = 0;
+
   // "lobby" | "playing" | "won" | "lost"
   @type("string") phase: string = "lobby";
 

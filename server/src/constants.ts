@@ -7,11 +7,17 @@ export const GRID_H = 64;
 export const BORDER = 2;
 
 // Clear the round when this fraction of the *interior* is claimed.
-export const CLEAR_RATIO = 0.8;
+export const CLEAR_RATIO = 0.85;
 
-// Simulation cadence (server-authoritative).
-export const TICK_MS = 16;    // ~60 Hz physics/broadcast (was 33/30Hz)
+// Simulation cadence (server-authoritative). Sim and broadcast are DECOUPLED so they can
+// be tuned independently. Kept at ~60Hz: raising to 120/90Hz overloaded the HOST (which
+// runs the server AND its browser on one machine) and made input feel stuck/very slow.
+export const SIM_MS = 16;     // ~60 Hz physics
+export const PATCH_MS = 16;   // ~60 Hz state broadcast
 export const MOVE_MS = 45;    // player advances one cell every 45ms while holding a direction
+
+// After clearing a stage, auto-advance to the next one over this countdown (client shows a bar).
+export const WIN_COUNTDOWN_MS = 5000;
 
 // Up to 4 concurrent markers (four corner spawns), matching the local build.
 export const MAX_PLAYERS = 4;

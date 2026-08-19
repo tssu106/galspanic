@@ -12,7 +12,7 @@ const TRAP_BONUS = 400;    // capture bonus points per trapped monster
 const BULLET_SPEED = 20;   // cells/sec for gunner projectiles
 const BULLET_LIFE = 4;     // seconds
 
-type Behavior = "bounce" | "wander" | "hunt";
+type Behavior = "bounce" | "wander" | "hunt" | "turret";
 interface EnemyType {
   key: string; speed: number; behavior: Behavior; shape: string;
   minLevel: number; weight: number; gun?: boolean; fireEvery?: number;
@@ -23,7 +23,7 @@ const ENEMY_TYPES: EnemyType[] = [
   { key: "saw",    speed: 1.15, behavior: "bounce", shape: "saw",      minLevel: 1, weight: 2 },
   { key: "blob",   speed: 0.70, behavior: "wander", shape: "blob",     minLevel: 2, weight: 2 },
   { key: "ghost",  speed: 0.90, behavior: "wander", shape: "ghost",    minLevel: 2, weight: 1 },
-  { key: "gunner", speed: 0.55, behavior: "bounce", shape: "turret",   minLevel: 4, weight: 2, gun: true, fireEvery: 2.4 },
+  { key: "gunner", speed: 0.55, behavior: "turret", shape: "turret",   minLevel: 4, weight: 2, gun: true, fireEvery: 2.4 },
   { key: "dart",   speed: 1.55, behavior: "hunt",   shape: "triangle", minLevel: 3, weight: 2 },
 ];
 
@@ -115,10 +115,10 @@ export class GalSim {
     }
 
     this.enemies = [];
-    this.enemySpeed = 8 + (level - 1) * 1.5;   // cells per second
+    this.enemySpeed = 9 + (level - 1) * 1.8;   // cells per second (gentle base, gradual per-level ramp)
     this.spawnThresholds = [0.20, 0.40, 0.60];
     const active = Math.max(1, this.players.length);
-    const count = 1 + active + (level - 1);
+    const count = 2 + active + (level - 1) * 2;   // more monsters: bigger base + faster per-level growth
     for (let i = 0; i < count; i++) {
       this.enemies.push(this.makeEnemy(
         COLS / 2 + (Math.random() - 0.5) * 16,
@@ -197,7 +197,15 @@ export class GalSim {
 
   setInput(sessionId: string, dir: [number, number] | null) {
     const p = this.players.find(q => q.sessionId === sessionId);
-    if (p) p.heldDir = (dir && (dir[0] || dir[1])) ? dir : null;
+    if (!p) return;
+    const nd = (dir && (dir[0] || dir[1])) ? dir : null;
+    const changed = (!p.heldDir) !== (!nd) ||
+      (!!nd && !!p.heldDir && (nd[0] !== p.heldDir[0] || nd[1] !== p.heldDir[1]));
+    p.heldDir = nd;
+    // Prime the step timer on a fresh direction so the first move fires on the NEXT tick
+    // (~16ms) instead of waiting up to MOVE_MS (45ms) for the accumulator. This cuts
+    // turn/start latency with zero client-side prediction — the server stays authoritative.
+    if (nd && changed && !p.retreating && p.acc < MOVE_MS) p.acc = MOVE_MS;
   }
 
   private isWall(x: number, y: number) { return !inBounds(x, y) || this.grid[idx(x, y)] === CLAIMED; }
@@ -364,31 +372,34 @@ export class GalSim {
     // enemies: per-archetype steering, bounce, kill on trail contact, shoot
     for (const e of this.enemies) {
       e.spin += dtSec * 8;
-      if (e.behavior === "wander") {
-        e.wanderT -= dtSec;
-        if (e.wanderT <= 0) {
-          e.wanderT = 0.6 + Math.random() * 1.2;
-          const a = Math.atan2(e.vy, e.vx) + (Math.random() - 0.5) * 1.7;
-          const sp = Math.hypot(e.vx, e.vy) || e.speed;
-          e.vx = Math.cos(a) * sp; e.vy = Math.sin(a) * sp;
+      // turrets are stationary emplacements — they never move, only aim and fire (below)
+      if (e.behavior !== "turret") {
+        if (e.behavior === "wander") {
+          e.wanderT -= dtSec;
+          if (e.wanderT <= 0) {
+            e.wanderT = 0.6 + Math.random() * 1.2;
+            const a = Math.atan2(e.vy, e.vx) + (Math.random() - 0.5) * 1.7;
+            const sp = Math.hypot(e.vx, e.vy) || e.speed;
+            e.vx = Math.cos(a) * sp; e.vy = Math.sin(a) * sp;
+          }
+        } else if (e.behavior === "hunt") {
+          const tgt = this.nearestTarget(e);
+          if (tgt) {
+            const dx = tgt.x - e.x, dy = tgt.y - e.y;
+            const d = Math.hypot(dx, dy) || 1;
+            const sp = Math.hypot(e.vx, e.vy) || e.speed;
+            e.vx += (dx / d) * sp * dtSec * 1.8;
+            e.vy += (dy / d) * sp * dtSec * 1.8;
+            const cur = Math.hypot(e.vx, e.vy) || 1;
+            e.vx = e.vx / cur * sp; e.vy = e.vy / cur * sp;
+          }
         }
-      } else if (e.behavior === "hunt") {
-        const tgt = this.nearestTarget(e);
-        if (tgt) {
-          const dx = tgt.x - e.x, dy = tgt.y - e.y;
-          const d = Math.hypot(dx, dy) || 1;
-          const sp = Math.hypot(e.vx, e.vy) || e.speed;
-          e.vx += (dx / d) * sp * dtSec * 1.8;
-          e.vy += (dy / d) * sp * dtSec * 1.8;
-          const cur = Math.hypot(e.vx, e.vy) || 1;
-          e.vx = e.vx / cur * sp; e.vy = e.vy / cur * sp;
-        }
-      }
 
-      const nx = e.x + e.vx * dtSec;
-      if (this.isWall(Math.floor(nx), Math.floor(e.y))) e.vx = -e.vx; else e.x = nx;
-      const ny = e.y + e.vy * dtSec;
-      if (this.isWall(Math.floor(e.x), Math.floor(ny))) e.vy = -e.vy; else e.y = ny;
+        const nx = e.x + e.vx * dtSec;
+        if (this.isWall(Math.floor(nx), Math.floor(e.y))) e.vx = -e.vx; else e.x = nx;
+        const ny = e.y + e.vy * dtSec;
+        if (this.isWall(Math.floor(e.x), Math.floor(ny))) e.vy = -e.vy; else e.y = ny;
+      }
 
       const owner = this.trail[idx(Math.floor(e.x), Math.floor(e.y))];
       if (owner) {

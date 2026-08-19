@@ -2,19 +2,20 @@ import { Room, Client } from "@colyseus/core";
 import { GameState, Player, Enemy, Projectile } from "./schema";
 import { GalSim } from "./GalSim";
 import type { SimEnemy } from "./GalSim";
-import { TICK_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS } from "./constants";
+import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, WIN_COUNTDOWN_MS } from "./constants";
 
 const COLORS = ["#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
 
 export class GameRoom extends Room<GameState> {
   maxClients = MAX_PLAYERS;
   sim!: GalSim;
+  private wonElapsed = 0;   // ms accumulated on the between-stage win countdown
 
   onCreate() {
     this.setState(new GameState());
-    // Broadcast state patches at the sim rate (~30Hz) instead of the 50ms/20Hz
-    // default, so positions update as fast as they're computed → far less jitter.
-    this.setPatchRate(TICK_MS);
+    // Broadcast state patches at PATCH_MS (~90Hz) instead of the 50ms/20Hz default.
+    // Decoupled from the faster sim so bandwidth stays bounded while input stays fresh.
+    this.setPatchRate(PATCH_MS);
     this.sim = new GalSim(1);
     this.initGridSchema();
     this.startRound(1);
@@ -28,14 +29,13 @@ export class GameRoom extends Room<GameState> {
     });
 
     this.onMessage("restart", () => {
-      if (this.state.phase === "won" || this.state.phase === "lost") {
-        const nextLevel = this.state.phase === "won" ? this.sim.level + 1 : 1;
-        this.startRound(nextLevel);
-      }
+      // A win auto-advances via the between-stage countdown (no instant skip);
+      // only a loss restarts (from level 1) when a player hits Enter.
+      if (this.state.phase === "lost") this.startRound(1);
     });
 
-    // Authoritative simulation loop.
-    this.setSimulationInterval((dt) => this.tick(dt), TICK_MS);
+    // Authoritative simulation loop (fast, decoupled from the broadcast rate).
+    this.setSimulationInterval((dt) => this.tick(dt), SIM_MS);
   }
 
   private initGridSchema() {
@@ -67,6 +67,8 @@ export class GameRoom extends Room<GameState> {
     this.state.claimedInterior = 0;
     this.state.imageId = IMAGE_POOL[(level - 1) % IMAGE_POOL.length];
     this.state.phase = "playing";
+    this.state.nextIn = 0;
+    this.wonElapsed = 0;
 
     // reflect reset player stats
     this.sim.players.forEach((sp) => {
@@ -85,6 +87,13 @@ export class GameRoom extends Room<GameState> {
   }
 
   tick(dt: number) {
+    // between-stage countdown: after clearing, auto-advance to the next stage over ~5s
+    if (this.state.phase === "won") {
+      this.wonElapsed += dt;
+      this.state.nextIn = Math.max(0, (WIN_COUNTDOWN_MS - this.wonElapsed) / 1000);
+      if (this.wonElapsed >= WIN_COUNTDOWN_MS) this.startRound(this.sim.level + 1);
+      return;
+    }
     if (this.state.phase !== "playing") return;
     this.sim.update(dt / 1000);
 
@@ -133,7 +142,10 @@ export class GameRoom extends Room<GameState> {
     }
 
     this.state.claimedInterior = this.sim.claimedInterior;
-    if (this.sim.over) this.state.phase = this.sim.over;   // "won" | "lost"
+    if (this.sim.over) {
+      this.state.phase = this.sim.over;   // "won" | "lost"
+      if (this.sim.over === "won") { this.wonElapsed = 0; this.state.nextIn = WIN_COUNTDOWN_MS / 1000; }
+    }
   }
 
   private freeSlot(): number {

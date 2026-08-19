@@ -17,6 +17,7 @@ export class GameRoom extends Room<GameState> {
     // Decoupled from the faster sim so bandwidth stays bounded while input stays fresh.
     this.setPatchRate(PATCH_MS);
     this.sim = new GalSim(1);
+    this.state.seed = this.sim.gameSeed;   // deterministic seed clients can replay
     this.initGridSchema();
     this.startRound(1);
     // tell clients the authoritative step cadence so their prediction matches exactly

@@ -62,6 +62,10 @@ export class GameState extends Schema {
   // preload it during the countdown → the next stage starts with no loading hitch.
   @type("string") nextImageId: string = "";
 
+  // Deterministic RNG game seed. Clients can run the same seeded sim (mulberry32,
+  // re-seeded per round from seed ^ level) for client-side prediction / lockstep.
+  @type("number") seed: number = 0;
+
   @type({ map: Player }) players = new MapSchema<Player>();
   @type([Enemy]) enemies = new ArraySchema<Enemy>();
   @type([Projectile]) projectiles = new ArraySchema<Projectile>();

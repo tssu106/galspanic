@@ -5,6 +5,19 @@ const EMPTY = 0, CLAIMED = 1;
 const idx = (x: number, y: number) => y * COLS + x;
 const inBounds = (x: number, y: number) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
 
+// Seeded PRNG (mulberry32). Replaces Math.random so the whole sim is reproducible
+// from a single seed — the foundation for a client running the same sim (prediction)
+// or for deterministic lockstep. Given the seed + the same inputs, every machine
+// produces identical results.
+function mulberry32(a: number): () => number {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // tuning (mirrors client/local.html, scaled for the 64x64 online grid)
 const STALL_MS = 400;      // stop moving mid-draw this long -> the line retraces
 const RETRACE_MS = 16;     // ms per cell while retracing back to origin (faster than MOVE_MS)
@@ -80,6 +93,11 @@ export class GalSim {
   enemySpeed = 8;
   spawnThresholds: number[] = [];
 
+  // seeded RNG: one game seed (the only real randomness), re-seeded per round from
+  // it + the level. Exposed so clients can run the same deterministic sim.
+  gameSeed = (Math.random() * 0x100000000) >>> 0;
+  private rng: () => number = mulberry32(1);   // replaced per round in resetRound
+
   // change tracking so the room only syncs cells that actually changed
   gridDirty = new Set<number>();
   trailDirty = new Set<number>();
@@ -98,6 +116,8 @@ export class GalSim {
 
   resetRound(level: number) {
     this.level = level;
+    // re-seed deterministically from the game seed + level (before any this.rng() use)
+    this.rng = mulberry32((this.gameSeed ^ Math.imul(level, 0x9E3779B1)) >>> 0);
     this.over = null;
     this.claimedInterior = 0;
     this.projectiles = [];
@@ -122,8 +142,8 @@ export class GalSim {
     const count = 2 + active + (level - 1) * 2;   // more monsters: bigger base + faster per-level growth
     for (let i = 0; i < count; i++) {
       this.enemies.push(this.makeEnemy(
-        COLS / 2 + (Math.random() - 0.5) * 16,
-        ROWS / 2 + (Math.random() - 0.5) * 12,
+        COLS / 2 + (this.rng() - 0.5) * 16,
+        ROWS / 2 + (this.rng() - 0.5) * 12,
       ));
     }
   }
@@ -131,14 +151,14 @@ export class GalSim {
   private pickEnemyType(): EnemyType {
     const avail = ENEMY_TYPES.filter(t => t.minLevel <= this.level);
     let total = 0; for (const t of avail) total += t.weight;
-    let r = Math.random() * total;
+    let r = this.rng() * total;
     for (const t of avail) { r -= t.weight; if (r <= 0) return t; }
     return avail[avail.length - 1];
   }
 
   private makeEnemy(x: number, y: number): SimEnemy {
     const t = this.pickEnemyType();
-    const ang = Math.random() * Math.PI * 2;
+    const ang = this.rng() * Math.PI * 2;
     const sp = this.enemySpeed * t.speed;
     // slower monsters are bigger (visual only; collisions use the center cell)
     const r = 1.1 / Math.pow(t.speed, 0.7);
@@ -147,17 +167,17 @@ export class GalSim {
       vx: Math.cos(ang) * sp || sp,
       vy: Math.sin(ang) * sp || sp,
       kind: t.key, shape: t.shape, behavior: t.behavior, speed: sp, r,
-      spin: Math.random() * 6, wanderT: 0.4 + Math.random() * 1.0,
+      spin: this.rng() * 6, wanderT: 0.4 + this.rng() * 1.0,
       gun: !!t.gun, fireEvery: t.fireEvery || 0, aim: ang,
-      cooldown: (t.fireEvery || 2) * (0.5 + Math.random() * 0.8),
+      cooldown: (t.fireEvery || 2) * (0.5 + this.rng() * 0.8),
     };
   }
 
   // spawn one enemy at a random empty (and trail-free) cell
   spawnEnemy(): boolean {
     for (let t = 0; t < 300; t++) {
-      const x = B + Math.floor(Math.random() * (COLS - 2 * B));
-      const y = B + Math.floor(Math.random() * (ROWS - 2 * B));
+      const x = B + Math.floor(this.rng() * (COLS - 2 * B));
+      const y = B + Math.floor(this.rng() * (ROWS - 2 * B));
       const i = idx(x, y);
       if (this.grid[i] === EMPTY && this.trail[i] === 0) {
         this.enemies.push(this.makeEnemy(x + 0.5, y + 0.5));
@@ -379,8 +399,8 @@ export class GalSim {
         if (e.behavior === "wander") {
           e.wanderT -= dtSec;
           if (e.wanderT <= 0) {
-            e.wanderT = 0.6 + Math.random() * 1.2;
-            const a = Math.atan2(e.vy, e.vx) + (Math.random() - 0.5) * 1.7;
+            e.wanderT = 0.6 + this.rng() * 1.2;
+            const a = Math.atan2(e.vy, e.vx) + (this.rng() - 0.5) * 1.7;
             const sp = Math.hypot(e.vx, e.vy) || e.speed;
             e.vx = Math.cos(a) * sp; e.vy = Math.sin(a) * sp;
           }
@@ -414,7 +434,7 @@ export class GalSim {
         if (tgt) e.aim = Math.atan2(tgt.y - e.y, tgt.x - e.x);
         e.cooldown -= dtSec;
         if (e.cooldown <= 0 && tgt) {
-          e.cooldown = e.fireEvery * (0.85 + Math.random() * 0.3);
+          e.cooldown = e.fireEvery * (0.85 + this.rng() * 0.3);
           this.projectiles.push({
             x: e.x, y: e.y,
             vx: Math.cos(e.aim) * BULLET_SPEED, vy: Math.sin(e.aim) * BULLET_SPEED,

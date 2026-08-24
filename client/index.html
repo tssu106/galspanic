@@ -36,6 +36,8 @@
     <b>방향키</b>로 이동 — 안전지대에서 빈 공간으로 들어가면 선이 그려지고, 다시 안전지대에 닿으면 안쪽이 점유됩니다.
     빨간 적이 당신의 선에 닿으면 목숨을 잃어요. 다 함께 <b>85%</b>를 열면 클리어!
     <div style="margin-top:6px"><button id="restart" style="display:none">다음/재시작 (Enter)</button></div>
+    <div style="margin-top:6px"><input id="chat" maxlength="60" placeholder="Enter 로 채팅… (마커 위 말풍선 3초)" autocomplete="off"
+      style="width:min(90vw,380px);background:#161a2b;border:1px solid #232a44;border-radius:8px;color:#e8ebf7;padding:7px 11px;font-size:13px;outline:none" /></div>
   </div>
 
 <script type="module">
@@ -56,6 +58,8 @@ const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const restartBtn = document.getElementById("restart");
+const chatInput = document.getElementById("chat");
+const bubbles = new Map();   // owner -> { text, until }  speech bubbles over each marker (~3s)
 
 let room = null, state = null, GW = 64, GH = 64;
 const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
@@ -85,6 +89,8 @@ async function connect() {
         text: ev.count > 1 ? `포획 x${ev.count}! +${ev.bonus}` : `포획! +${ev.bonus}`,
       });
     });
+    // chat: show a speech bubble over the sender's marker for ~3s
+    room.onMessage("chat", (ev) => { bubbles.set(ev.owner, { text: ev.text, until: performance.now() + 3000 }); });
   } catch (e) {
     statusEl.textContent = "서버 연결 실패 — server 폴더에서 npm start 후 새로고침하세요";
     console.error(e);
@@ -111,17 +117,32 @@ function syncInput() {
   }
 }
 window.addEventListener("keydown", (e) => {
+  if (document.activeElement === chatInput) return;   // typing in chat: let the input handle keys
   if (CODE_DIR[e.code] != null || e.code === "Enter") e.preventDefault();
   if (e.repeat) return;                       // ignore OS key auto-repeat
-  if (e.code === "Enter") { room?.send("restart"); return; }
+  if (e.code === "Enter") {
+    // while playing, Enter opens the chat box; on win/loss it restarts
+    if (state && state.phase === "playing") { releaseAllKeys(); chatInput.focus(); return; }
+    room?.send("restart"); return;
+  }
   if (e.code === "ShiftLeft" || e.code === "ShiftRight") { boostHeld = true; syncInput(); return; }
   if (!pressOrder.includes(e.code)) pressOrder.push(e.code);
   syncInput();
 });
 window.addEventListener("keyup", (e) => {
+  if (document.activeElement === chatInput) return;
   if (e.code === "ShiftLeft" || e.code === "ShiftRight") { boostHeld = false; syncInput(); return; }
   const i = pressOrder.indexOf(e.code); if (i >= 0) pressOrder.splice(i, 1);
   syncInput();
+});
+// chat box: Enter sends + closes, Escape cancels (control returns to the game)
+chatInput.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.code === "Enter") {
+    const t = chatInput.value.trim();
+    if (t && room) room.send("chat", { text: t });
+    chatInput.value = ""; chatInput.blur();
+  } else if (e.code === "Escape") { chatInput.value = ""; chatInput.blur(); }
 });
 // losing focus drops all held keys and tells the server to stop, so the marker
 // never keeps moving in the last direction after a missed keyup.
@@ -308,6 +329,38 @@ function rebuildGrid() {
   gridBuilt = true;
 }
 
+function bubbleRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath();
+}
+function drawBubble(cx, markerY, text, color, alpha) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.font = "600 13px system-ui, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const padX = 10, h = 24, maxW = 240, gap = 13;
+  let t = text;
+  while (ctx.measureText(t).width > maxW - padX*2 && t.length > 1) t = t.slice(0, -1);
+  if (t.length < text.length) t = t.slice(0, -1) + "…";
+  const w = ctx.measureText(t).width + padX*2;
+  const bx = Math.max(4, Math.min(cx - w/2, canvas.width - w - 4));   // clamp on-screen
+  const above = markerY - (h + gap) > 2;                               // room above the marker?
+  const y = above ? markerY - h - gap : markerY + gap;
+  const tipX = Math.max(bx + 10, Math.min(cx, bx + w - 10));
+  const fill = "rgba(18,22,38,0.94)";
+  ctx.fillStyle = fill;
+  ctx.beginPath();                                                     // tail toward the marker
+  if (above) { ctx.moveTo(tipX-6, y+h-1); ctx.lineTo(tipX+6, y+h-1); ctx.lineTo(tipX, y+h+7); }
+  else       { ctx.moveTo(tipX-6, y+1);   ctx.lineTo(tipX+6, y+1);   ctx.lineTo(tipX, y-7); }
+  ctx.closePath(); ctx.fill();
+  bubbleRect(bx, y, w, h, 9);
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = "#eef1fb"; ctx.fillText(t, bx + w/2, y + h/2 + 0.5);
+  ctx.restore();
+}
+
 function render() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
@@ -425,6 +478,21 @@ function render() {
       ctx.restore();
     }
     ctx.restore();          // end camera transform (HUD/overlay stay in screen space)
+
+    // chat speech bubbles — drawn in SCREEN space above each marker (consistent text
+    // size at any zoom), auto-expiring ~3s after the message.
+    state.players.forEach((p) => {
+      if (p.out) return;
+      const b = bubbles.get(p.owner);
+      if (!b) return;
+      if (b.until <= now) { bubbles.delete(p.owner); return; }
+      const pos = playerRenderPos(p.id, p.x, p.y, now);
+      const sx = ((pos.x + 0.5) * cw - camX) * camS;      // marker centre → screen px
+      const sy = (pos.y * ch - camY) * camS;
+      if (sx < -40 || sx > W + 40 || sy < -40 || sy > H + 40) return;
+      drawBubble(sx, sy, b.text, p.color, Math.min(1, (b.until - now) / 500));  // fade last 0.5s
+    });
+
     drawHud();
     if (state.phase === "won") drawWinCelebration(now, dt);
     else { wonCelebActive = false; if (state.phase === "lost") drawOverlay(); }

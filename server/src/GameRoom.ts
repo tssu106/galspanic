@@ -36,6 +36,14 @@ export class GameRoom extends Room<GameState> {
       if (this.state.phase === "lost") this.startRound(1);
     });
 
+    // Chat: relay a short message to everyone as a speech bubble over the sender.
+    this.onMessage("chat", (client, msg: { text?: string }) => {
+      const text = String(msg?.text ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+      if (!text) return;
+      const sp = this.sim.players.find((p) => p.sessionId === client.sessionId);
+      if (sp) this.broadcast("chat", { owner: sp.owner, text });
+    });
+
     // Authoritative simulation loop (fast, decoupled from the broadcast rate).
     this.setSimulationInterval((dt) => this.tick(dt), SIM_MS);
   }

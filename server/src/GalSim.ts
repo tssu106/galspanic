@@ -1,4 +1,4 @@
-import { GRID_W, GRID_H, BORDER as B, CLEAR_RATIO, MOVE_MS, START_LIVES } from "./constants";
+import { GRID_W, GRID_H, BORDER as B, CLEAR_RATIO, MOVE_MS, START_LIVES, BOOST_MULT, BOOST_COST } from "./constants";
 
 const COLS = GRID_W, ROWS = GRID_H, N = COLS * ROWS;
 const EMPTY = 0, CLAIMED = 1;
@@ -47,6 +47,8 @@ export interface SimPlayer {
   x: number; y: number;
   spawnX: number; spawnY: number;
   heldDir: [number, number] | null;
+  boost: boolean;            // Shift held (sprint requested)
+  boosting: boolean;         // actually sprinting this tick (requested + moving + can afford)
   drawing: boolean;
   retreating: boolean;
   lives: number;
@@ -131,6 +133,7 @@ export class GalSim {
       const [sx, sy] = SPAWNS[(p.owner - 1) % 4];
       p.x = sx; p.y = sy; p.spawnX = sx; p.spawnY = sy;
       p.drawing = false; p.retreating = false; p.out = false; p.lives = START_LIVES;
+      p.boost = false; p.boosting = false;
       p.claimed = 0; p.traps = 0; p.bonus = 0; p.acc = 0; p.idle = 0;
       p.drawOriginX = sx; p.drawOriginY = sy; p.trailCells.length = 0;
     }
@@ -204,7 +207,7 @@ export class GalSim {
     const [sx, sy] = SPAWNS[(owner - 1) % 4];
     const p: SimPlayer = {
       sessionId, owner, x: sx, y: sy, spawnX: sx, spawnY: sy,
-      heldDir: null, drawing: false, retreating: false, lives: START_LIVES,
+      heldDir: null, boost: false, boosting: false, drawing: false, retreating: false, lives: START_LIVES,
       claimed: 0, traps: 0, bonus: 0, out: false, acc: 0, idle: 0,
       drawOriginX: sx, drawOriginY: sy, trailCells: [],
     };
@@ -229,6 +232,11 @@ export class GalSim {
     // (~16ms) instead of waiting up to MOVE_MS (45ms) for the accumulator. This cuts
     // turn/start latency with zero client-side prediction — the server stays authoritative.
     if (nd && changed && !p.retreating && p.acc < MOVE_MS) p.acc = MOVE_MS;
+  }
+
+  setBoost(sessionId: string, on: boolean) {
+    const p = this.players.find(q => q.sessionId === sessionId);
+    if (p) p.boost = on;
   }
 
   private isWall(x: number, y: number) { return !inBounds(x, y) || this.grid[idx(x, y)] === CLAIMED; }
@@ -385,11 +393,19 @@ export class GalSim {
         else { p.idle += dtSec * 1000; if (p.idle >= STALL_MS) { this.startRetreat(p); continue; } }
       } else p.idle = 0;
 
+      // Sprint (Shift) moves BOOST_MULT x faster, paid per boosted cell from capture bonus.
+      p.boosting = !!(p.boost && held && p.bonus >= BOOST_COST);
       p.acc += dtSec * 1000;
       let guard = 0;
-      while (p.acc >= MOVE_MS && guard++ < 4) {
-        p.acc -= MOVE_MS;
-        if (held) this.step(p, held[0], held[1]);
+      while (guard++ < 8) {
+        const canBoost = !!(p.boost && held && p.bonus >= BOOST_COST);
+        const interval = canBoost ? MOVE_MS / BOOST_MULT : MOVE_MS;
+        if (p.acc < interval) break;
+        p.acc -= interval;
+        if (held) {
+          if (canBoost) { p.bonus -= BOOST_COST; p.boosting = true; }
+          this.step(p, held[0], held[1]);
+        }
       }
     }
 

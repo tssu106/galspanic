@@ -97,30 +97,35 @@ const CODE_DIR = {
   ArrowUp:1, KeyW:1, ArrowDown:2, KeyS:2, ArrowLeft:3, KeyA:3, ArrowRight:4, KeyD:4,
 };
 const pressOrder = [];
-let lastSentDir = -1;
+let lastSentDir = -1, lastSentBoost = false, boostHeld = false;
 function currentDir() {
   let dir = 0;
   for (const code of pressOrder) if (CODE_DIR[code] != null) dir = CODE_DIR[code];
   return dir;
 }
-function syncDir() {
+function syncInput() {
   const d = currentDir();
-  if (d !== lastSentDir && room) { room.send("input", { dir: d }); lastSentDir = d; }
+  if ((d !== lastSentDir || boostHeld !== lastSentBoost) && room) {
+    room.send("input", { dir: d, boost: boostHeld });
+    lastSentDir = d; lastSentBoost = boostHeld;
+  }
 }
 window.addEventListener("keydown", (e) => {
   if (CODE_DIR[e.code] != null || e.code === "Enter") e.preventDefault();
   if (e.repeat) return;                       // ignore OS key auto-repeat
   if (e.code === "Enter") { room?.send("restart"); return; }
+  if (e.code === "ShiftLeft" || e.code === "ShiftRight") { boostHeld = true; syncInput(); return; }
   if (!pressOrder.includes(e.code)) pressOrder.push(e.code);
-  syncDir();
+  syncInput();
 });
 window.addEventListener("keyup", (e) => {
+  if (e.code === "ShiftLeft" || e.code === "ShiftRight") { boostHeld = false; syncInput(); return; }
   const i = pressOrder.indexOf(e.code); if (i >= 0) pressOrder.splice(i, 1);
-  syncDir();
+  syncInput();
 });
 // losing focus drops all held keys and tells the server to stop, so the marker
 // never keeps moving in the last direction after a missed keyup.
-function releaseAllKeys(){ pressOrder.length = 0; syncDir(); }
+function releaseAllKeys(){ pressOrder.length = 0; boostHeld = false; syncInput(); }
 window.addEventListener("blur", releaseAllKeys);
 document.addEventListener("visibilitychange", () => { if (document.hidden) releaseAllKeys(); });
 restartBtn.onclick = () => room?.send("restart");
@@ -255,6 +260,7 @@ function enemyPos(br, i, live) {
 // cell solidifies into the line as the marker passes it (like the arcade line growing).
 const STEP_MS = 48;                  // fallback for state.moveMs (matches server MOVE_MS)
 const pmove = new Map();             // id -> { px, py, cx, cy, t0 }
+const prevMarker = new Map();        // id -> { x, y } last frame's render pos (for boost streaks)
 function playerRenderPos(id, sx, sy, now) {
   let m = pmove.get(id);
   if (!m) { m = { px: sx, py: sy, cx: sx, cy: sy, t0: now - 1e4 }; pmove.set(id, m); return { x: sx, y: sy }; }
@@ -373,10 +379,26 @@ function render() {
     // server-owned trail it detaches the marker from its line on direction changes.)
     const pulse = 0.5 + 0.5 * Math.sin(now / 150);   // 0..1 blink, ~1.1 Hz
     state.players.forEach((p) => {
-      if (p.out) { pmove.delete(p.id); return; }
+      if (p.out) { pmove.delete(p.id); prevMarker.delete(p.id); return; }
       const pos = playerRenderPos(p.id, p.x, p.y, now);
       const vx = pos.x, vy = pos.y;
       const isMe = room && p.id === room.sessionId;
+      // Sprint (Shift) speed streaks: fading afterimages trailing behind the marker.
+      const prev = prevMarker.get(p.id);
+      if (p.boosting && prev) {
+        const dx = vx - prev.x, dy = vy - prev.y, mag = Math.hypot(dx, dy);
+        if (mag > 0.0015) {
+          const ux = dx / mag, uy = dy / mag;
+          ctx.save();
+          ctx.fillStyle = p.color;
+          for (let s = 1; s <= 4; s++) {
+            ctx.globalAlpha = 0.30 * (1 - s / 5);
+            ctx.fillRect((vx - ux * s * 1.7) * cw, (vy - uy * s * 1.7) * ch, cw + 1, ch + 1);
+          }
+          ctx.restore();
+        }
+      }
+      prevMarker.set(p.id, { x: vx, y: vy });
       // Blinking halo so the marker stays easy to spot even when the map is zoomed out and
       // the cell is only a few px. Sized in SCREEN px (÷camS) so it's consistent at any zoom.
       const cxp = (vx + 0.5) * cw, cyp = (vy + 0.5) * ch;
@@ -404,7 +426,8 @@ function render() {
     }
     ctx.restore();          // end camera transform (HUD/overlay stay in screen space)
     drawHud();
-    if (state.phase === "won" || state.phase === "lost") drawOverlay();
+    if (state.phase === "won") drawWinCelebration(now, dt);
+    else { wonCelebActive = false; if (state.phase === "lost") drawOverlay(); }
   }
   requestAnimationFrame(render);
 }
@@ -432,6 +455,65 @@ function drawOverlay() {
     ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
     ctx.fillText("Enter 로 재시작", W/2, H/2 + 24);
   }
+  ctx.textAlign = "left";
+}
+
+// ---- stage-clear celebration: full-screen picture reveal + fireworks ----
+let fwParticles = [];
+let fwLastBurst = 0;
+let wonCelebActive = false;
+const FW_COLORS = ["#ff5db1", "#a3e635", "#22d3ee", "#fb923c", "#ffe066", "#c084fc", "#ffffff"];
+function spawnBurst(x, y) {
+  const n = 26 + (Math.random() * 18 | 0);
+  const color = FW_COLORS[Math.random() * FW_COLORS.length | 0];
+  const base = 120 + Math.random() * 150;   // px/s
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + Math.random() * 0.25;
+    const s = base * (0.55 + Math.random() * 0.6);
+    fwParticles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+      life: 1, ttl: 0.9 + Math.random() * 0.7, color, r: 2 + Math.random() * 2.2 });
+  }
+}
+function drawWinCelebration(now, dt) {
+  const W = canvas.width, H = canvas.height;
+  // full-screen reveal of the finished picture
+  if (imgReady) ctx.drawImage(img, 0, 0, W, H);
+  else { ctx.fillStyle = "#2a3350"; ctx.fillRect(0, 0, W, H); }
+  ctx.fillStyle = "rgba(8,10,20,.30)"; ctx.fillRect(0, 0, W, H);   // slight darken for contrast
+
+  // fireworks: (re)start on entering the won phase, then burst on an interval
+  if (!wonCelebActive) { wonCelebActive = true; fwParticles.length = 0; fwLastBurst = 0; }
+  if (now - fwLastBurst > 400) {
+    fwLastBurst = now;
+    spawnBurst(W * (0.12 + Math.random() * 0.76), H * (0.12 + Math.random() * 0.5));
+  }
+  for (let i = fwParticles.length - 1; i >= 0; i--) {
+    const p = fwParticles[i];
+    p.life -= dt / p.ttl;
+    if (p.life <= 0) { fwParticles.splice(i, 1); continue; }
+    p.vy += 320 * dt;                       // gravity
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // CLEAR banner + countdown — opaque box, centered on screen
+  const boxW = 460, boxH = 150, boxX = W/2 - boxW/2, boxY = H/2 - boxH/2;
+  ctx.fillStyle = "#0b0e1a"; ctx.fillRect(boxX, boxY, boxW, boxH);          // opaque backing
+  ctx.strokeStyle = "#a3e635"; ctx.lineWidth = 2; ctx.strokeRect(boxX, boxY, boxW, boxH);
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#a3e635"; ctx.font = "bold 40px system-ui";
+  ctx.fillText(`LEVEL ${state.level} CLEAR!`, W/2, boxY + 60);
+  const remain = Math.max(0, state.nextIn || 0);
+  const prog = Math.min(1, Math.max(0, 1 - remain / WIN_COUNTDOWN_S));
+  const bw = 320, bh = 14, bx = W/2 - bw/2, by = boxY + 90;
+  ctx.fillStyle = "#1b2138"; ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = "#a3e635"; ctx.fillRect(bx, by, bw * prog, bh);
+  ctx.strokeStyle = "#3a4670"; ctx.lineWidth = 1; ctx.strokeRect(bx, by, bw, bh);
+  ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
+  ctx.fillText(`다음 스테이지까지 ${Math.ceil(remain)}초`, W/2, by + bh + 24);
   ctx.textAlign = "left";
 }
 

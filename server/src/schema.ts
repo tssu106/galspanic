@@ -11,6 +11,7 @@ export class Player extends Schema {
   @type("number") y: number = 0;
   @type("number") drawing: number = 0;  // 0/1 — currently laying a trail
   @type("number") retreating: number = 0; // 0/1 — retracing a stalled line
+  @type("number") boosting: number = 0;  // 0/1 — sprinting (Shift), spending capture bonus
   @type("number") lives: number = 3;
   @type("number") claimed: number = 0;  // interior cells this player has claimed
   @type("number") traps: number = 0;    // monsters captured

@@ -24,9 +24,10 @@ export class GameRoom extends Room<GameState> {
     this.state.moveMs = MOVE_MS;
 
     // Client sends a held direction code (0..4). Server is authoritative.
-    this.onMessage("input", (client, msg: { dir: number }) => {
+    this.onMessage("input", (client, msg: { dir: number; boost?: boolean }) => {
       const d = DIRS[msg?.dir as number] || DIRS[0];
       this.sim.setInput(client.sessionId, [d[0], d[1]]);
+      this.sim.setBoost(client.sessionId, !!msg?.boost);
     });
 
     this.onMessage("restart", () => {
@@ -111,6 +112,7 @@ export class GameRoom extends Room<GameState> {
       p.x = sp.x; p.y = sp.y;
       p.drawing = sp.drawing ? 1 : 0;
       p.retreating = sp.retreating ? 1 : 0;
+      p.boosting = sp.boosting ? 1 : 0;
       p.lives = sp.lives; p.claimed = sp.claimed; p.out = sp.out ? 1 : 0;
       p.traps = sp.traps; p.bonus = sp.bonus;
     });

@@ -22,6 +22,11 @@ export const MOVE_MS = 48;    // one cell per 48ms = exactly 2 sim ticks (SIM_MS
                               // cadence, smooth constant-velocity glide. ~21 cells/s.
                               // Rule of thumb: keep SIM_MS = MOVE_MS / 2 so a cell is always 2 ticks.
 
+// Shift-to-sprint: hold Shift to move BOOST_MULT x faster, paid for out of capture
+// bonus points (BOOST_COST per boosted cell). No banked bonus -> no sprint.
+export const BOOST_MULT = 1.5;
+export const BOOST_COST = 6;
+
 // After clearing a stage, auto-advance to the next one over this countdown (client shows a bar).
 export const WIN_COUNTDOWN_MS = 5000;
 

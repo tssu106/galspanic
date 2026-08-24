@@ -139,11 +139,12 @@ export class GalSim {
     this.enemySpeed = 9 + (level - 1) * 1.8;   // cells per second (gentle base, gradual per-level ramp)
     this.spawnThresholds = [0.20, 0.40, 0.60];
     const active = Math.max(1, this.players.length);
-    const count = 2 + active + (level - 1) * 2;   // more monsters: bigger base + faster per-level growth
+    const count = 4 + active * 2 + (level - 1) * 2;   // more monsters to populate the larger map
     for (let i = 0; i < count; i++) {
+      // spread across most of the interior so they don't cluster at the center on a big grid
       this.enemies.push(this.makeEnemy(
-        COLS / 2 + (this.rng() - 0.5) * 16,
-        ROWS / 2 + (this.rng() - 0.5) * 12,
+        COLS / 2 + (this.rng() - 0.5) * (COLS - 2 * B) * 0.7,
+        ROWS / 2 + (this.rng() - 0.5) * (ROWS - 2 * B) * 0.7,
       ));
     }
   }
@@ -160,8 +161,9 @@ export class GalSim {
     const t = this.pickEnemyType();
     const ang = this.rng() * Math.PI * 2;
     const sp = this.enemySpeed * t.speed;
-    // slower monsters are bigger (visual only; collisions use the center cell)
-    const r = 1.1 / Math.pow(t.speed, 0.7);
+    // slower monsters are bigger (visual only; collisions use the center cell). Base bumped
+    // 1.1 -> 2.2 so monsters stay clearly visible on the larger, zoomed-out map.
+    const r = 2.2 / Math.pow(t.speed, 0.7);
     return {
       x, y,
       vx: Math.cos(ang) * sp || sp,

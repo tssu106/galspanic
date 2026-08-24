@@ -214,7 +214,12 @@ const snaps = [];                    // [{ t, ex:[x0,y0,x1,y1,...] }]
 let trailList = [];
 function syncTrail() {
   if (!state) return;
-  const n = GW * GH, t = state.trail, list = [];
+  // Copy the Colyseus ArraySchema to a plain array ONCE (iterator traversal), then scan
+  // that. Random-indexing an ArraySchema (state.trail[i]) goes through a Proxy get-trap
+  // that costs ~11µs/element — scanning GW*GH of them every frame was ~73ms (13fps) on the
+  // 80x80 grid. A one-shot spread copy is ~0.1ms and the plain-array scan ~0.04ms, so this
+  // is ~500x cheaper and keeps per-frame cost flat as the map grows.
+  const t = [...state.trail], n = t.length, list = [];
   for (let i = 0; i < n; i++) { const o = t[i]; if (o) { list.push(i, o); } }
   trailList = list;
 }
@@ -282,9 +287,11 @@ let gridBuilt = false, lastClaimed = -1, lastLevel = -1, lastImgVer = -1, lastGW
 function rebuildGrid() {
   const W = canvas.width, H = canvas.height, cw = W / GW, ch = H / GH;
   if (gridCanvas.width !== W || gridCanvas.height !== H) { gridCanvas.width = W; gridCanvas.height = H; }
-  for (let i = 0; i < GW * GH; i++) {
+  // one-shot plain-array copy — see syncTrail(): indexing the ArraySchema per cell is ~500x slower
+  const cells = [...state.cells];
+  for (let i = 0; i < cells.length; i++) {
     const cx = i % GW, cy = (i / GW) | 0;
-    if (state.cells[i] === 1) {
+    if (cells[i] === 1) {
       if (imgReady) gctx.drawImage(img, cx*(img.width/GW), cy*(img.height/GH), img.width/GW, img.height/GH,
                                    cx*cw, cy*ch, cw+1, ch+1);
       else { gctx.fillStyle = "#2a3350"; gctx.fillRect(cx*cw, cy*ch, cw+1, ch+1); }
@@ -317,8 +324,9 @@ function render() {
     if (room) state.players.forEach((p) => { if (p.id === room.sessionId) me = p; });
     let camS = 1, camX = 0, camY = 0, myPos = null;
     if (me && !me.out) {
-      const VIEW = Math.min(GW, GH, 44);            // cells across the shorter side (higher = zoomed out)
-      camS = Math.min(GW, GH) / VIEW;               // zoom factor (~1.45x on the 64 grid)
+      const VIEW = Math.min(GW, GH, 117);           // cells across the shorter side (higher = zoomed out)
+      camS = Math.min(GW, GH) / VIEW;               // zoom factor (~2.19x on the 256 grid — zoomed
+                                                    // back in 1.5x from VIEW=176 for a closer view)
       // On low latency (localhost/LAN) prediction only adds snap-back jitter, so
       // render my own marker with the same smooth server interpolation as everyone
       // else. (Prediction is worth re-enabling only for a high-latency remote server,
@@ -363,10 +371,22 @@ function render() {
     // players — every marker glides at constant velocity toward the latest server cell,
     // continuously tracking it for smooth motion. (Path prediction stays out: with a
     // server-owned trail it detaches the marker from its line on direction changes.)
+    const pulse = 0.5 + 0.5 * Math.sin(now / 150);   // 0..1 blink, ~1.1 Hz
     state.players.forEach((p) => {
       if (p.out) { pmove.delete(p.id); return; }
       const pos = playerRenderPos(p.id, p.x, p.y, now);
       const vx = pos.x, vy = pos.y;
+      const isMe = room && p.id === room.sessionId;
+      // Blinking halo so the marker stays easy to spot even when the map is zoomed out and
+      // the cell is only a few px. Sized in SCREEN px (÷camS) so it's consistent at any zoom.
+      const cxp = (vx + 0.5) * cw, cyp = (vy + 0.5) * ch;
+      const r = ((isMe ? 7 : 5) + pulse * 3) / camS;
+      ctx.save();
+      ctx.globalAlpha = 0.18 + 0.62 * pulse;
+      ctx.strokeStyle = p.color;                     // blink in each player's own color
+      ctx.lineWidth = (isMe ? 3 : 2.2) / camS;       // own marker gets a thicker, larger halo to stand out
+      ctx.strokeRect(cxp - r, cyp - r, r * 2, r * 2);
+      ctx.restore();
       ctx.fillStyle = "#fff"; ctx.fillRect(vx*cw-1, vy*ch-1, cw+2, ch+2);
       ctx.fillStyle = p.color; ctx.fillRect(vx*cw, vy*ch, cw+1, ch+1);
     });

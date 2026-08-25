@@ -138,11 +138,14 @@ window.addEventListener("keyup", (e) => {
 // chat box: Enter sends + closes, Escape cancels (control returns to the game)
 chatInput.addEventListener("keydown", (e) => {
   e.stopPropagation();
-  if (e.code === "Enter") {
+  // Ignore Enter while an IME (Korean/Japanese/etc.) is still composing — that Enter
+  // only commits the composition. Sending then would grab a partial value (the
+  // "only one character" bug). Send on the next, non-composing Enter.
+  if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
     const t = chatInput.value.trim();
     if (t && room) room.send("chat", { text: t });
     chatInput.value = ""; chatInput.blur();
-  } else if (e.code === "Escape") { chatInput.value = ""; chatInput.blur(); }
+  } else if (e.key === "Escape") { chatInput.value = ""; chatInput.blur(); }
 });
 // losing focus drops all held keys and tells the server to stop, so the marker
 // never keeps moving in the last direction after a missed keyup.
@@ -334,16 +337,45 @@ function bubbleRect(x, y, w, h, r) {
   ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r);
   ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath();
 }
+// Greedy wrap into lines that each fit maxWidth. Breaks on spaces when possible
+// (English) and falls back to per-character breaks for long/space-less runs (Korean).
+// ctx.font must already be set to the measuring font.
+function wrapText(text, maxWidth) {
+  const lines = [];
+  let line = "";
+  const flush = () => { if (line) { lines.push(line); line = ""; } };
+  for (const word of text.split(" ")) {
+    let w = word;
+    // A single token wider than the box: char-break it (also handles Korean/CJK).
+    while (ctx.measureText(w).width > maxWidth && w.length > 1) {
+      let i = 1;
+      while (i < w.length && ctx.measureText(w.slice(0, i + 1)).width <= maxWidth) i++;
+      flush();
+      lines.push(w.slice(0, i));
+      w = w.slice(i);
+    }
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width <= maxWidth) line = test;
+    else { flush(); line = w; }
+  }
+  flush();
+  return lines.length ? lines : [text];
+}
+
 function drawBubble(cx, markerY, text, color, alpha) {
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
   ctx.font = "600 13px system-ui, sans-serif";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  const padX = 10, h = 24, maxW = 240, gap = 13;
-  let t = text;
-  while (ctx.measureText(t).width > maxW - padX*2 && t.length > 1) t = t.slice(0, -1);
-  if (t.length < text.length) t = t.slice(0, -1) + "…";
-  const w = ctx.measureText(t).width + padX*2;
+  const padX = 10, padY = 6, lineH = 17, maxW = 240, gap = 13, maxLines = 6;
+  let lines = wrapText(text, maxW - padX * 2);
+  if (lines.length > maxLines) {                                       // cap very long messages
+    lines = lines.slice(0, maxLines);
+    lines[maxLines - 1] = lines[maxLines - 1].slice(0, -1) + "…";
+  }
+  const textW = Math.max(...lines.map((l) => ctx.measureText(l).width));
+  const w = Math.ceil(textW) + padX * 2;
+  const h = lines.length * lineH + padY * 2;
   const bx = Math.max(4, Math.min(cx - w/2, canvas.width - w - 4));   // clamp on-screen
   const above = markerY - (h + gap) > 2;                               // room above the marker?
   const y = above ? markerY - h - gap : markerY + gap;
@@ -357,7 +389,10 @@ function drawBubble(cx, markerY, text, color, alpha) {
   bubbleRect(bx, y, w, h, 9);
   ctx.fillStyle = fill; ctx.fill();
   ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.fillStyle = "#eef1fb"; ctx.fillText(t, bx + w/2, y + h/2 + 0.5);
+  ctx.fillStyle = "#eef1fb";
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], bx + w/2, y + padY + lineH * i + lineH/2);
+  }
   ctx.restore();
 }
 

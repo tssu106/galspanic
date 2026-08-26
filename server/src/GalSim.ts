@@ -1,4 +1,4 @@
-import { GRID_W, GRID_H, BORDER as B, CLEAR_RATIO, MOVE_MS, START_LIVES, BOOST_MULT, BOOST_COST } from "./constants";
+import { GRID_W, GRID_H, BORDER as B, CLEAR_RATIO, MOVE_MS, START_LIVES, BOOST_MULT, BOOST_COST, START_REVEAL_RATIO } from "./constants";
 
 const COLS = GRID_W, ROWS = GRID_H, N = COLS * ROWS;
 const EMPTY = 0, CLAIMED = 1;
@@ -22,7 +22,17 @@ function mulberry32(a: number): () => number {
 const STALL_MS = 400;      // stop moving mid-draw this long -> the line retraces
 const RETRACE_MS = 16;     // ms per cell while retracing back to origin (faster than MOVE_MS)
 const TRAP_RATIO = 0.10;   // an enemy boxed into a region <=10% of interior is captured
-const TRAP_BONUS = 400;    // capture bonus points per trapped monster
+// 포획 점수 — 몬스터 등급(kind)별 차등. 더 위험하고/드물고/높은 레벨에 나오는 적일수록 높다.
+// 한 번의 포획으로 잡힌 모든 적의 점수를 합산해 지급한다. 이 점수는 Shift 질주로 소모된다.
+const CAPTURE_SCORE: Record<string, number> = {
+  star:   150,   // 기본 반사체 (흔함, Lv1+)
+  saw:    200,   // 빠른 반사체 (Lv1+)
+  blob:   250,   // 느린 방황 (Lv2+)
+  ghost:  300,   // 예측불가 방황 (Lv2+)
+  dart:   500,   // 빠른 추적자 (Lv3+)
+  gunner: 700,   // 원거리 포수 (Lv4+, 최고 등급)
+};
+const CAPTURE_SCORE_DEFAULT = 200;   // 미등록 종류에 대한 안전값
 const BULLET_SPEED = 20;   // cells/sec for gunner projectiles
 const BULLET_LIFE = 4;     // seconds
 
@@ -72,10 +82,6 @@ export interface SimEnemy {
 export interface SimProjectile { x: number; y: number; vx: number; vy: number; life: number; r: number; }
 export interface CaptureEvent { x: number; y: number; count: number; bonus: number; owner: number; }
 
-const SPAWNS: [number, number][] = [
-  [B, B - 1], [COLS - 1 - B, B - 1], [B, ROWS - B], [COLS - 1 - B, ROWS - B],
-];
-
 /**
  * Authoritative Qix-style simulation. DOM-free; a faithful port of the local
  * engine (client/local.html): 6 monster archetypes, gunner projectiles,
@@ -91,6 +97,7 @@ export class GalSim {
   level = 1;
   totalInterior = (COLS - 2 * B) * (ROWS - 2 * B);
   claimedInterior = 0;
+  revealX = 0; revealY = 0;   // center of the round-start bright zone; anchors (re)spawns
   over: null | "won" | "lost" = null;
   enemySpeed = 8;
   spawnThresholds: number[] = [];
@@ -129,8 +136,11 @@ export class GalSim {
       for (let x = 0; x < COLS; x++)
         if (x < B || y < B || x >= COLS - B || y >= ROWS - B) this.setGrid(idx(x, y), CLAIMED);
 
+    // 시작 시 내부의 랜덤 위치를 5%가량 밝힌다(안전지대). 플레이어는 이 구역에서 시작한다.
+    this.revealStartArea();
+
     for (const p of this.players) {
-      const [sx, sy] = SPAWNS[(p.owner - 1) % 4];
+      const [sx, sy] = this.pickSafeSpawn(this.revealX, this.revealY);   // 밝은 구역 위에서 시작
       p.x = sx; p.y = sy; p.spawnX = sx; p.spawnY = sy;
       p.drawing = false; p.retreating = false; p.out = false; p.lives = START_LIVES;
       p.boost = false; p.boosting = false;
@@ -144,12 +154,77 @@ export class GalSim {
     const active = Math.max(1, this.players.length);
     const count = 4 + active * 2 + (level - 1) * 2;   // more monsters to populate the larger map
     for (let i = 0; i < count; i++) {
-      // spread across most of the interior so they don't cluster at the center on a big grid
-      this.enemies.push(this.makeEnemy(
-        COLS / 2 + (this.rng() - 0.5) * (COLS - 2 * B) * 0.7,
-        ROWS / 2 + (this.rng() - 0.5) * (ROWS - 2 * B) * 0.7,
-      ));
+      // spread across most of the interior; keep them off the just-revealed bright zone
+      const [ex, ey] = this.randomEmptySpot();
+      this.enemies.push(this.makeEnemy(ex, ey));
     }
+  }
+
+  // 라운드 시작용 안전지대: 내부의 랜덤 위치에 START_REVEAL_RATIO 만큼 직사각형으로 밝힌다.
+  // revealX/Y(재생성 기준점)를 설정하고 claimedInterior 를 그만큼 올린다.
+  private revealStartArea() {
+    const iw = COLS - 2 * B, ih = ROWS - 2 * B;
+    // 크기(넓이)도 랜덤, 형태(가로세로 비율)도 랜덤. 넓이는 내부의 약 3%~7.5% 사이에서
+    // 무작위로 정하고, 비율은 0.35~2.8로 넓게 잡아 길쭉한 직사각형도 나오게 한다.
+    const ratio = START_REVEAL_RATIO * (0.6 + this.rng() * 0.9);   // ~3% ~ 7.5%
+    const area = this.totalInterior * ratio;
+    const aspect = 0.35 + this.rng() * 2.45;                       // 0.35 ~ 2.8 (길쭉한 형태 허용)
+    let w = Math.round(Math.sqrt(area * aspect));
+    let h = Math.round(area / Math.max(1, w));
+    w = Math.max(8, Math.min(w, iw));
+    h = Math.max(8, Math.min(h, ih));
+    // 직사각형 전체가 내부에 들어오도록 좌상단 위치를 랜덤 배치
+    const x0 = B + Math.floor(this.rng() * (iw - w + 1));
+    const y0 = B + Math.floor(this.rng() * (ih - h + 1));
+    this.revealX = x0 + (w >> 1); this.revealY = y0 + (h >> 1);
+    let gained = 0;
+    for (let y = y0; y < y0 + h; y++)
+      for (let x = x0; x < x0 + w; x++) {
+        const i = idx(x, y);
+        if (this.grid[i] === EMPTY) { this.setGrid(i, CLAIMED); gained++; }
+      }
+    this.claimedInterior += gained;   // 밝힌 만큼 진행도에 반영(어느 플레이어에도 귀속되지 않음)
+  }
+
+  // 내부의 랜덤한 EMPTY 셀 중심 좌표(float). 몬스터 배치를 밝은 구역/보더 밖에 두기 위함.
+  private randomEmptySpot(): [number, number] {
+    for (let t = 0; t < 60; t++) {   // 기존과 같은 중앙 편향 분포로 우선 시도
+      const x = COLS / 2 + (this.rng() - 0.5) * (COLS - 2 * B) * 0.7;
+      const y = ROWS / 2 + (this.rng() - 0.5) * (ROWS - 2 * B) * 0.7;
+      const gx = Math.floor(x), gy = Math.floor(y);
+      if (inBounds(gx, gy) && this.grid[idx(gx, gy)] === EMPTY) return [x, y];
+    }
+    for (let t = 0; t < 300; t++) {  // 폴백: 아무 EMPTY 셀
+      const gx = B + Math.floor(this.rng() * (COLS - 2 * B));
+      const gy = B + Math.floor(this.rng() * (ROWS - 2 * B));
+      if (this.grid[idx(gx, gy)] === EMPTY) return [gx + 0.5, gy + 0.5];
+    }
+    return [COLS / 2, ROWS / 2];
+  }
+
+  // 현재 안전지대(claimed)의 프론티어 셀들 — 빈칸과 맞닿은 가장자리. (재)생성 후보.
+  private collectFrontier(): number[] {
+    const out: number[] = [];
+    for (let y = 0; y < ROWS; y++)
+      for (let x = 0; x < COLS; x++)
+        if (this.grid[idx(x, y)] === CLAIMED && this.isBorder(x, y)) out.push(idx(x, y));
+    return out;
+  }
+
+  // (nearX,nearY) 근처의 랜덤한 안전지대 가장자리 셀을 고른다. 무작위 후보 몇 개 중
+  // 가장 가까운 것을 택해 "밝아진 곳 주변의 랜덤한 안전지대"를 만족시킨다.
+  private pickSafeSpawn(nearX: number, nearY: number): [number, number] {
+    const F = this.collectFrontier();
+    if (!F.length) return [this.revealX, this.revealY];
+    let best = F[0], bestD = Infinity;
+    const tries = Math.min(24, F.length);
+    for (let t = 0; t < tries; t++) {
+      const i = F[(this.rng() * F.length) | 0];
+      const cx = i % COLS, cy = (i / COLS) | 0;
+      const d = (cx - nearX) * (cx - nearX) + (cy - nearY) * (cy - nearY);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return [best % COLS, (best / COLS) | 0];
   }
 
   private pickEnemyType(): EnemyType {
@@ -204,7 +279,7 @@ export class GalSim {
   }
 
   addPlayer(sessionId: string, owner: number): SimPlayer {
-    const [sx, sy] = SPAWNS[(owner - 1) % 4];
+    const [sx, sy] = this.pickSafeSpawn(this.revealX, this.revealY);   // 밝은 구역 위에서 합류
     const p: SimPlayer = {
       sessionId, owner, x: sx, y: sy, spawnX: sx, spawnY: sy,
       heldDir: null, boost: false, boosting: false, drawing: false, retreating: false, lives: START_LIVES,
@@ -344,12 +419,15 @@ export class GalSim {
       if (this.grid[i] === EMPTY && comp[i] >= 0 && claimIt[comp[i]]) { this.setGrid(i, CLAIMED); gained++; }
 
     if (trapCount > 0) {
+      // 등급별 점수: 잡힌 각 적의 아키타입 점수를 합산
+      let bonus = 0;
+      for (const e of trapped) bonus += CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT;
       this.enemies = this.enemies.filter(e => !trapped.has(e));
       p.traps += trapCount;
-      p.bonus += TRAP_BONUS * trapCount;
+      p.bonus += bonus;
       this.captureEvents.push({
         x: trapSX / trapCount, y: trapSY / trapCount,
-        count: trapCount, bonus: TRAP_BONUS * trapCount, owner: p.owner,
+        count: trapCount, bonus, owner: p.owner,
       });
     }
 
@@ -366,7 +444,10 @@ export class GalSim {
     for (const i of p.trailCells) this.setTrail(i, 0);
     p.trailCells.length = 0;
     p.drawing = false; p.retreating = false;
-    p.x = p.spawnX; p.y = p.spawnY; p.acc = 0; p.idle = 0;
+    // 죽으면 밝아진 구역 주변의 랜덤한 안전지대로 재생성 (고정 스폰 대신)
+    const [sx, sy] = this.pickSafeSpawn(this.revealX, this.revealY);
+    p.x = sx; p.y = sy; p.spawnX = sx; p.spawnY = sy;
+    p.drawOriginX = sx; p.drawOriginY = sy; p.acc = 0; p.idle = 0;
     p.lives--;
     if (p.lives <= 0) {
       p.out = true;

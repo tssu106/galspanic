@@ -13,28 +13,65 @@
   h1 { margin:2px 0 0; font-size:20px; } h1 span { color:#ff5db1; }
   #hud { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
   .chip { background:var(--panel); border:1px solid #232a44; border-radius:12px; padding:7px 12px;
-          display:flex; flex-direction:column; gap:2px; min-width:120px; }
+          display:flex; flex-direction:column; gap:2px; min-width:150px; }
+  .chip .meta { gap:8px; }
   .chip .top { display:flex; align-items:center; gap:7px; font-weight:600; font-size:13px; }
   .chip .dot { width:12px; height:12px; border-radius:4px; box-shadow:0 0 8px currentColor; }
   .chip .meta { font-size:11px; color:var(--muted); display:flex; justify-content:space-between; }
   .chip.dead { opacity:.4; filter:grayscale(1); }
   .chip.me { outline:2px solid #ff5db1; }
   canvas { background:#05060c; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.5);
-           width:min(92vw, 88vh, 760px); height:min(92vw, 88vh, 760px); }
+           aspect-ratio:2/3; height:min(84vh, 860px); width:auto; max-width:94vw; }
   #help { color:var(--muted); font-size:12px; text-align:center; max-width:640px; line-height:1.5; }
   #status { font-size:13px; color:#ffb400; min-height:18px; }
   kbd { background:#232a44; border-radius:5px; padding:1px 6px; font-size:11px; }
   button { background:#ff5db1; color:#fff; border:0; border-radius:8px; padding:8px 14px; font-size:14px; cursor:pointer; }
+
+  /* ---- 초기(타이틀) 화면: "게임 시작"을 누르기 전까지 게임 뷰를 덮는다 ---- */
+  #start { position:fixed; inset:0; z-index:50; display:flex; flex-direction:column;
+           align-items:center; justify-content:center; gap:16px; padding:24px; text-align:center;
+           background:radial-gradient(1200px 800px at 50% -10%, #1a1f38, var(--bg)); }
+  #start.hidden { display:none; }
+  #start .logo { margin:0; font-size:min(16vw,68px); font-weight:800; letter-spacing:3px;
+                 text-shadow:0 6px 34px rgba(255,93,177,.4); }
+  #start .logo span { color:#ff5db1; }
+  #start .tag { color:var(--muted); font-size:13px; letter-spacing:4px; text-transform:uppercase; margin-top:-6px; }
+  #start .card { background:var(--panel); border:1px solid #232a44; border-radius:16px;
+                 padding:20px 22px; max-width:420px; width:100%; display:flex; flex-direction:column; gap:14px;
+                 box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  #start .rules { color:var(--muted); font-size:13px; line-height:1.7; text-align:left; }
+  #start .rules b { color:var(--ink); }
+  #start input { background:#0e1120; border:1px solid #2a3350; border-radius:10px; color:var(--ink);
+                 padding:11px 13px; font-size:15px; outline:none; text-align:center; }
+  #start input:focus { border-color:#ff5db1; }
+  #start .go { font-size:17px; font-weight:700; padding:13px 16px; border-radius:12px; }
+  #start .go:disabled { opacity:.6; cursor:default; }
+  #start .err { color:#ff6b6b; font-size:13px; min-height:18px; }
 </style>
 </head>
 <body>
+  <div id="start">
+    <h1 class="logo">GALS <span>PANIC</span></h1>
+    <div class="tag">Online Co-op</div>
+    <div class="card">
+      <div class="rules">
+        <b>방향키</b>로 이동 · 안전지대에서 빈 공간으로 들어가 선을 긋고, 다시 안전지대에 닿으면 안쪽이 열립니다.<br>
+        빨간 <b>적</b>이 선에 닿으면 목숨을 잃어요 · 함께 <b>90%</b>를 열면 클리어!<br>
+        <b>Shift</b> 질주 · <b>Enter</b> 채팅
+      </div>
+      <input id="nameInput" maxlength="12" placeholder="플레이어 이름 (선택)" autocomplete="off" />
+      <button id="startBtn" class="go">게임 시작</button>
+      <div id="startErr" class="err"></div>
+    </div>
+  </div>
+
   <h1>GALS <span>PANIC</span> — Online Co-op</h1>
   <div id="status">서버 연결 중…</div>
   <div id="hud"></div>
-  <canvas id="c" width="720" height="720"></canvas>
+  <canvas id="c" width="512" height="768"></canvas>
   <div id="help">
     <b>방향키</b>로 이동 — 안전지대에서 빈 공간으로 들어가면 선이 그려지고, 다시 안전지대에 닿으면 안쪽이 점유됩니다.
-    빨간 적이 당신의 선에 닿으면 목숨을 잃어요. 다 함께 <b>85%</b>를 열면 클리어!
+    빨간 적이 당신의 선에 닿으면 목숨을 잃어요. 다 함께 <b>90%</b>를 열면 클리어!
     <div style="margin-top:6px"><button id="restart" style="display:none">다음/재시작 (Enter)</button></div>
     <div style="margin-top:6px"><input id="chat" maxlength="60" placeholder="Enter 로 채팅… (마커 위 말풍선 3초)" autocomplete="off"
       style="width:min(90vw,380px);background:#161a2b;border:1px solid #232a44;border-radius:8px;color:#e8ebf7;padding:7px 11px;font-size:13px;outline:none" /></div>
@@ -60,6 +97,11 @@ const statusEl = document.getElementById("status");
 const restartBtn = document.getElementById("restart");
 const chatInput = document.getElementById("chat");
 const bubbles = new Map();   // owner -> { text, until }  speech bubbles over each marker (~3s)
+// 초기(타이틀) 화면 요소 — "게임 시작"을 누르기 전까지 서버에 접속하지 않는다.
+const startScreen = document.getElementById("start");
+const startBtn = document.getElementById("startBtn");
+const nameInput = document.getElementById("nameInput");
+const startErr = document.getElementById("startErr");
 
 let room = null, state = null, GW = 64, GH = 64;
 const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
@@ -69,34 +111,55 @@ img.onload = () => { imgReady = true; imgVersion++; };
 // between-stage countdown, so switching to it at round start has no loading hitch.
 const preImg = new Image(); preImg.crossOrigin = "anonymous";
 
-async function connect() {
-  try {
-    const client = new Client(WS_URL);
-    room = await client.joinOrCreate("game", { name: "Guest" });
-    statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
-    // Keep this handler TRIVIAL: just latch the latest state. The heavy per-update work
-    // (scanning the 4096-cell trail array, capturing enemy snapshots) is done once per
-    // render frame instead — so a burst of queued patches can't pile up scans and stall
-    // the main thread (which was making input feel ~1s late on the host).
-    room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; });
-    room.state.listen?.("imageId", (v) => { if (v) img.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
-    // preload the next stage's image during the countdown → next round starts hitch-free
-    room.state.listen?.("nextImageId", (v) => { if (v) preImg.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
-    // capture popups: server broadcasts one per trapped-monster batch
-    room.onMessage("trap", (ev) => {
-      flashes.push({
-        x: ev.x, y: ev.y, color: playerColor(ev.owner), life: 1.2, ttl: 1.2,
-        text: ev.count > 1 ? `포획 x${ev.count}! +${ev.bonus}` : `포획! +${ev.bonus}`,
-      });
+// Connects and JOINS the live game. Called only from startGame() (the "게임 시작"
+// button), so a player never enters the running match until they choose to. Throws on
+// failure so the caller can keep the title screen up and let the player retry.
+async function connect(name) {
+  const client = new Client(WS_URL);
+  room = await client.joinOrCreate("game", { name });
+  statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
+  // Keep this handler TRIVIAL: just latch the latest state. The heavy per-update work
+  // (scanning the 4096-cell trail array, capturing enemy snapshots) is done once per
+  // render frame instead — so a burst of queued patches can't pile up scans and stall
+  // the main thread (which was making input feel ~1s late on the host).
+  room.onStateChange((s) => { state = s; GW = s.gridW; GH = s.gridH; });
+  room.state.listen?.("imageId", (v) => { if (v) img.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
+  // preload the next stage's image during the countdown → next round starts hitch-free
+  room.state.listen?.("nextImageId", (v) => { if (v) preImg.src = `${HTTP_URL}/images/${v}_blur.jpg`; });
+  // capture popups: server broadcasts one per trapped-monster batch
+  room.onMessage("trap", (ev) => {
+    flashes.push({
+      x: ev.x, y: ev.y, color: playerColor(ev.owner), life: 1.2, ttl: 1.2,
+      text: ev.count > 1 ? `포획 x${ev.count}! +${ev.bonus}` : `포획! +${ev.bonus}`,
     });
-    // chat: show a speech bubble over the sender's marker for ~3s
-    room.onMessage("chat", (ev) => { bubbles.set(ev.owner, { text: ev.text, until: performance.now() + 3000 }); });
+  });
+  // chat: show a speech bubble over the sender's marker for ~3s
+  room.onMessage("chat", (ev) => { bubbles.set(ev.owner, { text: ev.text, until: performance.now() + 3000 }); });
+}
+
+// ---- 초기 화면: "게임 시작"을 눌러야 접속·합류한다 ----
+try { nameInput.value = localStorage.getItem("galspanic:name") || ""; } catch {}
+async function startGame() {
+  if (startBtn.disabled) return;
+  const name = (nameInput.value || "").trim().slice(0, 12) || "Guest";
+  try { localStorage.setItem("galspanic:name", name === "Guest" ? "" : name); } catch {}
+  startBtn.disabled = true; startBtn.textContent = "접속 중…"; startErr.textContent = "";
+  try {
+    await connect(name);
+    startScreen.classList.add("hidden");   // 접속에 성공했을 때만 게임 화면을 드러낸다
   } catch (e) {
-    statusEl.textContent = "서버 연결 실패 — server 폴더에서 npm start 후 새로고침하세요";
     console.error(e);
+    startErr.textContent = "서버 연결 실패 — server 폴더에서 npm start 후 다시 시도하세요";
+    startBtn.disabled = false; startBtn.textContent = "게임 시작";
   }
 }
-connect();
+startBtn.addEventListener("click", startGame);
+// 이름 칸에서 Enter 로도 시작 (IME 조합 중 Enter 는 무시 — 부분 입력 방지)
+nameInput.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) startGame();
+});
+nameInput.focus();
 
 // ---- input: send held direction (0..4) on change ----
 const CODE_DIR = {
@@ -117,7 +180,8 @@ function syncInput() {
   }
 }
 window.addEventListener("keydown", (e) => {
-  if (document.activeElement === chatInput) return;   // typing in chat: let the input handle keys
+  const ae = document.activeElement;
+  if (ae === chatInput || ae === nameInput) return;   // typing in a text field: let it handle keys
   if (CODE_DIR[e.code] != null || e.code === "Enter") e.preventDefault();
   if (e.repeat) return;                       // ignore OS key auto-repeat
   if (e.code === "Enter") {
@@ -130,7 +194,8 @@ window.addEventListener("keydown", (e) => {
   syncInput();
 });
 window.addEventListener("keyup", (e) => {
-  if (document.activeElement === chatInput) return;
+  const ae = document.activeElement;
+  if (ae === chatInput || ae === nameInput) return;
   if (e.code === "ShiftLeft" || e.code === "ShiftRight") { boostHeld = false; syncInput(); return; }
   const i = pressOrder.indexOf(e.code); if (i >= 0) pressOrder.splice(i, 1);
   syncInput();
@@ -579,16 +644,24 @@ function spawnBurst(x, y) {
 }
 function drawWinCelebration(now, dt) {
   const W = canvas.width, H = canvas.height;
-  // full-screen reveal of the finished picture
-  if (imgReady) ctx.drawImage(img, 0, 0, W, H);
-  else { ctx.fillStyle = "#2a3350"; ctx.fillRect(0, 0, W, H); }
-  ctx.fillStyle = "rgba(8,10,20,.30)"; ctx.fillRect(0, 0, W, H);   // slight darken for contrast
+  // 불투명 배경으로 게임 화면을 완전히 덮는다
+  ctx.fillStyle = "#07090f"; ctx.fillRect(0, 0, W, H);
 
-  // fireworks: (re)start on entering the won phase, then burst on an interval
+  // 아래쪽에 불투명 배너 자리를 남기고, 그 위 영역에 그림 "전체"를 비율 유지로 최대한 크게 보여준다
+  const barH = 100, areaH = H - barH;
+  if (imgReady && img.width && img.height) {
+    const scale = Math.min(W / img.width, areaH / img.height);   // contain — 왜곡 없이 전체 표시
+    const dw = img.width * scale, dh = img.height * scale;
+    ctx.drawImage(img, 0, 0, img.width, img.height, (W - dw) / 2, (areaH - dh) / 2, dw, dh);
+  } else {
+    ctx.fillStyle = "#2a3350"; ctx.fillRect(0, 0, W, areaH);
+  }
+
+  // fireworks: (re)start on entering the won phase, then burst on an interval (그림 영역 위에서만)
   if (!wonCelebActive) { wonCelebActive = true; fwParticles.length = 0; fwLastBurst = 0; }
   if (now - fwLastBurst > 400) {
     fwLastBurst = now;
-    spawnBurst(W * (0.12 + Math.random() * 0.76), H * (0.12 + Math.random() * 0.5));
+    spawnBurst(W * (0.12 + Math.random() * 0.76), areaH * (0.1 + Math.random() * 0.5));
   }
   for (let i = fwParticles.length - 1; i >= 0; i--) {
     const p = fwParticles[i];
@@ -596,27 +669,29 @@ function drawWinCelebration(now, dt) {
     if (p.life <= 0) { fwParticles.splice(i, 1); continue; }
     p.vy += 320 * dt;                       // gravity
     p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.y > areaH) continue;              // 배너 위로는 그리지 않음
     ctx.globalAlpha = Math.max(0, p.life);
     ctx.fillStyle = p.color;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
   }
   ctx.globalAlpha = 1;
 
-  // CLEAR banner + countdown — opaque box, centered on screen
-  const boxW = 460, boxH = 150, boxX = W/2 - boxW/2, boxY = H/2 - boxH/2;
-  ctx.fillStyle = "#0b0e1a"; ctx.fillRect(boxX, boxY, boxW, boxH);          // opaque backing
-  ctx.strokeStyle = "#a3e635"; ctx.lineWidth = 2; ctx.strokeRect(boxX, boxY, boxW, boxH);
+  // ---- 불투명 CLEAR 배너: 하단 가로 막대 (그림을 가리지 않는다) ----
+  const barY = H - barH;
+  ctx.fillStyle = "#0b0e1a"; ctx.fillRect(0, barY, W, barH);                 // 완전 불투명 막대
+  ctx.strokeStyle = "#a3e635"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, barY + 1); ctx.lineTo(W, barY + 1); ctx.stroke();   // 상단 강조선
   ctx.textAlign = "center";
-  ctx.fillStyle = "#a3e635"; ctx.font = "bold 40px system-ui";
-  ctx.fillText(`LEVEL ${state.level} CLEAR!`, W/2, boxY + 60);
+  ctx.fillStyle = "#a3e635"; ctx.font = "bold 32px system-ui";
+  ctx.fillText(`LEVEL ${state.level} CLEAR!`, W / 2, barY + 38);
   const remain = Math.max(0, state.nextIn || 0);
   const prog = Math.min(1, Math.max(0, 1 - remain / WIN_COUNTDOWN_S));
-  const bw = 320, bh = 14, bx = W/2 - bw/2, by = boxY + 90;
+  const bw = 340, bh = 12, bx = W / 2 - bw / 2, by = barY + 56;
   ctx.fillStyle = "#1b2138"; ctx.fillRect(bx, by, bw, bh);
   ctx.fillStyle = "#a3e635"; ctx.fillRect(bx, by, bw * prog, bh);
   ctx.strokeStyle = "#3a4670"; ctx.lineWidth = 1; ctx.strokeRect(bx, by, bw, bh);
-  ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
-  ctx.fillText(`다음 스테이지까지 ${Math.ceil(remain)}초`, W/2, by + bh + 24);
+  ctx.fillStyle = "#c9d0f0"; ctx.font = "13px system-ui";
+  ctx.fillText(`다음 스테이지까지 ${Math.ceil(remain)}초`, W / 2, by + bh + 16);
   ctx.textAlign = "left";
 }
 
@@ -629,14 +704,18 @@ function drawHud() {
     const me = room && p.id === room.sessionId;
     const pct = Math.round(p.claimed / total * 100);
     const traps = p.traps ? `🕸${p.traps}` : "";
+    const score = p.bonus | 0;   // 점수: 포획으로 획득(등급별) · Shift 질주로 소모
     html += `<div class="chip ${p.out ? "dead" : ""} ${me ? "me" : ""}">
       <div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}${me?" (나)":""}</div>
-      <div class="meta"><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div></div>`;
+      <div class="meta"><span style="color:#ffd54a">⭐${score}</span><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div></div>`;
   });
   html += `<div class="chip"><div class="top">진행 · Lv ${state.level}</div>
-    <div class="meta"><span>${ratio}%</span><span>목표 85%</span></div></div>`;
+    <div class="meta"><span>${ratio}%</span><span>목표 90%</span></div></div>`;
   hud.innerHTML = html;
   restartBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
+  // 클리어(승리) 화면에서는 채팅 입력창을 숨긴다
+  chatInput.style.display = (state.phase === "won") ? "none" : "";
+  if (state.phase === "won" && document.activeElement === chatInput) chatInput.blur();
 }
 render();
 </script>

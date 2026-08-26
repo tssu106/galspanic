@@ -5,14 +5,17 @@
 // frame — ~11µs/cell), not an inherent grid cost. The client now copies the schema arrays
 // to plain arrays once per frame (~500x cheaper), so per-frame cost stays flat as the grid
 // grows and we can keep widening the field in later steps.
-export const GRID_W = 192;
-export const GRID_H = 192;
+// Field is PORTRAIT 2:3 to match the reveal artwork (512x768). A square grid squished the
+// portrait picture; with a 2:3 grid the client canvas (512x768) uses exactly-square 3.2px
+// cells, so the image shows undistorted both in play and on the clear screen.
+export const GRID_W = 160;
+export const GRID_H = 240;
 
 // Claimed border ring thickness.
 export const BORDER = 2;
 
 // Clear the round when this fraction of the *interior* is claimed.
-export const CLEAR_RATIO = 0.85;
+export const CLEAR_RATIO = 0.90;
 
 // Simulation cadence (server-authoritative). ~42Hz keeps host load LOW (server + its browser
 // share one machine; higher rates felt stuck) while client interpolation keeps motion smooth.
@@ -26,6 +29,12 @@ export const MOVE_MS = 48;    // one cell per 48ms = exactly 2 sim ticks (SIM_MS
 // bonus points (BOOST_COST per boosted cell). No banked bonus -> no sprint.
 export const BOOST_MULT = 1.5;
 export const BOOST_COST = 6;
+
+// 라운드 시작 시 내부(interior)의 랜덤한 위치를 미리 밝힌다(안전지대). 이 값은 밝히는
+// 직사각형 넓이의 기준치로, 실제 넓이·가로세로 비율은 이 값 주변에서 매 판 랜덤하게 정해진다
+// (revealStartArea 참고). 플레이어는 이 밝아진 구역의 경계에서 시작하고, 죽으면 밝아진 구역
+// 주변의 안전지대 경계에 다시 생성된다. (기존의 고정 4코너 스폰을 대체)
+export const START_REVEAL_RATIO = 0.05;
 
 // After clearing a stage, auto-advance to the next one over this countdown (client shows a bar).
 export const WIN_COUNTDOWN_MS = 5000;

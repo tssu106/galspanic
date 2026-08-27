@@ -666,6 +666,13 @@ function syncTrail() {
   for (let i = 0; i < n; i++) { const o = t[i]; if (o) { list.push(i, o); } }
   trailList = list;
 }
+let webList = [];
+function syncWeb() {   // 거미줄 셀 목록 (trail 과 같은 방식: 스키마 배열 1회 복사 후 스캔)
+  if (!state || !state.web) { webList = []; return; }
+  const w = [...state.web], n = w.length, list = [];
+  for (let i = 0; i < n; i++) if (w[i]) list.push(i);
+  webList = list;
+}
 function captureSnapshot() {
   if (!state) return;
   const ex = [];
@@ -821,6 +828,7 @@ function render() {
     // per-frame (not per-patch): capped so queued patches can't pile up scans and stall
     captureSnapshot();   // enemy snapshot for interpolation
     syncTrail();         // rebuild the active-trail list from the grid
+    syncWeb();           // rebuild the web-cell list
     // rebuild the cached grid layer only when it changed (claim / new level / image load / resize)
     if (state.claimedInterior !== lastClaimed || state.level !== lastLevel ||
         imgVersion !== lastImgVer || GW !== lastGW || GH !== lastGH) {
@@ -856,6 +864,16 @@ function render() {
     ctx.translate(-camX*camS + shX, -camY*camS + shY); ctx.scale(camS, camS);
 
     if (gridBuilt) ctx.drawImage(gridCanvas, 0, 0);   // one blit instead of GW*GH draws
+    // 거미줄(감속 필드) — 바닥에 반투명하게. 그 위에선 플레이어가 느려진다.
+    if (webList.length) {
+      ctx.save();
+      ctx.fillStyle = "rgba(210,220,255,0.26)";
+      for (const i of webList) { const cx = i % GW, cy = (i / GW) | 0; ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1); }
+      ctx.strokeStyle = "rgba(230,236,255,0.55)"; ctx.lineWidth = Math.max(0.6, cw*0.16);
+      for (const i of webList) { const cx = (i % GW)*cw, cy = ((i/GW)|0)*ch;   // X 무늬(끈적한 거미줄 느낌)
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx+cw, cy+ch); ctx.moveTo(cx+cw, cy); ctx.lineTo(cx, cy+ch); ctx.stroke(); }
+      ctx.restore();
+    }
     // trails — draw ONLY the active trail cells (built on each patch), so per-frame
     // cost is O(trail length), independent of map size. Skip each player's newest
     // (head) cell; the moving marker stands in for the line's tip.
@@ -892,6 +910,25 @@ function render() {
       ctx.fillStyle = "#ffe066";
       ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
       ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x-R*0.25, y-R*0.25, R*0.4, 0, 7); ctx.fill();
+      ctx.restore();
+    });
+    // 보스 레이저 — on=0 예고(점선 경고), on=1 발사(빔). 발사 중엔 선 위에서 즉사 + (십자) 맵 삭제.
+    if (state.beams) state.beams.forEach((b) => {
+      const x1=b.x1*cw, y1=b.y1*ch, x2=b.x2*cw, y2=b.y2*ch;
+      ctx.save(); ctx.lineCap = "round";
+      if (!b.on) {   // 예고
+        ctx.globalAlpha = 0.45 + 0.35 * Math.sin(now/55);
+        ctx.strokeStyle = "#ff3b3b"; ctx.lineWidth = Math.max(1, cw*0.6);
+        ctx.setLineDash([cw*2.2, cw*1.6]);
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      } else {       // 발사
+        ctx.strokeStyle = "rgba(255,70,70,0.45)"; ctx.lineWidth = b.w*cw*2.6;
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+        ctx.strokeStyle = "#ffdada"; ctx.lineWidth = b.w*cw*1.3;
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = Math.max(1, b.w*cw*0.5);
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      }
       ctx.restore();
     });
     // players — every marker glides at constant velocity toward the latest server cell,

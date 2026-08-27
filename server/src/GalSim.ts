@@ -64,12 +64,29 @@ interface BossType {
   fireEvery: number;  // 발사 간격(초)
   score: number;      // 포획 점수
 }
+// r 은 현재의 2배로 키운 거대 보스. speed 는 큰 덩치에 맞춰 살짝 낮춤.
 const BOSS_TYPES: BossType[] = [
-  { key: "boss_ring",   shape: "boss_ring",   behavior: "bounce", pattern: "radial", speed: 0.35, r: 6.0, bullets: 16, fireEvery: 2.0, score: 2500 },
-  { key: "boss_spiral", shape: "boss_spiral", behavior: "wander", pattern: "spiral", speed: 0.30, r: 5.5, bullets: 5,  fireEvery: 0.32, score: 3200 },
-  { key: "boss_spread", shape: "boss_spread", behavior: "hunt",   pattern: "spread", speed: 0.50, r: 5.0, bullets: 7,  fireEvery: 1.5, score: 3600 },
-  { key: "boss_cross",  shape: "boss_cross",  behavior: "bounce", pattern: "cross",  speed: 0.40, r: 5.5, bullets: 8,  fireEvery: 1.1, score: 2800 },
+  { key: "boss_ring",   shape: "boss_ring",   behavior: "bounce", pattern: "radial", speed: 0.30, r: 12.0, bullets: 16, fireEvery: 2.0, score: 2500 },
+  { key: "boss_spiral", shape: "boss_spiral", behavior: "wander", pattern: "spiral", speed: 0.28, r: 11.0, bullets: 5,  fireEvery: 0.32, score: 3200 },
+  { key: "boss_spread", shape: "boss_spread", behavior: "hunt",   pattern: "spread", speed: 0.42, r: 10.0, bullets: 7,  fireEvery: 1.5, score: 3600 },
+  { key: "boss_cross",  shape: "boss_cross",  behavior: "bounce", pattern: "cross",  speed: 0.35, r: 11.0, bullets: 8,  fireEvery: 1.1, score: 2800 },
 ];
+
+// 보스별 시그니처 특수 패턴. 평상시(기본 발사) ↔ 특수를 번갈아 쓴다.
+const BOSS_SPECIALS: Record<string, string[]> = {
+  boss_ring:   ["shockwave", "laser_sweep"],           // 확산 파동 + 360° 레이저 스윕
+  boss_spiral: ["dual_spiral", "homing", "web"],        // 양방향 나선 + 유도탄 + 거미줄
+  boss_spread: ["charge", "devour", "blink"],           // 조준 돌진 + 포식 + 순간이동
+  boss_cross:  ["cross_laser", "corruption", "summon"], // 십자 레이저 + 오염 자국 + 졸개 소환
+};
+
+// 거미줄(감속 필드)
+const WEB_SLOW = 2.0;      // 거미줄 위 이동 시간 배수(느려짐)
+const WEB_LIFE = 9;        // 거미줄 지속(초)
+const WEB_R = 6;           // 한 번에 까는 반경(셀)
+// 레이저
+const BEAM_LEN = Math.hypot(GRID_W, GRID_H);   // 맵을 가로지르는 길이
+const BEAM_CARVE_EVERY = 0.1;                  // 카브(맵 삭제) 간격(초) — 매 틱 삭제 방지
 
 type Behavior = "bounce" | "wander" | "hunt" | "turret";
 interface EnemyType {
@@ -113,11 +130,14 @@ export interface SimEnemy {
   spin: number; wanderT: number;
   gun: boolean; fireEvery: number; cooldown: number; aim: number;
   boss?: boolean; pattern?: BossPattern; bullets?: number; phase?: number;   // 보스 전용
-  // 보스 행동 모드: 주기적으로 "격노"(추격/질주/난사)로 전환했다가 평상시로 복귀.
-  mode?: string; modeT?: number; baseSpeed?: number; fireEveryBase?: number; behaviorSaved?: Behavior; baseR?: number; rTarget?: number;
+  // 보스 행동/특수 패턴: 평상시("normal") ↔ 시그니처 특수를 번갈아 쓴다. mode=현재 특수명,
+  // modeT=남은 시간, subT=하위 타이머(연속 발사/카브용).
+  mode?: string; modeT?: number; subT?: number; baseSpeed?: number; fireEveryBase?: number; behaviorSaved?: Behavior; baseR?: number; rTarget?: number;
 }
 
-export interface SimProjectile { x: number; y: number; vx: number; vy: number; life: number; r: number; }
+export interface SimProjectile { x: number; y: number; vx: number; vy: number; life: number; r: number; homing?: boolean; }
+// 보스 레이저: (x1,y1)에서 각도 ang 방향으로 len 만큼. tele>0 이면 예고(경고선), 아니면 발사 중.
+export interface SimBeam { x1: number; y1: number; ang: number; rot: number; len: number; w: number; t: number; tele: number; carve: boolean; carveT: number; }
 export interface CaptureEvent { x: number; y: number; count: number; bonus: number; owner: number; }
 export interface BossEvent { x: number; y: number; kind: string; }   // 보스 출현 (클라 연출용)
 
@@ -129,9 +149,13 @@ export interface BossEvent { x: number; y: number; kind: string; }   // 보스 �
 export class GalSim {
   grid = new Uint8Array(N);
   trail = new Uint8Array(N);
+  web = new Uint8Array(N);              // 거미줄(감속 필드): 1이면 그 위 플레이어가 느려짐
   players: SimPlayer[] = [];
   enemies: SimEnemy[] = [];
   projectiles: SimProjectile[] = [];
+  beams: SimBeam[] = [];               // 보스 레이저(예고/발사)
+  private webTimers = new Map<number, number>();   // 거미줄 셀 → 남은 수명(초)
+  webDirty = new Set<number>();        // 변경된 거미줄 셀 (룸이 동기화)
   captureEvents: CaptureEvent[] = [];   // drained by the room, broadcast to clients
   warpEvents: BossEvent[] = [];         // 블랙홀 예고 시작 이벤트 (룸이 drain → "warp" 브로드캐스트)
   // 예고 중인 블랙홀들. 타이머가 끝나면 맵을 원형으로 지우고 플레이어를 죽인 뒤 보스를 생성한다.
@@ -169,6 +193,9 @@ export class GalSim {
   private setTrail(i: number, v: number) {
     if (this.trail[i] !== v) { this.trail[i] = v; this.trailDirty.add(i); }
   }
+  private setWeb(i: number, v: number) {
+    if (this.web[i] !== v) { this.web[i] = v; this.webDirty.add(i); }
+  }
 
   resetRound(level: number) {
     this.level = level;
@@ -180,11 +207,13 @@ export class GalSim {
     this.captureEvents = [];
     this.warpEvents = [];
     this.pendingWarps = [];
+    this.beams = [];
+    this.webTimers.clear();
     // 보스 스케줄 초기화: 일정 시간 후 종류별로 한 마리씩 순차 등장 (순서는 라운드마다 랜덤)
     this.roundElapsed = 0;
     this.bossTimer = BOSS_FIRST_SEC;
     this.bossQueue = this.shuffledBosses();
-    for (let i = 0; i < N; i++) { this.setGrid(i, EMPTY); this.setTrail(i, 0); }
+    for (let i = 0; i < N; i++) { this.setGrid(i, EMPTY); this.setTrail(i, 0); this.setWeb(i, 0); }
     for (let y = 0; y < ROWS; y++)
       for (let x = 0; x < COLS; x++)
         if (x < B || y < B || x >= COLS - B || y >= ROWS - B) this.setGrid(idx(x, y), CLAIMED);
@@ -450,42 +479,198 @@ export class GalSim {
     this.bossIn = 10;
   }
 
-  // 보스 행동 모드 갱신: 평상시 ↔ 격노를 주기적으로 오간다. 격노는 3종 중 랜덤:
-  //  · chase  — 플레이어 추격(hunt) + 이동 속도 급증
-  //  · rush   — 현재 방향으로 매우 빠르게 질주(벽에 튕김)
-  //  · burst  — 발사 간격을 대폭 줄여 탄막 난사
-  // 이동 로직이 vx,vy 크기를 속도로 쓰므로 모드 전환 시 벡터를 새 속도로 재정규화한다.
+  private renormVel(e: SimEnemy) {   // 방향 유지, 크기만 현재 speed 로
+    const c = Math.hypot(e.vx, e.vy) || 1; e.vx = e.vx / c * e.speed; e.vy = e.vy / c * e.speed;
+  }
+
+  // 보스 행동/특수 패턴 스케줄러: 평상시(기본 발사) ↔ 보스별 시그니처 특수를 번갈아 쓴다.
   private updateBossMode(e: SimEnemy, dtSec: number) {
-    // 크기를 목표값(rTarget)으로 매 틱 부드럽게 접근 → 돌진 시 서서히 커졌다 서서히 작아짐.
+    // 크기를 목표값(rTarget)으로 매 틱 부드럽게 접근 (돌진 시 서서히 커졌다 작아짐).
     if (e.rTarget != null && e.r !== e.rTarget) {
       e.r += (e.rTarget - e.r) * Math.min(1, dtSec * 7);
       if (Math.abs(e.r - e.rTarget) < 0.02) e.r = e.rTarget;
     }
+    if (e.mode && e.mode !== "normal") this.runBossSpecial(e, dtSec);   // 활성 특수의 매 틱 효과
     e.modeT = (e.modeT ?? 0) - dtSec;
     if (e.modeT > 0) return;
-    const base = e.baseSpeed || e.speed;
     if (!e.mode || e.mode === "normal") {
-      // devour: 나를 향해 달려들며 점유지를 파먹는 파괴 모드
-      const modes = ["chase", "rush", "burst", "devour"];
-      e.mode = modes[Math.floor(this.rng() * modes.length)];
-      e.modeT = 3 + this.rng() * 2;   // 격노 지속 3~5초
-      // 달려드는 모드(chase/devour)는 조금 더 빠르게. 대신 돌진 중엔 발사를 멈춘다(아래 발사부).
-      // 돌진 계열(chase/rush/devour)은 덩치를 키운다(1.5배, rTarget 으로 부드럽게). burst 는 그대로.
-      const bigR = (e.baseR || e.r) * 1.5;
-      if (e.mode === "chase") { e.behaviorSaved = e.behavior; e.behavior = "hunt"; e.speed = base * 2.2; e.rTarget = bigR; }
-      else if (e.mode === "rush") { e.speed = base * 2.8; e.rTarget = bigR; }
-      else if (e.mode === "burst") { e.fireEvery = (e.fireEveryBase || e.fireEvery) * 0.4; }
-      else if (e.mode === "devour") { e.behaviorSaved = e.behavior; e.behavior = "hunt"; e.speed = base * 2.0; e.rTarget = bigR; e.modeT = 4 + this.rng() * 2; }
+      const set = BOSS_SPECIALS[e.kind] || ["shockwave"];
+      this.startSpecial(e, set[Math.floor(this.rng() * set.length)]);
     } else {
-      if (e.behaviorSaved) e.behavior = e.behaviorSaved;   // chase/devour 로 바꿨던 행동 복구
-      e.mode = "normal";
-      e.modeT = 5 + this.rng() * 3;   // 평상시 5~8초
-      e.speed = base;
-      e.fireEvery = e.fireEveryBase || e.fireEvery;
-      e.rTarget = e.baseR || e.r;     // 크기 목표 원복 (부드럽게 축소)
+      this.endSpecial(e);
     }
-    const cur = Math.hypot(e.vx, e.vy) || 1;   // 방향 유지, 크기만 새 속도로
-    e.vx = e.vx / cur * e.speed; e.vy = e.vy / cur * e.speed;
+  }
+
+  // 특수 시작 — 종류별로 지속시간/행동/크기/레이저 등을 설정.
+  private startSpecial(e: SimEnemy, name: string) {
+    const base = e.baseSpeed || e.speed, bigR = (e.baseR || e.r) * 1.4;
+    e.mode = name; e.subT = 0;
+    switch (name) {
+      case "shockwave": e.modeT = 1.4; break;
+      case "dual_spiral": e.modeT = 2.6; break;
+      case "homing": e.modeT = 2.6; break;
+      case "web": e.modeT = 2.6; break;
+      case "corruption": e.modeT = 3.0; break;
+      case "charge": {   // 조준 예고선 → 돌진
+        e.behaviorSaved = e.behavior; e.behavior = "hunt"; e.speed = base * 2.6; e.rTarget = bigR; e.modeT = 1.8;
+        const tgt = this.nearestTarget(e);
+        const ang = tgt ? Math.atan2(tgt.y - e.y, tgt.x - e.x) : this.rng() * TAU2;
+        this.beams.push({ x1: e.x, y1: e.y, ang, rot: 0, len: BEAM_LEN, w: 0.8, t: 0, tele: 0.6, carve: false, carveT: 0 });
+        this.renormVel(e); break;
+      }
+      case "devour":
+        e.behaviorSaved = e.behavior; e.behavior = "hunt"; e.speed = base * 2.0; e.rTarget = bigR; e.modeT = 4 + this.rng() * 2;
+        this.renormVel(e); break;
+      case "blink": {   // 플레이어 근처 빈 곳으로 순간이동 (미니 블랙홀 연출)
+        const [nx, ny] = this.pickWarpSpot(); this.warpEvents.push({ x: nx, y: ny, kind: e.kind });
+        e.x = nx; e.y = ny; e.modeT = 0.15; break;
+      }
+      case "summon":   // 주변에 졸개 소환
+        for (let k = 0; k < 4; k++) this.spawnEnemyNear(e.x, e.y);
+        e.modeT = 0.15; break;
+      case "laser_sweep":   // 360° 회전 죽음의 레이저 (맵은 안 깎고 킬만)
+        e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 2.9;
+        this.beams.push({ x1: e.x, y1: e.y, ang: this.rng() * TAU2, rot: TAU2 / 2.1, len: BEAM_LEN, w: 1.1, t: 2.1, tele: 0.7, carve: false, carveT: 0 });
+        break;
+      case "cross_laser":   // 십자 레이저 4줄로 맵을 일자로 깎으며 천천히 회전
+        e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 3.0;
+        for (let k = 0; k < 4; k++)
+          this.beams.push({ x1: e.x, y1: e.y, ang: k * (Math.PI / 2), rot: 0.55, len: BEAM_LEN, w: 1.1, t: 2.3, tele: 0.7, carve: true, carveT: 0 });
+        break;
+      default: e.modeT = 1.5; break;
+    }
+  }
+
+  // 특수 종료 — 평상시로 복귀.
+  private endSpecial(e: SimEnemy) {
+    if (e.behaviorSaved) e.behavior = e.behaviorSaved;
+    e.mode = "normal"; e.modeT = 5 + this.rng() * 3;
+    e.speed = e.baseSpeed || e.speed;
+    e.fireEvery = e.fireEveryBase || e.fireEvery;
+    e.rTarget = e.baseR || e.r;
+    if (e.vx === 0 && e.vy === 0) { const a = this.rng() * TAU2; e.vx = Math.cos(a) * e.speed; e.vy = Math.sin(a) * e.speed; }
+    else this.renormVel(e);
+  }
+
+  // 활성 특수의 매 틱 효과 (연속 발사/까는 계열).
+  private runBossSpecial(e: SimEnemy, dtSec: number) {
+    e.subT = (e.subT ?? 0) - dtSec;
+    if (e.subT > 0) return;
+    const tgt = this.nearestTarget(e);
+    if (tgt) e.aim = Math.atan2(tgt.y - e.y, tgt.x - e.x);
+    switch (e.mode) {
+      case "shockwave": {   // 확산 파동: 촘촘한 링을 주기적으로 → 퍼지는 파도
+        e.subT = 0.32; const n = 22;
+        for (let k = 0; k < n; k++) this.fireBullet(e, (k / n) * TAU2, BOSS_BULLET_SPEED * 0.9);
+        break;
+      }
+      case "dual_spiral": {   // 반대로 도는 나선 2겹
+        e.subT = 0.11; e.phase = (e.phase || 0) + 0.45; const n = 3;
+        for (let k = 0; k < n; k++) {
+          this.fireBullet(e, e.phase + (k / n) * TAU2, BOSS_BULLET_SPEED);
+          this.fireBullet(e, -e.phase + (k / n) * TAU2, BOSS_BULLET_SPEED);
+        }
+        break;
+      }
+      case "homing":   // 유도탄 3발
+        e.subT = 0.45;
+        for (let k = -1; k <= 1; k++) this.fireBullet(e, (e.aim || 0) + k * 0.25, BOSS_BULLET_SPEED * 0.8, true);
+        break;
+      case "web":   // 이동하며 거미줄을 깐다
+        e.subT = 0.2; this.layWeb(e.x, e.y, 4); break;
+      case "corruption":   // 이동하며 점유지를 조금씩 되돌린다(킬 없음)
+        e.subT = 0.1; this.carveDisc(e.x, e.y, 3); break;
+    }
+  }
+
+  // 거미줄 깔기(감속 필드). 셀마다 수명 부여.
+  private layWeb(x: number, y: number, r: number) {
+    const cx = Math.floor(x), cy = Math.floor(y), r2 = (r + 0.5) * (r + 0.5);
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy > r2) continue;
+      const gx = cx + dx, gy = cy + dy;
+      if (gx < B || gy < B || gx >= COLS - B || gy >= ROWS - B) continue;
+      const i = idx(gx, gy); this.setWeb(i, 1); this.webTimers.set(i, WEB_LIFE);
+    }
+  }
+
+  // 원형으로 점유지 삭제(킬 없음) — corruption/레이저 카브에서 재사용.
+  private carveDisc(x: number, y: number, r: number) {
+    const cx = Math.floor(x), cy = Math.floor(y), r2 = (r + 0.5) * (r + 0.5); let erased = 0;
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy > r2) continue;
+      const gx = cx + dx, gy = cy + dy;
+      if (gx < B || gy < B || gx >= COLS - B || gy >= ROWS - B) continue;
+      const i = idx(gx, gy);
+      if (this.grid[i] === CLAIMED) { this.setGrid(i, EMPTY); this.claimedInterior--; erased++; }
+    }
+    if (this.claimedInterior < 0) this.claimedInterior = 0;
+    this.reduceClaimCredit(erased);
+  }
+
+  // 보스 주변 빈 셀에 일반 적 한 마리 소환.
+  private spawnEnemyNear(x: number, y: number) {
+    for (let t = 0; t < 30; t++) {
+      const gx = Math.floor(x + (this.rng() - 0.5) * 12), gy = Math.floor(y + (this.rng() - 0.5) * 12);
+      if (gx < B || gy < B || gx >= COLS - B || gy >= ROWS - B) continue;
+      const i = idx(gx, gy);
+      if (this.grid[i] === EMPTY && this.trail[i] === 0) { this.enemies.push(this.makeEnemy(gx + 0.5, gy + 0.5)); return; }
+    }
+    this.spawnEnemy();
+  }
+
+  // 점(px,py)과 선분(ax,ay)-(bx,by) 사이 거리.
+  private distToSeg(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+    const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1;
+    let t = ((px - ax) * dx + (py - ay) * dy) / L2; t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+  }
+
+  // 레이저 갱신: 회전/수명 처리, 발사 중이면 선 위 플레이어 킬 + (carve 빔) 맵 삭제.
+  private updateBeams(dtSec: number) {
+    for (let i = this.beams.length - 1; i >= 0; i--) {
+      const b = this.beams[i];
+      if (b.tele > 0) { b.tele -= dtSec; b.ang += b.rot * dtSec * 0.5; continue; }   // 예고: 미리 절반 속도 회전
+      b.t -= dtSec; b.ang += b.rot * dtSec;
+      b.carveT -= dtSec;
+      const doCarve = b.carve && b.carveT <= 0;
+      if (doCarve) b.carveT = BEAM_CARVE_EVERY;
+      this.beamHit(b, doCarve);
+      if (b.t <= 0) this.beams.splice(i, 1);
+    }
+  }
+
+  private beamHit(b: SimBeam, doCarve: boolean) {
+    const x2 = b.x1 + Math.cos(b.ang) * b.len, y2 = b.y1 + Math.sin(b.ang) * b.len;
+    for (const p of this.players) {   // 선 위 플레이어 즉사
+      if (p.out) continue;
+      if (this.distToSeg(p.x, p.y, b.x1, b.y1, x2, y2) <= b.w + 0.6) this.killPlayer(p);
+    }
+    if (!doCarve) return;
+    let erased = 0; const steps = Math.ceil(b.len), w = Math.ceil(b.w), w2 = (b.w + 0.5) * (b.w + 0.5);
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps, px = b.x1 + (x2 - b.x1) * t, py = b.y1 + (y2 - b.y1) * t;
+      const bx = Math.floor(px), by = Math.floor(py);
+      for (let dy = -w; dy <= w; dy++) for (let dx = -w; dx <= w; dx++) {
+        if (dx * dx + dy * dy > w2) continue;
+        const gx = bx + dx, gy = by + dy;
+        if (gx < B || gy < B || gx >= COLS - B || gy >= ROWS - B) continue;
+        const idxc = idx(gx, gy);
+        if (this.grid[idxc] === CLAIMED) { this.setGrid(idxc, EMPTY); this.claimedInterior--; erased++; }
+      }
+    }
+    if (this.claimedInterior < 0) this.claimedInterior = 0;
+    this.reduceClaimCredit(erased);
+  }
+
+  // 거미줄 수명 감소/소멸.
+  private updateWeb(dtSec: number) {
+    if (!this.webTimers.size) return;
+    for (const [i, tt] of this.webTimers) {
+      const nt = tt - dtSec;
+      if (nt <= 0) { this.setWeb(i, 0); this.webTimers.delete(i); }
+      else this.webTimers.set(i, nt);
+    }
   }
 
   // devour 파먹기: 보스 주변 반경의 내부(interior) claimed 셀을 EMPTY 로 되돌리고(진행도 감소),
@@ -513,12 +698,12 @@ export class GalSim {
     }
   }
 
-  private fireBullet(e: SimEnemy, ang: number, speed: number) {
+  private fireBullet(e: SimEnemy, ang: number, speed: number, homing = false) {
     if (this.projectiles.length >= MAX_PROJECTILES) return;
     this.projectiles.push({
       x: e.x, y: e.y,
       vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed,
-      life: BULLET_LIFE, r: 0.9,
+      life: BULLET_LIFE, r: 0.9, homing,
     });
   }
 
@@ -752,6 +937,8 @@ export class GalSim {
       this.bossTimer = BOSS_INTERVAL_SEC;            // 이후 2분마다 반복
     }
     this.updatePendingWarps(dtSec);   // 예고가 끝난 블랙홀 → 맵 지우기 + 보스 등장
+    this.updateBeams(dtSec);          // 보스 레이저 (회전/카브/킬)
+    this.updateWeb(dtSec);            // 거미줄 수명
     // 다음 보스까지 남은 시간 — 보스는 계속 등장하므로 항상 카운트다운(클라가 ≤10s면 WARNING).
     this.bossIn = Math.max(0, this.bossTimer);
 
@@ -777,7 +964,9 @@ export class GalSim {
       let guard = 0;
       while (guard++ < 8) {
         const canBoost = !!(p.boost && held && p.bonus >= BOOST_COST);
-        const interval = canBoost ? MOVE_MS / BOOST_MULT : MOVE_MS;
+        // 거미줄(web) 위에 서 있으면 이동이 느려진다(칸당 이동 시간 ×WEB_SLOW).
+        const webF = this.web[idx(p.x, p.y)] ? WEB_SLOW : 1;
+        const interval = (canBoost ? MOVE_MS / BOOST_MULT : MOVE_MS) * webF;
         if (p.acc < interval) break;
         p.acc -= interval;
         if (held) {
@@ -829,15 +1018,13 @@ export class GalSim {
       }
 
       if (e.boss) {
-        // 보스: 종류별 다방향 난사. 조준(spread)과 회전 연출을 위해 항상 aim 갱신.
+        // 보스: 조준(spread)과 회전 연출을 위해 항상 aim 갱신. 기본 발사는 평상시(normal)에만 —
+        // 특수 패턴 중에는 각 특수(파동/나선/유도/레이저 등)가 공격을 담당한다.
         const tgt = this.nearestTarget(e);
         if (tgt) e.aim = Math.atan2(tgt.y - e.y, tgt.x - e.x);
-        e.cooldown -= dtSec;
-        if (e.cooldown <= 0) {
-          e.cooldown = e.fireEvery!;
-          // 나를 향해 달려드는 동안(chase/devour)은 투사체를 쏘지 않는다 (돌진+난사는 너무 빡셈).
-          const charging = e.mode === "chase" || e.mode === "devour";
-          if (!charging) this.fireBossVolley(e, tgt);
+        if (!e.mode || e.mode === "normal") {
+          e.cooldown -= dtSec;
+          if (e.cooldown <= 0) { e.cooldown = e.fireEvery!; this.fireBossVolley(e, tgt); }
         }
       } else if (e.gun) {
         const tgt = this.nearestTarget(e);
@@ -859,6 +1046,15 @@ export class GalSim {
     // 긋는 중(open 셀 위)이거나 되돌아가는 중이면 노출된 상태이므로 그대로 죽는다.
     for (let k = this.projectiles.length - 1; k >= 0; k--) {
       const pr = this.projectiles[k];
+      if (pr.homing) {   // 유도탄: 가장 가까운 플레이어 쪽으로 서서히 방향 전환
+        let tx = 0, ty = 0, bd = Infinity;
+        for (const p of this.players) { if (p.out) continue; const d = (p.x - pr.x) ** 2 + (p.y - pr.y) ** 2; if (d < bd) { bd = d; tx = p.x; ty = p.y; } }
+        if (bd < Infinity) {
+          const sp = Math.hypot(pr.vx, pr.vy) || 1, dx = tx - pr.x, dy = ty - pr.y, dd = Math.hypot(dx, dy) || 1;
+          pr.vx += (dx / dd) * sp * dtSec * 2.2; pr.vy += (dy / dd) * sp * dtSec * 2.2;
+          const c = Math.hypot(pr.vx, pr.vy) || 1; pr.vx = pr.vx / c * sp; pr.vy = pr.vy / c * sp;
+        }
+      }
       pr.x += pr.vx * dtSec; pr.y += pr.vy * dtSec; pr.life -= dtSec;
       let gone = pr.life <= 0 || pr.x < 0 || pr.y < 0 || pr.x >= COLS || pr.y >= ROWS;
       if (!gone) {

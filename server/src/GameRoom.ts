@@ -1,5 +1,5 @@
 import { Room, Client } from "@colyseus/core";
-import { GameState, Player, Enemy, Projectile } from "./schema";
+import { GameState, Player, Enemy, Projectile, Beam } from "./schema";
 import { GalSim } from "./GalSim";
 import type { SimEnemy } from "./GalSim";
 import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, WIN_COUNTDOWN_MS } from "./constants";
@@ -64,9 +64,11 @@ export class GameRoom extends Room<GameState> {
   private initGridSchema() {
     this.state.cells = new (this.state.cells.constructor as any)();
     this.state.trail = new (this.state.trail.constructor as any)();
+    this.state.web = new (this.state.web.constructor as any)();
     for (let i = 0; i < this.sim.cellCount; i++) {
       this.state.cells.push(this.sim.grid[i]);
       this.state.trail.push(this.sim.trail[i]);
+      this.state.web.push(this.sim.web[i]);
     }
     this.state.totalInterior = this.sim.totalInterior;
   }
@@ -77,14 +79,17 @@ export class GameRoom extends Room<GameState> {
     for (let i = 0; i < this.sim.cellCount; i++) {
       this.state.cells[i] = this.sim.grid[i];
       this.state.trail[i] = this.sim.trail[i];
+      this.state.web[i] = this.sim.web[i];
     }
     this.sim.gridDirty.clear();
     this.sim.trailDirty.clear();
+    this.sim.webDirty.clear();
 
-    // rebuild enemy + projectile schema lists
+    // rebuild enemy + projectile + beam schema lists
     this.state.enemies.splice(0, this.state.enemies.length);
     for (const e of this.sim.enemies) this.state.enemies.push(this.makeEnemySchema(e));
     this.state.projectiles.splice(0, this.state.projectiles.length);
+    this.state.beams.splice(0, this.state.beams.length);
 
     this.state.level = level;
     this.state.claimedInterior = 0;
@@ -123,8 +128,10 @@ export class GameRoom extends Room<GameState> {
     // sync only changed cells
     for (const i of this.sim.gridDirty) this.state.cells[i] = this.sim.grid[i];
     for (const i of this.sim.trailDirty) this.state.trail[i] = this.sim.trail[i];
+    for (const i of this.sim.webDirty) this.state.web[i] = this.sim.web[i];
     this.sim.gridDirty.clear();
     this.sim.trailDirty.clear();
+    this.sim.webDirty.clear();
 
     // sync players
     this.sim.players.forEach((sp) => {
@@ -160,6 +167,16 @@ export class GameRoom extends Room<GameState> {
     for (let i = 0; i < this.sim.projectiles.length; i++) {
       const sp = this.sim.projectiles[i]!, ps = this.state.projectiles[i]!;
       ps.x = sp.x; ps.y = sp.y;
+    }
+
+    // beams: match length and copy endpoints/state
+    while (this.state.beams.length < this.sim.beams.length) this.state.beams.push(new Beam());
+    while (this.state.beams.length > this.sim.beams.length) this.state.beams.pop();
+    for (let i = 0; i < this.sim.beams.length; i++) {
+      const sb = this.sim.beams[i]!, es = this.state.beams[i]!;
+      es.x1 = sb.x1; es.y1 = sb.y1;
+      es.x2 = sb.x1 + Math.cos(sb.ang) * sb.len; es.y2 = sb.y1 + Math.sin(sb.ang) * sb.len;
+      es.w = sb.w; es.on = sb.tele > 0 ? 0 : 1;
     }
 
     // broadcast capture events for client popups/sound, then clear

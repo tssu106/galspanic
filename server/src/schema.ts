@@ -36,6 +36,16 @@ export class Projectile extends Schema {
   @type("number") y: number = 0;
 }
 
+// A boss laser beam (cell coords). on=0 → telegraph/warning line; on=1 → firing.
+export class Beam extends Schema {
+  @type("number") x1: number = 0;
+  @type("number") y1: number = 0;
+  @type("number") x2: number = 0;
+  @type("number") y2: number = 0;
+  @type("number") w: number = 1;    // half-width in cells
+  @type("number") on: number = 0;   // 0 telegraph, 1 firing
+}
+
 export class GameState extends Schema {
   @type("number") gridW: number = GRID_W;
   @type("number") gridH: number = GRID_H;
@@ -43,6 +53,8 @@ export class GameState extends Schema {
   // Flat cell arrays. cells: 0 = empty, 1 = claimed. trail: 0 = none, else owner slot.
   @type(["number"]) cells = new ArraySchema<number>();
   @type(["number"]) trail = new ArraySchema<number>();
+  // web: 0 = none, 1 = spider web (a boss hazard that slows players standing on it).
+  @type(["number"]) web = new ArraySchema<number>();
 
   @type("number") claimedInterior: number = 0;
   @type("number") totalInterior: number = 0;
@@ -75,4 +87,5 @@ export class GameState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type([Enemy]) enemies = new ArraySchema<Enemy>();
   @type([Projectile]) projectiles = new ArraySchema<Projectile>();
+  @type([Beam]) beams = new ArraySchema<Beam>();
 }

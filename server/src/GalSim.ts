@@ -346,14 +346,21 @@ export class GalSim {
     });
   }
 
-  // 블랙홀이 뜰 위치: 맵 내부 어디든 균일 랜덤. 원이 내부에 들어오도록만 클램프한다.
+  // 블랙홀이 뜰 위치: 맵 내부의 "아직 차지하지 않은 빈(EMPTY) 셀" 중 랜덤. 이미 채워진(claimed)
+  // 공간에는 생성하지 않는다 — 안 그러면 보스가 플레이어가 못 들어가는 채운 영역에 갇힌다.
   private pickWarpSpot(): [number, number] {
     const lo = B + BOSS_WARP_ERASE_R;
-    const spanX = COLS - 2 * (B + BOSS_WARP_ERASE_R) - 1;
-    const spanY = ROWS - 2 * (B + BOSS_WARP_ERASE_R) - 1;
-    const x = lo + Math.floor(this.rng() * Math.max(1, spanX + 1));
-    const y = lo + Math.floor(this.rng() * Math.max(1, spanY + 1));
-    return [x + 0.5, y + 0.5];
+    const spanX = Math.max(1, COLS - 2 * lo), spanY = Math.max(1, ROWS - 2 * lo);
+    for (let t = 0; t < 200; t++) {   // 원이 안에 들어오는 범위에서 빈 셀을 랜덤 탐색
+      const x = lo + Math.floor(this.rng() * spanX);
+      const y = lo + Math.floor(this.rng() * spanY);
+      if (this.grid[idx(x, y)] === EMPTY) return [x + 0.5, y + 0.5];
+    }
+    // 폴백: 내부 전체에서 아무 빈 셀 (거의 다 채워진 후반부 대비)
+    for (let y = B; y < ROWS - B; y++)
+      for (let x = B; x < COLS - B; x++)
+        if (this.grid[idx(x, y)] === EMPTY) return [x + 0.5, y + 0.5];
+    return [COLS / 2, ROWS / 2];
   }
 
   // 현재 살아있는 보스 수.

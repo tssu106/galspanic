@@ -47,6 +47,47 @@
   #start .go { font-size:17px; font-weight:700; padding:13px 16px; border-radius:12px; }
   #start .go:disabled { opacity:.6; cursor:default; }
   #start .err { color:#ff6b6b; font-size:13px; min-height:18px; }
+  /* dev 전용 스테이지 선택 (dev 서버에서만 노출) */
+  #start .dev-stage { display:flex; align-items:center; justify-content:space-between; gap:12px;
+                      background:#0e1120; border:1px dashed #3a4570; border-radius:10px;
+                      padding:9px 13px; font-size:13px; color:var(--muted); }
+  #start .dev-stage[hidden] { display:none; }
+  #start .dev-stage select { background:#161a2b; border:1px solid #2a3350; border-radius:8px;
+                             color:var(--ink); padding:6px 10px; font-size:14px; outline:none; }
+  #start .dev-stage select:focus { border-color:#ff5db1; }
+
+  /* ---- 우측 채팅창: 대화 로그 + 입력 ---- */
+  #chatPanel { position:fixed; right:14px; top:70px; width:360px; max-width:36vw;
+               max-height:min(72vh, 640px); display:flex; flex-direction:column;
+               background:rgba(22,26,43,.86); backdrop-filter:blur(6px);
+               border:1px solid #232a44; border-radius:14px; overflow:hidden;
+               box-shadow:0 14px 44px rgba(0,0,0,.45); z-index:30; }
+  #chatPanel.hidden { display:none; }
+  #chatHead { padding:9px 13px; font-size:12px; font-weight:700; letter-spacing:.6px;
+              color:var(--muted); border-bottom:1px solid #232a44; display:flex;
+              align-items:center; gap:7px; }
+  #chatHead::before { content:"💬"; font-size:13px; }
+  #chatLog { flex:1; overflow-y:auto; padding:9px 13px; display:flex; flex-direction:column;
+             gap:6px; font-size:13px; line-height:1.45; min-height:90px; overscroll-behavior:contain; }
+  #chatLog .chat-row { word-break:break-word; }
+  #chatLog .chat-name { font-weight:700; margin-right:5px; }
+  #chatLog .chat-msg { color:var(--ink); }
+  #chatLog:empty::before { content:"아직 메시지가 없어요 · Enter 로 입력"; color:var(--muted);
+                           font-size:12px; opacity:.65; }
+  #chatPanel #chat { border:0; border-top:1px solid #232a44; border-radius:0; width:100%;
+                     background:#0e1120; color:var(--ink); padding:10px 13px; font-size:13px; outline:none; }
+  #chatPanel #chat:focus { background:#141a30; }
+  /* 이미지 오른쪽 여유가 좁으면(모바일 등) 우측 고정 대신 캔버스 아래로 쌓는다.
+     실제 여유 폭 기준 판단·토글은 JS(syncChatBox)가 한다. */
+  #chatPanel.chat-stacked { position:static; inset:auto; width:min(94vw,560px);
+                            max-width:94vw; height:auto; max-height:220px; margin:14px auto 0; }
+
+  /* dev 전용 보스 소환 버튼 */
+  #devBossBtn { position:fixed; left:14px; top:70px; z-index:40; background:#3a1d5e; color:#e9d5ff;
+                border:1px solid #6d28d9; border-radius:10px; padding:9px 13px; font-size:13px;
+                font-weight:700; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+  #devBossBtn:hover { background:#4c2a76; }
+  #devBossBtn.hidden { display:none; }
 </style>
 </head>
 <body>
@@ -60,6 +101,10 @@
         <b>Shift</b> 질주 · <b>Enter</b> 채팅
       </div>
       <input id="nameInput" maxlength="12" placeholder="플레이어 이름 (선택)" autocomplete="off" />
+      <label id="devStage" class="dev-stage" hidden>
+        <span>🛠 스테이지 (dev)</span>
+        <select id="stageSelect"></select>
+      </label>
       <button id="startBtn" class="go">게임 시작</button>
       <div id="startErr" class="err"></div>
     </div>
@@ -73,9 +118,17 @@
     <b>방향키</b>로 이동 — 안전지대에서 빈 공간으로 들어가면 선이 그려지고, 다시 안전지대에 닿으면 안쪽이 점유됩니다.
     빨간 적이 당신의 선에 닿으면 목숨을 잃어요. 다 함께 <b>90%</b>를 열면 클리어!
     <div style="margin-top:6px"><button id="restart" style="display:none">다음/재시작 (Enter)</button></div>
-    <div style="margin-top:6px"><input id="chat" maxlength="60" placeholder="Enter 로 채팅… (마커 위 말풍선 3초)" autocomplete="off"
-      style="width:min(90vw,380px);background:#161a2b;border:1px solid #232a44;border-radius:8px;color:#e8ebf7;padding:7px 11px;font-size:13px;outline:none" /></div>
   </div>
+
+  <!-- 우측 채팅창: 대화 로그 + 입력. Enter 로 입력창 포커스, 다시 Enter 로 전송 (Esc 취소). -->
+  <aside id="chatPanel" class="hidden">
+    <div id="chatHead">채팅</div>
+    <div id="chatLog" aria-live="polite"></div>
+    <input id="chat" maxlength="60" placeholder="Enter 로 채팅…" autocomplete="off" />
+  </aside>
+
+  <!-- dev 전용: 클릭하면 10초 카운트다운 후 보스 출현 -->
+  <button id="devBossBtn" class="hidden" title="dev: 10초 뒤 보스 출현">🕳 보스 소환</button>
 
 <script type="module">
 import { Client } from "https://esm.sh/colyseus.js@0.15.0";
@@ -96,12 +149,17 @@ const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const restartBtn = document.getElementById("restart");
 const chatInput = document.getElementById("chat");
+const chatPanel = document.getElementById("chatPanel");
+const chatLog = document.getElementById("chatLog");
 const bubbles = new Map();   // owner -> { text, until }  speech bubbles over each marker (~3s)
 // 초기(타이틀) 화면 요소 — "게임 시작"을 누르기 전까지 서버에 접속하지 않는다.
 const startScreen = document.getElementById("start");
 const startBtn = document.getElementById("startBtn");
 const nameInput = document.getElementById("nameInput");
 const startErr = document.getElementById("startErr");
+const devStage = document.getElementById("devStage");     // dev 전용 스테이지 선택 래퍼
+const stageSelect = document.getElementById("stageSelect");
+const devBossBtn = document.getElementById("devBossBtn");  // dev 전용 보스 소환 버튼
 
 let room = null, state = null, GW = 64, GH = 64;
 const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
@@ -114,9 +172,11 @@ const preImg = new Image(); preImg.crossOrigin = "anonymous";
 // Connects and JOINS the live game. Called only from startGame() (the "게임 시작"
 // button), so a player never enters the running match until they choose to. Throws on
 // failure so the caller can keep the title screen up and let the player retry.
-async function connect(name) {
+async function connect(name, level) {
   const client = new Client(WS_URL);
-  room = await client.joinOrCreate("game", { name });
+  // level 은 dev 서버에서만 서버가 신뢰한다 (프로덕션에선 무시되고 레벨 1로 시작).
+  const opts = level ? { name, level } : { name };
+  room = await client.joinOrCreate("game", opts);
   statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
   // Keep this handler TRIVIAL: just latch the latest state. The heavy per-update work
   // (scanning the 4096-cell trail array, capturing enemy snapshots) is done once per
@@ -133,20 +193,59 @@ async function connect(name) {
       text: ev.count > 1 ? `포획 x${ev.count}! +${ev.bonus}` : `포획! +${ev.bonus}`,
     });
   });
-  // chat: show a speech bubble over the sender's marker for ~3s
-  room.onMessage("chat", (ev) => { bubbles.set(ev.owner, { text: ev.text, until: performance.now() + 3000 }); });
+  // 블랙홀 예고: 그 자리에 블랙홀을 띄워 회피를 유도(예고가 끝나면 서버가 맵을 지우고 보스 등장)
+  room.onMessage("warp", (ev) => {
+    warps.push({ x: ev.x, y: ev.y, t0: performance.now(), burst: false });
+    shakeT = 0.22;   // 예고 시작 시 약한 흔들림 (버스트 때 크게)
+  });
+  // chat: show a speech bubble over the sender's marker (~3s) AND log it in the side panel
+  room.onMessage("chat", (ev) => {
+    bubbles.set(ev.owner, { text: ev.text, until: performance.now() + 3000 });
+    appendChat(ev.owner, ev.text);
+  });
 }
 
 // ---- 초기 화면: "게임 시작"을 눌러야 접속·합류한다 ----
 try { nameInput.value = localStorage.getItem("galspanic:name") || ""; } catch {}
+
+// dev 서버면 시작 화면에 스테이지 선택을 노출한다. 서버 /config 로 판별하며,
+// 프로덕션(dev=false)에선 선택 UI가 나타나지 않는다.
+let devMode = false;
+(async () => {
+  try {
+    const cfg = await fetch(`${HTTP_URL}/config`).then((r) => r.json());
+    if (!cfg?.dev) return;
+    devMode = true;
+    const MAX_STAGE = 12;   // 선택 가능한 최대 스테이지 (포탑은 4스테이지+ 등장)
+    for (let i = 1; i <= MAX_STAGE; i++) {
+      const o = document.createElement("option");
+      o.value = String(i); o.textContent = `스테이지 ${i}`;
+      stageSelect.appendChild(o);
+    }
+    let saved = 1;
+    try { saved = Math.min(MAX_STAGE, Math.max(1, parseInt(localStorage.getItem("galspanic:stage") || "1", 10) || 1)); } catch {}
+    stageSelect.value = String(saved);
+    stageSelect.addEventListener("keydown", (e) => e.stopPropagation());   // 방향키가 게임 입력으로 새지 않게
+    devStage.hidden = false;
+  } catch { /* dev 아님/서버 미응답 → 선택 UI 숨긴 채 진행 */ }
+})();
+
 async function startGame() {
   if (startBtn.disabled) return;
   const name = (nameInput.value || "").trim().slice(0, 12) || "Guest";
   try { localStorage.setItem("galspanic:name", name === "Guest" ? "" : name); } catch {}
+  // dev 에서 고른 시작 스테이지 (아니면 undefined → 서버가 레벨 1로 시작)
+  let level;
+  if (devMode) {
+    level = parseInt(stageSelect.value, 10) || 1;
+    try { localStorage.setItem("galspanic:stage", String(level)); } catch {}
+  }
   startBtn.disabled = true; startBtn.textContent = "접속 중…"; startErr.textContent = "";
   try {
-    await connect(name);
+    await connect(name, level);
     startScreen.classList.add("hidden");   // 접속에 성공했을 때만 게임 화면을 드러낸다
+    chatPanel.classList.remove("hidden");  // 채팅 패널도 함께 노출
+    if (devMode) devBossBtn.classList.remove("hidden");   // dev 면 보스 소환 버튼 노출
   } catch (e) {
     console.error(e);
     startErr.textContent = "서버 연결 실패 — server 폴더에서 npm start 후 다시 시도하세요";
@@ -154,6 +253,8 @@ async function startGame() {
   }
 }
 startBtn.addEventListener("click", startGame);
+// dev 보스 소환: 서버에 요청 → 10초 카운트다운 후 출현 (blur 로 스페이스/엔터 재발동 방지)
+devBossBtn.addEventListener("click", () => { room?.send("devBoss"); devBossBtn.blur(); });
 // 이름 칸에서 Enter 로도 시작 (IME 조합 중 Enter 는 무시 — 부분 입력 방지)
 nameInput.addEventListener("keydown", (e) => {
   e.stopPropagation();
@@ -225,11 +326,84 @@ function playerColor(owner) {
   return cs[(owner - 1) % cs.length] || "#fff";
 }
 
+// owner(슬롯) → 표시 이름. 현재 상태에서 해당 플레이어를 찾고, 없으면 P{n} 로 대체.
+function ownerName(owner) {
+  let nm = null;
+  if (state) state.players.forEach((p) => { if (p.owner === owner) nm = p.name; });
+  return nm || `P${owner}`;
+}
+
+// 우측 채팅 로그에 한 줄 추가. 바닥에 붙어 있을 때만 자동 스크롤하고, 기록은 100줄로 제한.
+function appendChat(owner, text) {
+  if (!chatLog) return;
+  const atBottom = chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 24;
+  const row = document.createElement("div");
+  row.className = "chat-row";
+  const who = document.createElement("span");
+  who.className = "chat-name"; who.textContent = ownerName(owner); who.style.color = playerColor(owner);
+  const msg = document.createElement("span");
+  msg.className = "chat-msg"; msg.textContent = text;
+  row.append(who, msg);
+  chatLog.appendChild(row);
+  while (chatLog.childElementCount > 100) chatLog.removeChild(chatLog.firstChild);
+  if (atBottom) chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+// 우측 채팅 패널을 게임 이미지(캔버스)에 붙여 배치한다. 이미지 오른쪽 가장자리에서
+// gap 만큼 띄우고, 거기서 창 오른쪽 끝(여백 제외)까지 폭을 꽉 채운다. 상단/높이는 이미지에
+// 맞춘다. 오른쪽 여유 폭이 CHAT_MIN_W 보다 좁으면(모바일 등) 캔버스 아래 스택으로 전환한다.
+// render 루프에서 매 프레임 호출되므로, 배치가 실제로 바뀐 경우에만 DOM 을 갱신한다.
+const CHAT_GAP = 12, CHAT_MARGIN = 14, CHAT_MIN_W = 240;
+let lastChatKey = "";
+function syncChatBox() {
+  if (!chatPanel || chatPanel.classList.contains("hidden")) return;
+  const c = canvas.getBoundingClientRect();
+  const left = Math.round(c.right + CHAT_GAP);
+  const width = Math.round(window.innerWidth - left - CHAT_MARGIN);
+  const top = Math.round(c.top), height = Math.round(c.height);
+  const docked = width >= CHAT_MIN_W;
+  const key = docked ? `d:${left},${width},${top},${height}` : "s";
+  if (key === lastChatKey) return;
+  lastChatKey = key;
+  if (docked) {
+    chatPanel.classList.remove("chat-stacked");
+    chatPanel.style.left = left + "px";
+    chatPanel.style.right = "auto";
+    chatPanel.style.width = width + "px";
+    chatPanel.style.maxWidth = "none";
+    chatPanel.style.top = top + "px";
+    chatPanel.style.height = height + "px";
+    chatPanel.style.maxHeight = height + "px";
+  } else {
+    // 스택 모드: 인라인 배치를 모두 지우고 .chat-stacked CSS 에 맡긴다 (표시/숨김은 .hidden 클래스라 영향 없음)
+    chatPanel.classList.add("chat-stacked");
+    chatPanel.style.cssText = "";
+  }
+}
+
 // monster archetype colors (kind -> color); shape comes from the synced e.shape
 const KIND_COLOR = {
   star:"#ff3b5c", saw:"#f59e0b", blob:"#a855f7", ghost:"#e0e7ff", gunner:"#ef4444", dart:"#22d3ee",
+  // 보스: 종류별로 뚜렷이 다른 색
+  boss_ring:"#ef4444", boss_spiral:"#a855f7", boss_spread:"#fb923c", boss_cross:"#ec4899",
 };
 const flashes = [];   // capture popups {x,y,text,color,life,ttl}, fed by the "trap" broadcast
+
+// ── 보스 연출 상태 ──────────────────────────────────────────────────────────
+const warps = [];              // 블랙홀 연출 {x,y,t0,burst}, "warp" 브로드캐스트로 추가
+let shakeT = 0;                // 화면 흔들림 남은 시간(초)
+let bossCountEnd = 0;          // 다음 보스 스폰 시각의 로컬 추정치(ms). 카운트다운을 부드럽게.
+const WARP_TELE_MS = 1800;     // 블랙홀 예고(회피 시간) — 서버 BOSS_WARP_SEC 와 일치
+const WARP_POP_MS = 500;       // 예고 끝에 보스가 튀어나오는 시간(ms)
+const WARP_TTL = WARP_TELE_MS + WARP_POP_MS;   // 블랙홀 전체 수명(ms)
+const WARP_R_CELLS = 12;       // 왜곡(렌즈) 반경(셀)
+const WARP_ERASE_CELLS = 9;    // 서버가 지우고/죽이는 원형 반경(셀) — 위험 원 표시에 사용
+const SHAKE_DUR = 0.5;         // 흔들림 지속(초)
+// 블랙홀 렌즈 왜곡용 오프스크린 버퍼 (매 프레임 현재 화면을 복사해 왜곡 샘플링)
+const warpBuf = document.createElement("canvas");
+warpBuf.width = canvas.width; warpBuf.height = canvas.height;
+const warpBufCtx = warpBuf.getContext("2d");
+function easeOut(a) { return 1 - Math.pow(1 - a, 3); }
 
 function spikePath(points, R, inner) {
   ctx.beginPath();
@@ -271,9 +445,184 @@ function drawEnemy(px, py, e, R, spin) {
     ctx.save(); ctx.rotate(e.aim||0); ctx.fillStyle="#7f1d1d"; ctx.fillRect(0,-R*0.26,R*1.7,R*0.52); ctx.restore();
     ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0,0,R,0,7); ctx.fill(); ctx.shadowBlur = 0;
     ctx.fillStyle = "#3f0d0d"; ctx.beginPath(); ctx.arc(0,0,R*0.55,0,7); ctx.fill(); enemyEyes(R);
+  } else if (e.shape && e.shape.indexOf("boss_") === 0) {
+    drawBoss(e, R, spin, color);
   } else {
     ctx.save(); ctx.rotate(spin); spikePath(4, R, 0.55); ctx.fill(); ctx.restore(); ctx.shadowBlur = 0; enemyEyes(R);
   }
+  ctx.restore();
+}
+
+// 보스 4종의 생김새 — 각기 뚜렷이 다른 실루엣 + 공통 위압적 광륜. ctx 는 이미 (px,py)로 이동됨.
+function drawBoss(e, R, spin, color) {
+  // 공통: 부드러운 외곽 광륜 (덩치와 위압감)
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(0, 0, R*1.28, 0, 7); ctx.fill();
+  ctx.restore();
+  // 격노(추격/질주/난사) 중이면 붉은 맥동 링으로 표시
+  if (e.enr) {
+    const t = performance.now();
+    ctx.save();
+    ctx.globalAlpha = 0.35 + 0.25 * Math.sin(t / 70);
+    ctx.strokeStyle = "#ff2d2d"; ctx.lineWidth = Math.max(1, R * 0.13);
+    ctx.beginPath(); ctx.arc(0, 0, R * (1.34 + 0.06 * Math.sin(t / 90)), 0, 7); ctx.stroke();
+    ctx.restore();
+  }
+  // devour(포식): 땅을 파먹는 어두운 공동 + 회전 이빨 + 빨아들이는 호선
+  if (e.enr === 2) {
+    const t = performance.now();
+    ctx.save();
+    const g = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, R * 1.8);
+    g.addColorStop(0, "rgba(0,0,0,0.55)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R * 1.8, 0, 7); ctx.fill();
+    ctx.rotate(t / 220);
+    ctx.fillStyle = "#ff2d2d";
+    for (let k = 0; k < 10; k++) {                    // 톱니 이빨 링
+      const a = k * (Math.PI / 5);
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * R * 1.5, Math.sin(a) * R * 1.5);
+      ctx.lineTo(Math.cos(a + 0.18) * R * 1.2, Math.sin(a + 0.18) * R * 1.2);
+      ctx.lineTo(Math.cos(a - 0.18) * R * 1.2, Math.sin(a - 0.18) * R * 1.2);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if (e.shape === "boss_ring") {
+    // 방사포: 굵은 톱니 링 + 겹눈 코어. 사방 포문 느낌.
+    ctx.save(); ctx.rotate(spin*0.5); ctx.fillStyle = color; spikePath(16, R, 0.82); ctx.fill(); ctx.restore();
+    ctx.fillStyle = "#2a0909"; ctx.beginPath(); ctx.arc(0,0,R*0.62,0,7); ctx.fill();
+    ctx.save(); ctx.rotate(spin*0.5);            // 포문 점 8개
+    ctx.fillStyle = "#ffd7d7";
+    for (let k=0;k<8;k++){ const a=k*Math.PI/4; ctx.beginPath(); ctx.arc(Math.cos(a)*R*0.82, Math.sin(a)*R*0.82, R*0.1, 0, 7); ctx.fill(); }
+    ctx.restore();
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0,0,R*0.3,0,7); ctx.fill();
+    enemyEyes(R*0.95);
+  } else if (e.shape === "boss_spiral") {
+    // 나선탄: 회전하는 소용돌이 팔 3개 + 어두운 눈.
+    ctx.save(); ctx.rotate(spin);
+    ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, R*0.26); ctx.lineCap = "round";
+    for (let arm=0; arm<3; arm++){
+      ctx.beginPath();
+      for (let t=0;t<=1.001;t+=0.1){ const ang = arm*(Math.PI*2/3) + t*3.6; const rr = R*(0.15 + t*1.0); ctx.lineTo(Math.cos(ang)*rr, Math.sin(ang)*rr); }
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.fillStyle = "#1b0b2e"; ctx.beginPath(); ctx.arc(0,0,R*0.5,0,7); ctx.fill();
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0,0,R*0.22,0,7); ctx.fill();
+    enemyEyes(R*0.8);
+  } else if (e.shape === "boss_spread") {
+    // 샷건: 조준 방향으로 향한 넓은 상어/화살 머리 + 벌린 입.
+    ctx.save(); ctx.rotate(e.aim||0);
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.moveTo(R*1.15,0); ctx.lineTo(-R*0.75,R); ctx.lineTo(-R*0.35,0); ctx.lineTo(-R*0.75,-R); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#3a1500";                                   // 벌린 입
+    ctx.beginPath(); ctx.moveTo(R*1.1,0); ctx.lineTo(R*0.05,R*0.3); ctx.lineTo(R*0.05,-R*0.3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#fff";                                      // 이빨
+    for (let k=-1;k<=1;k++){ ctx.beginPath(); ctx.moveTo(R*0.75, k*R*0.18); ctx.lineTo(R*0.5, k*R*0.18-R*0.06); ctx.lineTo(R*0.5, k*R*0.18+R*0.06); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+    ctx.save(); ctx.rotate((e.aim||0) + Math.PI/2); enemyEyes(R*0.7); ctx.restore();
+  } else { // boss_cross
+    // 십자펄스: 회전하는 굵은 플러스 + 대각 X 겹침, 겹눈 코어.
+    ctx.save(); ctx.rotate(spin*0.7);
+    ctx.fillStyle = color;
+    const armL = R*1.2, armW = R*0.4;
+    ctx.fillRect(-armL, -armW, armL*2, armW*2);
+    ctx.fillRect(-armW, -armL, armW*2, armL*2);
+    ctx.globalAlpha = 0.7; ctx.rotate(Math.PI/4);               // 대각 X 겹침
+    ctx.fillRect(-armL*0.85, -armW*0.7, armL*1.7, armW*1.4);
+    ctx.fillRect(-armW*0.7, -armL*0.85, armW*1.4, armL*1.7);
+    ctx.restore();
+    ctx.fillStyle = "#2a0a1a"; ctx.beginPath(); ctx.arc(0,0,R*0.55,0,7); ctx.fill();
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0,0,R*0.28,0,7); ctx.fill();
+    enemyEyes(R*0.9);
+  }
+}
+
+// (cellX,cellY) 근처에 아직 진행 중인 블랙홀이 있으면 반환 (보스 등장 스케일 연출용).
+function activeWarpNear(cx, cy, now) {
+  for (const w of warps) {
+    if (now - w.t0 > WARP_TTL) continue;
+    const dx = w.x - cx, dy = w.y - cy, rr = WARP_R_CELLS * 0.6;
+    if (dx*dx + dy*dy <= rr*rr) return w;
+  }
+  return null;
+}
+
+// 블랙홀 왜곡: 화면 스냅샷(warpBuf)을 동심 고리별로 회전·확대해 굴절시키고, 그 위에
+// 어두운 코어 + 강착원반 + 렌즈링 + 등장 충격파를 얹는다. (cx,cy)=스크린 중심, R=반경(px), age=경과(ms).
+function drawWarp(cx, cy, R, age) {
+  const f = Math.min(1, age / WARP_TELE_MS);                 // 예고 진행 0..1 (점점 강해짐)
+  const bursting = age >= WARP_TELE_MS;
+  const bp = bursting ? Math.min(1, (age - WARP_TELE_MS) / WARP_POP_MS) : 0;   // 버스트 0..1
+  const inten = f * (1 - bp);                                // 예고 때 강해지다 버스트에 잦아듦
+  // 1) 렌즈 굴절 (예고 동안 점점 강하게 왜곡)
+  const rings = 7;
+  for (let k = rings; k >= 1; k--) {
+    const r1 = R * (k / rings), r0 = R * ((k - 1) / rings);
+    const tw = 1 - (k - 1) / rings;                          // 안쪽일수록 강하게
+    const ang = tw * 1.7 * inten + age * 0.004 * (0.5 + tw);
+    const sc = 1 + 0.45 * tw * inten;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r1, 0, 7); ctx.arc(cx, cy, r0, 0, 7, true); ctx.clip("evenodd");
+    ctx.translate(cx, cy); ctx.rotate(ang); ctx.scale(sc, sc); ctx.translate(-cx, -cy);
+    ctx.drawImage(warpBuf, 0, 0);
+    ctx.restore();
+  }
+  ctx.save();
+  ctx.translate(cx, cy);
+  // 2) 어두운 코어 + 강착원반 (예고 동안 자라남)
+  const coreR = R * (0.16 + 0.22 * f) * (1 - bp * 0.4);
+  const g = ctx.createRadialGradient(0, 0, coreR * 0.15, 0, 0, coreR);
+  g.addColorStop(0, "rgba(0,0,0,0.96)");
+  g.addColorStop(0.55, "rgba(12,4,24,0.82)");
+  g.addColorStop(1, "rgba(24,10,44,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, coreR, 0, 7); ctx.fill();
+  ctx.rotate(age * 0.012);
+  ctx.strokeStyle = "rgba(168,139,250," + (0.85 * (1 - bp)).toFixed(3) + ")";
+  ctx.lineWidth = Math.max(1, R * 0.03);
+  for (let arm = 0; arm < 4; arm++) {
+    ctx.beginPath();
+    for (let t = 0; t <= 1.001; t += 0.12) { const a = arm * (Math.PI / 2) + t * 5; const rr = coreR * (0.25 + t * 1.15); ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+    ctx.stroke();
+  }
+  ctx.rotate(-age * 0.012);
+  // 3) ★위험 원 — 실제로 지워지고 죽는 반경. 붉은 점선 맥동 링으로 회피 위치를 알려준다.
+  const dangerR = R * (WARP_ERASE_CELLS / WARP_R_CELLS) * (0.55 + 0.45 * f);
+  ctx.globalAlpha = (0.55 + 0.4 * Math.sin(age / 55)) * (1 - bp * 0.7);
+  ctx.strokeStyle = "#ff2d2d"; ctx.lineWidth = Math.max(1.5, R * 0.05);
+  ctx.setLineDash([Math.max(3, R * 0.14), Math.max(2, R * 0.09)]);
+  ctx.beginPath(); ctx.arc(0, 0, dangerR, 0, 7); ctx.stroke();
+  ctx.setLineDash([]);
+  // 4) 버스트 충격파 (예고가 끝나 보스가 튀어나오는 순간)
+  if (bursting) {
+    ctx.globalAlpha = (1 - bp) * 0.9;
+    ctx.strokeStyle = "rgba(255,80,80,0.95)"; ctx.lineWidth = Math.max(1, R * 0.08 * (1 - bp));
+    ctx.beginPath(); ctx.arc(0, 0, dangerR * (1 + bp * 1.1), 0, 7); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// 보스 출현 임박 카운트다운 — 반투명 WARNING + 큰 숫자(10.00→0.00). 화면 중앙, 스크린 공간.
+function drawBossWarning(remain, now) {
+  const W = canvas.width, H = canvas.height;
+  const blink = 0.55 + 0.45 * Math.sin(now / 90);
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.globalAlpha = 0.16 + 0.16 * blink;
+  ctx.fillStyle = "#ff3b5c";
+  ctx.font = "900 44px system-ui, sans-serif";
+  ctx.fillText("⚠ WARNING", W / 2, H * 0.4);
+  ctx.globalAlpha = 0.22 + 0.16 * blink;
+  ctx.fillStyle = "#ffe066";
+  ctx.font = "900 120px ui-monospace, Menlo, monospace";
+  ctx.fillText(remain.toFixed(2), W / 2, H * 0.4 + 118);
+  ctx.globalAlpha = 0.16 + 0.12 * blink;
+  ctx.fillStyle = "#e8ebf7";
+  ctx.font = "700 20px system-ui, sans-serif";
+  ctx.fillText("보스 출현", W / 2, H * 0.4 + 162);
   ctx.restore();
 }
 
@@ -464,6 +813,7 @@ function drawBubble(cx, markerY, text, color, alpha) {
 function render() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
+  syncChatBox();   // dock the side chat panel to the image and fill the right space
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
   if (state && state.cells.length) {
@@ -496,7 +846,14 @@ function render() {
       camY = Math.max(0, Math.min(myPos.y*ch + ch/2 - vpy/2, H - vpy));
     }
     ctx.save();
-    ctx.translate(-camX*camS, -camY*camS); ctx.scale(camS, camS);
+    // 보스 출현 흔들림: 월드 전체를 스크린 공간에서 잠깐 흔든다 (감쇠).
+    let shX = 0, shY = 0;
+    if (shakeT > 0) {
+      shakeT = Math.max(0, shakeT - dt);
+      const m = shakeT / SHAKE_DUR, amp = 12 * m * m;
+      shX = (Math.random() - 0.5) * amp; shY = (Math.random() - 0.5) * amp;
+    }
+    ctx.translate(-camX*camS + shX, -camY*camS + shY); ctx.scale(camS, camS);
 
     if (gridBuilt) ctx.drawImage(gridCanvas, 0, 0);   // one blit instead of GW*GH draws
     // trails — draw ONLY the active trail cells (built on each patch), so per-frame
@@ -516,7 +873,17 @@ function render() {
     const br = enemyBracket(now - SNAP_DELAY);
     state.enemies.forEach((e, i) => {
       const v = enemyPos(br, i, e);
-      drawEnemy(v.x*cw, v.y*ch, e, (e.r || 1) * cw, spin);
+      let R = (e.r || 1) * cw;
+      // 보스는 블랙홀 위에서 갓 튀어나올 때 작게 시작해 커진다.
+      if (e.shape && e.shape.indexOf("boss_") === 0) {
+        // 보스는 예고가 끝나는 순간(WARP_TELE_MS) 서버가 스폰 → 그때부터 커지며 튀어나온다.
+        const wp = activeWarpNear(v.x, v.y, now);
+        if (wp) {
+          const popA = (now - wp.t0 - WARP_TELE_MS) / WARP_POP_MS;
+          if (popA >= 0 && popA <= 1) R *= 0.18 + 0.82 * easeOut(popA);
+        }
+      }
+      drawEnemy(v.x*cw, v.y*ch, e, R, spin);
     });
     // gunner bullets — ignore walls & safe zone; lethal on any contact
     state.projectiles.forEach((pr) => {
@@ -546,7 +913,7 @@ function render() {
           ctx.fillStyle = p.color;
           for (let s = 1; s <= 4; s++) {
             ctx.globalAlpha = 0.30 * (1 - s / 5);
-            ctx.fillRect((vx - ux * s * 1.7) * cw, (vy - uy * s * 1.7) * ch, cw + 1, ch + 1);
+            ctx.beginPath(); ctx.arc((vx - ux * s * 1.7 + 0.5) * cw, (vy - uy * s * 1.7 + 0.5) * ch, cw * 0.7, 0, 7); ctx.fill();  // round afterimage
           }
           ctx.restore();
         }
@@ -560,10 +927,11 @@ function render() {
       ctx.globalAlpha = 0.18 + 0.62 * pulse;
       ctx.strokeStyle = p.color;                     // blink in each player's own color
       ctx.lineWidth = (isMe ? 3 : 2.2) / camS;       // own marker gets a thicker, larger halo to stand out
-      ctx.strokeRect(cxp - r, cyp - r, r * 2, r * 2);
+      ctx.beginPath(); ctx.arc(cxp, cyp, r, 0, 7); ctx.stroke();   // round halo
       ctx.restore();
-      ctx.fillStyle = "#fff"; ctx.fillRect(vx*cw-1, vy*ch-1, cw+2, ch+2);
-      ctx.fillStyle = p.color; ctx.fillRect(vx*cw, vy*ch, cw+1, ch+1);
+      const mr = cw * 0.8;                           // round marker core (was a square cell)
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cxp, cyp, mr + 1, 0, 7); ctx.fill();
+      ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(cxp, cyp, mr, 0, 7); ctx.fill();
     });
     // capture popups
     for (let i = flashes.length-1; i >= 0; i--) {
@@ -579,6 +947,21 @@ function render() {
     }
     ctx.restore();          // end camera transform (HUD/overlay stay in screen space)
 
+    // ── 보스 블랙홀: 합성된 화면을 렌즈로 굴절시켜 왜곡한다 (스크린 공간) ──
+    if (warps.length) {
+      warpBufCtx.clearRect(0, 0, W, H);
+      warpBufCtx.drawImage(canvas, 0, 0);          // 현재 화면 스냅샷 (자기참조 스미어 방지)
+      for (let i = warps.length - 1; i >= 0; i--) {
+        const wobj = warps[i];
+        const age = now - wobj.t0;
+        if (age > WARP_TTL) { warps.splice(i, 1); continue; }
+        if (!wobj.burst && age >= WARP_TELE_MS) { wobj.burst = true; shakeT = SHAKE_DUR; }   // 버스트 순간 큰 흔들림
+        const scx = ((wobj.x + 0.5) * cw - camX) * camS;
+        const scy = ((wobj.y + 0.5) * ch - camY) * camS;
+        drawWarp(scx, scy, WARP_R_CELLS * cw * camS, age);
+      }
+    }
+
     // chat speech bubbles — drawn in SCREEN space above each marker (consistent text
     // size at any zoom), auto-expiring ~3s after the message.
     state.players.forEach((p) => {
@@ -592,6 +975,17 @@ function render() {
       if (sx < -40 || sx > W + 40 || sy < -40 || sy > H + 40) return;
       drawBubble(sx, sy, b.text, p.color, Math.min(1, (b.until - now) / 500));  // fade last 0.5s
     });
+
+    // 보스 출현 카운트다운: 남은 시간이 ≤10초면 반투명 WARNING + 10.00→0.00 표시.
+    // 서버 bossIn 을 로컬 시계로 매 프레임 부드럽게 이어 그린다. 단조 감소를 위해 서버가
+    // "더 빠르다(≥120ms)"면 아래로 스냅, 큰 폭 증가(>3s)만 새 카운트다운으로 채택하고, 작은
+    // 상방 드리프트(서버 sim 지연 등)는 무시한다 — 숫자가 위로 튀지 않게.
+    if (typeof state.bossIn === "number" && state.bossIn >= 0 && state.bossIn <= 10) {
+      const serverEnd = now + state.bossIn * 1000;
+      if (!bossCountEnd || serverEnd < bossCountEnd - 120 || serverEnd > bossCountEnd + 3000) bossCountEnd = serverEnd;
+      const remain = Math.max(0, Math.min(10, (bossCountEnd - now) / 1000));
+      if (remain > 0) drawBossWarning(remain, now); else bossCountEnd = 0;
+    } else { bossCountEnd = 0; }
 
     drawHud();
     if (state.phase === "won") drawWinCelebration(now, dt);

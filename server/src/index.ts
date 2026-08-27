@@ -7,6 +7,9 @@ import { GameRoom } from "./GameRoom";
 
 const port = Number(process.env.PORT || 2567);
 const host = process.env.HOST || "0.0.0.0"; // bind all interfaces so LAN/tunnel clients can reach us
+// dev 서버 여부: 로컬 `npm start`(NODE_ENV 미설정)는 dev, 배포(NODE_ENV=production)는 아님.
+// dev 일 때만 클라이언트에 스테이지 선택 UI를 노출하고, 서버가 선택 레벨을 신뢰한다.
+const DEV = process.env.NODE_ENV !== "production";
 const app = express();
 app.use(express.json());
 
@@ -27,6 +30,8 @@ app.use("/images", (_req, res, next) => {
 app.use("/images", express.static("public/images"));
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
+// 클라이언트가 시작 화면에서 이 값을 읽어 dev 전용 스테이지 선택 UI 노출 여부를 정한다.
+app.get("/config", (_req, res) => res.json({ dev: DEV }));
 
 const server = http.createServer(app);
 const gameServer = new Server({

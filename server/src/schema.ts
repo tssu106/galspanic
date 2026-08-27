@@ -27,6 +27,7 @@ export class Enemy extends Schema {
   @type("string") shape: string = "star";
   @type("number") r: number = 1;           // radius in cells (size = slower is bigger)
   @type("number") aim: number = 0;         // facing angle (gunner barrel / dart nose)
+  @type("number") enr: number = 0;         // 0/1 — boss enraged (chase/rush/burst) → client red aura
 }
 
 // A gunner's bullet (position only; it ignores walls and kills even on safe zone).
@@ -52,6 +53,10 @@ export class GameState extends Schema {
 
   // Seconds left on the between-stage countdown (only meaningful while phase === "won").
   @type("number") nextIn: number = 0;
+
+  // Seconds until the next boss spawns (-1 = no more bosses this round). Clients show a
+  // translucent WARNING countdown once this drops to ≤10s.
+  @type("number") bossIn: number = -1;
 
   // "lobby" | "playing" | "won" | "lost"
   @type("string") phase: string = "lobby";

@@ -21,9 +21,11 @@ export const CLEAR_RATIO = 0.90;
 // share one machine; higher rates felt stuck) while client interpolation keeps motion smooth.
 export const SIM_MS = 24;     // ~42 Hz physics
 export const PATCH_MS = 24;   // ~42 Hz state broadcast (matches the sim)
-export const MOVE_MS = 48;    // one cell per 48ms = exactly 2 sim ticks (SIM_MS x 2) → regular
-                              // cadence, smooth constant-velocity glide. ~21 cells/s.
-                              // Rule of thumb: keep SIM_MS = MOVE_MS / 2 so a cell is always 2 ticks.
+export const MOVE_MS = 24;    // one cell per 24ms = ~42 cells/s (2x the old 48ms cadence, test).
+                              // With SIM_MS=24 that's one cell per sim tick; client interpolation
+                              // over PATCH_MS still smooths motion. Physics rate stays flat (no
+                              // extra host load). Rule of thumb for a 2-tick glide is SIM_MS =
+                              // MOVE_MS / 2, but we keep SIM_MS at 24 to avoid doubling sim load.
 
 // Shift-to-sprint: hold Shift to move BOOST_MULT x faster, paid for out of capture
 // bonus points (BOOST_COST per boosted cell). No banked bonus -> no sprint.

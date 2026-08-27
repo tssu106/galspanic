@@ -6,20 +6,27 @@ import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, WIN_COUNTDOWN
 
 const COLORS = ["#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
 
+// dev 서버(로컬 npm start)일 때만 클라이언트가 보낸 시작 레벨을 신뢰한다. 프로덕션에서는
+// 항상 레벨 1로 시작한다 (임의 레벨 점프 차단).
+const DEV = process.env.NODE_ENV !== "production";
+
 export class GameRoom extends Room<GameState> {
   maxClients = MAX_PLAYERS;
   sim!: GalSim;
   private wonElapsed = 0;   // ms accumulated on the between-stage win countdown
+  private startLevel = 1;   // 이 방이 시작한 레벨 (loss 후 재시작도 이 레벨로 되돌린다)
 
-  onCreate() {
+  onCreate(options: { level?: number } = {}) {
+    // dev 에서만 방을 만든 클라이언트가 고른 스테이지로 시작. 그 외에는 레벨 1.
+    this.startLevel = DEV ? this.clampLevel(options.level) : 1;
     this.setState(new GameState());
     // Broadcast state patches at PATCH_MS (~90Hz) instead of the 50ms/20Hz default.
     // Decoupled from the faster sim so bandwidth stays bounded while input stays fresh.
     this.setPatchRate(PATCH_MS);
-    this.sim = new GalSim(1);
+    this.sim = new GalSim(this.startLevel);
     this.state.seed = this.sim.gameSeed;   // deterministic seed clients can replay
     this.initGridSchema();
-    this.startRound(1);
+    this.startRound(this.startLevel);
     // tell clients the authoritative step cadence so their prediction matches exactly
     this.state.moveMs = MOVE_MS;
 
@@ -32,8 +39,14 @@ export class GameRoom extends Room<GameState> {
 
     this.onMessage("restart", () => {
       // A win auto-advances via the between-stage countdown (no instant skip);
-      // only a loss restarts (from level 1) when a player hits Enter.
-      if (this.state.phase === "lost") this.startRound(1);
+      // only a loss restarts when a player hits Enter. Prod restarts from level 1;
+      // in dev we return to the room's chosen start level so testing stays put.
+      if (this.state.phase === "lost") this.startRound(this.startLevel);
+    });
+
+    // dev 전용: 클라이언트의 "보스 소환" 버튼 → 10초 카운트다운 후 보스 등장 (4종 순환).
+    this.onMessage("devBoss", () => {
+      if (DEV && this.state.phase === "playing") this.sim.scheduleBossDev();
     });
 
     // Chat: relay a short message to everyone as a speech bubble over the sender.
@@ -133,7 +146,10 @@ export class GameRoom extends Room<GameState> {
     for (let i = 0; i < this.sim.enemies.length; i++) {
       const se = this.sim.enemies[i]!, es = this.state.enemies[i]!;
       es.x = se.x; es.y = se.y; es.aim = se.aim;
-      if (es.kind !== se.kind) { es.kind = se.kind; es.shape = se.shape; es.r = se.r; }
+      es.r = se.r;   // 돌진 시 커진 덩치 등 크기 변화를 매 틱 반영
+      // 격노 상태: 0 평상시, 1 격노(추격/질주/난사), 2 devour(포식) — 클라 시각 구분용
+      es.enr = (se.boss && se.mode && se.mode !== "normal") ? (se.mode === "devour" ? 2 : 1) : 0;
+      if (es.kind !== se.kind) { es.kind = se.kind; es.shape = se.shape; }
     }
 
     // projectiles: match length and copy positions
@@ -152,7 +168,14 @@ export class GameRoom extends Room<GameState> {
       this.sim.captureEvents.length = 0;
     }
 
+    // 블랙홀 예고 이벤트 → 클라이언트가 그 자리에 블랙홀을 띄워 회피를 유도
+    if (this.sim.warpEvents.length) {
+      for (const ev of this.sim.warpEvents) this.broadcast("warp", ev);
+      this.sim.warpEvents.length = 0;
+    }
+
     this.state.claimedInterior = this.sim.claimedInterior;
+    this.state.bossIn = this.sim.bossIn;   // 보스 카운트다운 (≤10s면 클라가 WARNING 표시)
     if (this.sim.over) {
       this.state.phase = this.sim.over;   // "won" | "lost"
       if (this.sim.over === "won") {
@@ -162,6 +185,13 @@ export class GameRoom extends Room<GameState> {
         this.state.nextImageId = IMAGE_POOL[this.sim.level % IMAGE_POOL.length];
       }
     }
+  }
+
+  // 클라이언트가 보낸 레벨을 1..99 정수로 정규화. 유효하지 않으면 1.
+  private clampLevel(v: unknown): number {
+    const n = Math.floor(Number(v));
+    if (!Number.isFinite(n)) return 1;
+    return Math.max(1, Math.min(99, n));
   }
 
   private freeSlot(): number {

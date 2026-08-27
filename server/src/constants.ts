@@ -45,11 +45,14 @@ export const WIN_COUNTDOWN_MS = 5000;
 export const MAX_PLAYERS = 4;
 export const START_LIVES = 3;
 
-// How many images are in the pool (server picks one per round, keeps it secret).
+// Background artwork pool. The server picks one per stage via IMAGE_POOL[(level-1) % N]
+// (see GameRoom.startRound), so stages 1..N each get a distinct, non-overlapping image
+// and the sequence wraps only after the pool is exhausted.
 export const IMAGE_POOL = [
-  "art01",
-  "art02",
-  "art03",
+  "art01", "art02", "art03", "art04", "art05", "art06", "art07", "art08", "art09", "art10",
+  "art11", "art12", "art13", "art14", "art15", "art16", "art17", "art18", "art19", "art20",
+  "art21", "art22", "art23", "art24", "art25", "art26", "art27", "art28", "art29", "art30",
+  "art31", "art32", "art33", "art34", "art35", "art36", "art37",
 ];
 
 // Direction code (sent by clients) -> delta.

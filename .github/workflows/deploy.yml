@@ -1,0 +1,32 @@
+name: Deploy to server
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build
+        run: cd server && npm ci && npm run build
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+      - name: Rsync artifacts to VM
+        env: { H: "${{ secrets.DEPLOY_HOST }}", U: "${{ secrets.DEPLOY_USER }}" }
+        run: |
+          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          $SSH "$U@$H" "mkdir -p ~/galspanic/server ~/galspanic/client"
+          rsync -az --delete -e "$SSH" server/dist/ "$U@$H:~/galspanic/server/dist/"
+          rsync -az -e "$SSH" server/package.json server/package-lock.json "$U@$H:~/galspanic/server/"
+          rsync -az --delete -e "$SSH" server/public/ "$U@$H:~/galspanic/server/public/"
+          rsync -az --delete -e "$SSH" client/ "$U@$H:~/galspanic/client/"
+      - name: Install prod deps & restart on VM
+        env: { H: "${{ secrets.DEPLOY_HOST }}", U: "${{ secrets.DEPLOY_USER }}" }
+        run: ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$U@$H" "cd ~/galspanic/server && npm ci --omit=dev && sudo systemctl restart galspanic && echo deployed"

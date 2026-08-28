@@ -71,6 +71,9 @@ export class GameState extends Schema {
   // translucent WARNING countdown once this drops to ≤10s.
   @type("number") bossIn: number = -1;
 
+  // Lobby start countdown: seconds until the game begins (-1 = still waiting).
+  @type("number") startIn: number = -1;
+
   // "lobby" | "playing" | "won" | "lost"
   @type("string") phase: string = "lobby";
 

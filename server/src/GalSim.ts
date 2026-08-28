@@ -134,7 +134,7 @@ export interface SimEnemy {
   boss?: boolean; pattern?: BossPattern; bullets?: number; phase?: number;   // 보스 전용
   // 보스 행동/특수 패턴: 평상시("normal") ↔ 시그니처 특수를 번갈아 쓴다. mode=현재 특수명,
   // modeT=남은 시간, subT=하위 타이머(연속 발사/카브용).
-  mode?: string; modeT?: number; subT?: number; baseSpeed?: number; fireEveryBase?: number; behaviorSaved?: Behavior; baseR?: number; rTarget?: number;
+  mode?: string; modeT?: number; subT?: number; baseSpeed?: number; fireEveryBase?: number; behaviorSaved?: Behavior; baseR?: number; rTarget?: number; forceLaser?: boolean;
 }
 
 export interface SimProjectile { x: number; y: number; vx: number; vy: number; life: number; r: number; homing?: boolean; }
@@ -483,6 +483,17 @@ export class GalSim {
     this.bossIn = 10;
   }
 
+  // dev "레이저 보스": 빈 곳에 레이저 보스를 바로 소환하고, 곧(≈1.2초) 레이저를 발사시킨다.
+  // ring↔cross 를 번갈아 소환해 두 레이저(단일/십자)를 모두 체험할 수 있게 한다.
+  devLaser() {
+    if (this.bossAlive() >= BOSS_MAX_ALIVE) return;
+    const t = (this.devBossIdx++ % 2 === 0) ? BOSS_TYPES[0] : BOSS_TYPES[3];   // ring / cross
+    const [x, y] = this.pickWarpSpot();
+    this.spawnBoss(t, x, y);
+    const e = this.enemies[this.enemies.length - 1];
+    e.modeT = 1.2; e.forceLaser = true;
+  }
+
   private renormVel(e: SimEnemy) {   // 방향 유지, 크기만 현재 speed 로
     const c = Math.hypot(e.vx, e.vy) || 1; e.vx = e.vx / c * e.speed; e.vy = e.vy / c * e.speed;
   }
@@ -498,8 +509,13 @@ export class GalSim {
     e.modeT = (e.modeT ?? 0) - dtSec;
     if (e.modeT > 0) return;
     if (!e.mode || e.mode === "normal") {
-      const set = BOSS_SPECIALS[e.kind] || ["shockwave"];
-      this.startSpecial(e, set[Math.floor(this.rng() * set.length)]);
+      if (e.forceLaser) {   // dev "레이저 보스": 첫 특수를 레이저로 강제
+        e.forceLaser = false;
+        this.startSpecial(e, e.kind === "boss_cross" ? "cross_laser" : "laser_sweep");
+      } else {
+        const set = BOSS_SPECIALS[e.kind] || ["shockwave"];
+        this.startSpecial(e, set[Math.floor(this.rng() * set.length)]);
+      }
     } else {
       this.endSpecial(e);
     }
@@ -533,17 +549,17 @@ export class GalSim {
         for (let k = 0; k < 4; k++) this.spawnEnemyNear(e.x, e.y);
         e.modeT = 0.15; break;
       case "laser_sweep": {   // 회전 없이 플레이어를 향해 일자로 발사, 맵을 관통하며 절단
-        e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 2.9;
+        e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 3.6;
         const tgt = this.nearestTarget(e);
         const ang = tgt ? Math.atan2(tgt.y - e.y, tgt.x - e.x) : this.rng() * TAU2;
         // 단방향: 보스에서 조준 방향으로 한 줄, 맵 끝까지 관통. 두께 = 보스 지름(반폭 w = e.r).
-        this.beams.push({ x1: e.x, y1: e.y, ang, rot: 0, len: BEAM_LEN, w: e.r, t: 2.1, tele: 0.7, carve: true, carveT: 0, full: false });
+        this.beams.push({ x1: e.x, y1: e.y, ang, rot: 0, len: BEAM_LEN, w: e.r, t: 2.1, tele: 1.3, carve: true, carveT: 0, full: false });
         break;
       }
       case "cross_laser":   // 십자(+) 레이저: 4방향 단방향 rays 로 맵을 절단 (두께 = 보스 지름)
-        e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 3.0;
+        e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 3.8;
         for (let k = 0; k < 4; k++)
-          this.beams.push({ x1: e.x, y1: e.y, ang: k * (Math.PI / 2), rot: 0, len: BEAM_LEN, w: e.r, t: 2.3, tele: 0.7, carve: true, carveT: 0, full: false });
+          this.beams.push({ x1: e.x, y1: e.y, ang: k * (Math.PI / 2), rot: 0, len: BEAM_LEN, w: e.r, t: 2.3, tele: 1.3, carve: true, carveT: 0, full: false });
         break;
       default: e.modeT = 1.5; break;
     }

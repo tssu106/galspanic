@@ -17,9 +17,11 @@ export class GameRoom extends Room<GameState> {
   private startLevel = 1;   // 이 방이 시작한 레벨 (loss 후 재시작도 이 레벨로 되돌린다)
   private imageSeq: string[] = [];   // 스테이지별 배경 이미지 순서(랜덤 셔플, 한 바퀴 동안 비중복)
 
-  onCreate(options: { level?: number } = {}) {
+  onCreate(options: { level?: number; private?: boolean } = {}) {
     // dev 에서만 방을 만든 클라이언트가 고른 스테이지로 시작. 그 외에는 레벨 1.
     this.startLevel = DEV ? this.clampLevel(options.level) : 1;
+    // "방 만들기"로 만든 방은 비공개 → 빠른 참가(joinOrCreate) 매칭에서 제외, 코드로만 입장.
+    if (options.private) this.setPrivate(true);
     this.setState(new GameState());
     // Broadcast state patches at PATCH_MS (~90Hz) instead of the 50ms/20Hz default.
     // Decoupled from the faster sim so bandwidth stays bounded while input stays fresh.
@@ -27,7 +29,10 @@ export class GameRoom extends Room<GameState> {
     this.sim = new GalSim(this.startLevel);
     this.state.seed = this.sim.gameSeed;   // deterministic seed clients can replay
     this.initGridSchema();
-    this.startRound(this.startLevel);
+    // 게임을 바로 시작하지 않고 로비에서 대기한다. 4명이 되면 10초 카운트다운 후 시작(아래 tick),
+    // 또는 로비의 "지금 시작"으로 시작. startRound 는 시작 시점에 호출한다.
+    this.state.phase = "lobby";
+    this.state.startIn = -1;   // 시작 카운트다운 남은 초 (-1 = 대기 중)
     // tell clients the authoritative step cadence so their prediction matches exactly
     this.state.moveMs = MOVE_MS;
 
@@ -36,6 +41,13 @@ export class GameRoom extends Room<GameState> {
       const d = DIRS[msg?.dir as number] || DIRS[0];
       this.sim.setInput(client.sessionId, [d[0], d[1]]);
       this.sim.setBoost(client.sessionId, !!msg?.boost);
+    });
+
+    // 로비 "지금 시작": 4명이 안 돼도 방에 있는 사람들끼리 3초 카운트다운 후 시작.
+    this.onMessage("startNow", () => {
+      if (this.state.phase === "lobby" && this.state.startIn < 0 && this.state.players.size >= 1) {
+        this.state.startIn = 3;
+      }
     });
 
     this.onMessage("restart", () => {
@@ -48,6 +60,10 @@ export class GameRoom extends Room<GameState> {
     // dev 전용: 클라이언트의 "보스 소환" 버튼 → 10초 카운트다운 후 보스 등장 (4종 순환).
     this.onMessage("devBoss", () => {
       if (DEV && this.state.phase === "playing") this.sim.scheduleBossDev();
+    });
+    // dev 전용: "레이저 보스" 버튼 → 레이저 보스를 바로 소환해 곧 레이저 발사 (체험용).
+    this.onMessage("devLaser", () => {
+      if (DEV && this.state.phase === "playing") this.sim.devLaser();
     });
 
     // Chat: relay a short message to everyone as a speech bubble over the sender.
@@ -109,6 +125,13 @@ export class GameRoom extends Room<GameState> {
     });
   }
 
+  // 로비 → 게임 시작: 라운드를 열고(플레이어 스폰·무적), 방을 잠가 진행 중 방엔 못 들어오게 한다.
+  private beginGame() {
+    this.state.startIn = -1;
+    this.startRound(this.startLevel);   // phase 를 "playing" 으로 전환
+    this.lock();                        // 이후 새 플레이어 입장 차단
+  }
+
   private makeEnemySchema(e: SimEnemy): Enemy {
     const es = new Enemy();
     es.x = e.x; es.y = e.y; es.kind = e.kind; es.shape = e.shape; es.r = e.r; es.aim = e.aim;
@@ -116,6 +139,14 @@ export class GameRoom extends Room<GameState> {
   }
 
   tick(dt: number) {
+    // 로비: 시작 카운트다운을 굴리고, 0이 되면 게임을 시작한다. (그 외엔 시뮬 정지)
+    if (this.state.phase === "lobby") {
+      if (this.state.startIn >= 0) {
+        this.state.startIn = Math.max(0, this.state.startIn - dt / 1000);
+        if (this.state.startIn <= 0) this.beginGame();
+      }
+      return;
+    }
     // between-stage countdown: after clearing, auto-advance to the next stage over ~5s
     if (this.state.phase === "won") {
       this.wonElapsed += dt;
@@ -247,6 +278,11 @@ export class GameRoom extends Room<GameState> {
     p.owner = slot;
     p.x = sp.x; p.y = sp.y; p.lives = sp.lives;
     this.state.players.set(client.sessionId, p);
+
+    // 로비가 꽉 차면(4명) 10초 카운트다운 후 자동 시작.
+    if (this.state.phase === "lobby" && this.state.startIn < 0 && this.state.players.size >= MAX_PLAYERS) {
+      this.state.startIn = 10;
+    }
   }
 
   onLeave(client: Client) {

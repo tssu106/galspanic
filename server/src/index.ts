@@ -1,7 +1,7 @@
 import http from "http";
 import path from "path";
 import express from "express";
-import { Server } from "@colyseus/core";
+import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { GameRoom } from "./GameRoom";
 
@@ -32,6 +32,16 @@ app.use("/images", express.static("public/images"));
 app.get("/health", (_req, res) => res.json({ ok: true }));
 // 클라이언트가 시작 화면에서 이 값을 읽어 dev 전용 스테이지 선택 UI 노출 여부를 정한다.
 app.get("/config", (_req, res) => res.json({ dev: DEV }));
+// 현재 접속자 수(모든 game 방 합산)와 방 개수 — 메인화면에 표시.
+app.get("/stats", async (_req, res) => {
+  try {
+    const rooms = await matchMaker.query({ name: "game" });
+    const online = rooms.reduce((s, r) => s + (r.clients || 0), 0);
+    res.json({ online, rooms: rooms.length });
+  } catch {
+    res.json({ online: 0, rooms: 0 });
+  }
+});
 
 const server = http.createServer(app);
 const gameServer = new Server({

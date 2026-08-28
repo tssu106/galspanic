@@ -23,8 +23,9 @@ export class GameRoom extends Room<GameState> {
     // "방 만들기"로 만든 방은 비공개 → 빠른 참가(joinOrCreate) 매칭에서 제외, 코드로만 입장.
     if (options.private) this.setPrivate(true);
     this.setState(new GameState());
-    // Broadcast state patches at PATCH_MS (~90Hz) instead of the 50ms/20Hz default.
-    // Decoupled from the faster sim so bandwidth stays bounded while input stays fresh.
+    // Broadcast state patches at PATCH_MS (~30Hz). Decoupled from the 42Hz sim so the
+    // host serializes/sends deltas less often (big CPU/bandwidth win on tiny instances)
+    // while physics stays accurate; client interpolation keeps motion smooth.
     this.setPatchRate(PATCH_MS);
     this.sim = new GalSim(this.startLevel);
     this.state.seed = this.sim.gameSeed;   // deterministic seed clients can replay

@@ -19,8 +19,13 @@ export const CLEAR_RATIO = 0.90;
 
 // Simulation cadence (server-authoritative). ~42Hz keeps host load LOW (server + its browser
 // share one machine; higher rates felt stuck) while client interpolation keeps motion smooth.
-export const SIM_MS = 24;     // ~42 Hz physics
-export const PATCH_MS = 24;   // ~42 Hz state broadcast (matches the sim)
+export const SIM_MS = 24;     // ~42 Hz physics (unchanged: keeps collision/carve accuracy)
+export const PATCH_MS = 33;   // ~30 Hz state broadcast. Decoupled from the sim: physics still
+                              // runs at 42Hz, we just serialize+send deltas less often. On tiny
+                              // instances (e.g. Render Free 0.1 core) the big cells/trail/web
+                              // array change-tracking dominates CPU, so fewer broadcasts = big
+                              // CPU/bandwidth savings and fewer carve-time spikes. Client
+                              // interpolation keeps 30Hz visually smooth.
 export const MOVE_MS = 24;    // one cell per 24ms = ~42 cells/s (2x the old 48ms cadence, test).
                               // With SIM_MS=24 that's one cell per sim tick; client interpolation
                               // over PATCH_MS still smooths motion. Physics rate stays flat (no

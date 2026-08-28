@@ -27,7 +27,8 @@ app.use("/images", (_req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   next();
 });
-app.use("/images", express.static("public/images"));
+// 실행 위치(cwd)와 무관하게 항상 server/public/images 를 서빙 (systemd 등에서 WorkingDirectory 가 달라도 안전).
+app.use("/images", express.static(path.join(__dirname, "..", "public", "images")));
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 // 클라이언트가 시작 화면에서 이 값을 읽어 dev 전용 스테이지 선택 UI 노출 여부를 정한다.

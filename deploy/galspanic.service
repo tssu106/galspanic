@@ -1,0 +1,19 @@
+[Unit]
+Description=Gals Panic (Colyseus) game server
+After=network.target
+
+[Service]
+Type=simple
+# Ubuntu 이미지는 기본 사용자가 ubuntu, Oracle Linux 이미지는 opc 입니다. 맞춰서 바꾸세요.
+User=ubuntu
+WorkingDirectory=/home/ubuntu/galspanic/server
+Environment=NODE_ENV=production
+Environment=PORT=2567
+Environment=HOST=0.0.0.0
+# `which node` 결과에 맞춰 경로를 확인하세요 (nodesource 설치 시 보통 /usr/bin/node).
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

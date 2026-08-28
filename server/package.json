@@ -6,9 +6,13 @@
   "scripts": {
     "prestart": "npm run build:sim",
     "start": "ts-node src/index.ts",
-    "build": "tsc",
     "build:sim": "esbuild src/GalSim.ts --bundle --format=esm --platform=browser --outfile=../client/sim.bundle.js",
-    "serve": "node dist/index.js"
+    "build": "npm run build:sim && tsc",
+    "serve": "node dist/index.js",
+    "prod": "npm run build && NODE_ENV=production node dist/index.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "@colyseus/core": "^0.15.0",

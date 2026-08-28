@@ -88,6 +88,8 @@ const WEB_R = 6;           // 한 번에 까는 반경(셀)
 // 레이저
 const BEAM_LEN = Math.hypot(GRID_W, GRID_H);   // 맵을 가로지르는 길이
 const BEAM_CARVE_EVERY = 0.1;                  // 카브(맵 삭제) 간격(초) — 매 틱 삭제 방지
+const LASER_COOLDOWN = 30;                     // 보스별 레이저 재사용 대기(초) — 30초에 한 번꼴
+const isLaser = (name: string) => name === "laser_sweep" || name === "cross_laser";
 
 type Behavior = "bounce" | "wander" | "hunt" | "turret";
 interface EnemyType {
@@ -134,7 +136,7 @@ export interface SimEnemy {
   boss?: boolean; pattern?: BossPattern; bullets?: number; phase?: number;   // 보스 전용
   // 보스 행동/특수 패턴: 평상시("normal") ↔ 시그니처 특수를 번갈아 쓴다. mode=현재 특수명,
   // modeT=남은 시간, subT=하위 타이머(연속 발사/카브용).
-  mode?: string; modeT?: number; subT?: number; baseSpeed?: number; fireEveryBase?: number; behaviorSaved?: Behavior; baseR?: number; rTarget?: number; forceLaser?: boolean;
+  mode?: string; modeT?: number; subT?: number; baseSpeed?: number; fireEveryBase?: number; behaviorSaved?: Behavior; baseR?: number; rTarget?: number; forceLaser?: boolean; laserCd?: number;
 }
 
 export interface SimProjectile { x: number; y: number; vx: number; vy: number; life: number; r: number; homing?: boolean; }
@@ -376,6 +378,7 @@ export class GalSim {
       gun: false, fireEvery: t.fireEvery, cooldown: t.fireEvery * 0.5, aim: ang,
       boss: true, pattern: t.pattern, bullets: t.bullets, phase: 0,
       mode: "normal", modeT: 4 + this.rng() * 3, baseSpeed: sp, fireEveryBase: t.fireEvery, behaviorSaved: t.behavior, baseR: t.r, rTarget: t.r,
+      laserCd: LASER_COOLDOWN * 0.5,   // 스폰 후 첫 레이저는 ~15초 뒤부터 (이후 30초 간격)
     });
   }
 
@@ -506,6 +509,7 @@ export class GalSim {
       if (Math.abs(e.r - e.rTarget) < 0.02) e.r = e.rTarget;
     }
     if (e.mode && e.mode !== "normal") this.runBossSpecial(e, dtSec);   // 활성 특수의 매 틱 효과
+    if (e.laserCd != null && e.laserCd > 0) e.laserCd = Math.max(0, e.laserCd - dtSec);   // 레이저 쿨다운 감소
     e.modeT = (e.modeT ?? 0) - dtSec;
     if (e.modeT > 0) return;
     if (!e.mode || e.mode === "normal") {
@@ -514,7 +518,13 @@ export class GalSim {
         this.startSpecial(e, e.kind === "boss_cross" ? "cross_laser" : "laser_sweep");
       } else {
         const set = BOSS_SPECIALS[e.kind] || ["shockwave"];
-        this.startSpecial(e, set[Math.floor(this.rng() * set.length)]);
+        let name = set[Math.floor(this.rng() * set.length)];
+        // 레이저는 쿨다운(30초) 중이면 레이저가 아닌 특수로 대체 → 너무 자주 안 쏜다.
+        if (isLaser(name) && (e.laserCd ?? 0) > 0) {
+          const nonLaser = set.filter(s => !isLaser(s));
+          name = nonLaser.length ? nonLaser[Math.floor(this.rng() * nonLaser.length)] : "shockwave";
+        }
+        this.startSpecial(e, name);
       }
     } else {
       this.endSpecial(e);
@@ -549,17 +559,19 @@ export class GalSim {
         for (let k = 0; k < 4; k++) this.spawnEnemyNear(e.x, e.y);
         e.modeT = 0.15; break;
       case "laser_sweep": {   // 회전 없이 플레이어를 향해 일자로 발사, 맵을 관통하며 절단
-        e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 3.6;
+        e.laserCd = LASER_COOLDOWN;   // 다음 레이저까지 30초 대기
+        e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 5.3;
         const tgt = this.nearestTarget(e);
         const ang = tgt ? Math.atan2(tgt.y - e.y, tgt.x - e.x) : this.rng() * TAU2;
         // 단방향: 보스에서 조준 방향으로 한 줄, 맵 끝까지 관통. 두께 = 보스 지름(반폭 w = e.r).
-        this.beams.push({ x1: e.x, y1: e.y, ang, rot: 0, len: BEAM_LEN, w: e.r, t: 2.1, tele: 1.3, carve: true, carveT: 0, full: false });
+        this.beams.push({ x1: e.x, y1: e.y, ang, rot: 0, len: BEAM_LEN, w: e.r, t: 2.1, tele: 3.0, carve: true, carveT: 0, full: false });
         break;
       }
       case "cross_laser":   // 십자(+) 레이저: 4방향 단방향 rays 로 맵을 절단 (두께 = 보스 지름)
-        e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 3.8;
+        e.laserCd = LASER_COOLDOWN;   // 다음 레이저까지 30초 대기
+        e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 5.5;
         for (let k = 0; k < 4; k++)
-          this.beams.push({ x1: e.x, y1: e.y, ang: k * (Math.PI / 2), rot: 0, len: BEAM_LEN, w: e.r, t: 2.3, tele: 1.3, carve: true, carveT: 0, full: false });
+          this.beams.push({ x1: e.x, y1: e.y, ang: k * (Math.PI / 2), rot: 0, len: BEAM_LEN, w: e.r, t: 2.3, tele: 3.0, carve: true, carveT: 0, full: false });
         break;
       default: e.modeT = 1.5; break;
     }

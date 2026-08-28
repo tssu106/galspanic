@@ -1,0 +1,11 @@
+# Caddy 리버스 프록시 — 자동 HTTPS(Let's Encrypt) + WebSocket(wss) 프록시.
+# 도메인을 소유하고 DNS A레코드가 이 VM의 공인 IP를 가리키면, 아래 한 줄이면 끝납니다.
+# (Caddy는 WebSocket 업그레이드를 자동 처리하므로 별도 설정이 필요 없습니다.)
+#
+# 사용: 도메인을 실제 값으로 바꾼 뒤
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl restart caddy
+
+your-domain.example.com {
+    encode gzip
+    reverse_proxy localhost:2567
+}

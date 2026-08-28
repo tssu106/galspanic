@@ -41,6 +41,7 @@ const CAPTURE_SCORE_DEFAULT = 200;   // 미등록 종류에 대한 안전값
 const BULLET_SPEED = 20;   // cells/sec for gunner projectiles
 const BULLET_LIFE = 4;     // seconds
 const TAU2 = Math.PI * 2;
+const INVULN_SEC = 3;      // 시작/부활 직후 무적 시간(초)
 
 // ── 보스 몬스터 ──────────────────────────────────────────────────────────────
 // 라운드 시작 후 일정 시간이 지나면 등장하는 거대·다방향 발사 몬스터. 한 라운드에 최대 4마리
@@ -122,6 +123,7 @@ export interface SimPlayer {
   idle: number;              // ms stalled while drawing (triggers retrace)
   drawOriginX: number; drawOriginY: number;  // safe cell a line started from
   trailCells: number[];
+  invuln: number;            // 무적 남은 시간(초). 시작/부활 직후 잠시 무적 (모든 사망 판정 무시)
 }
 
 export interface SimEnemy {
@@ -137,7 +139,8 @@ export interface SimEnemy {
 
 export interface SimProjectile { x: number; y: number; vx: number; vy: number; life: number; r: number; homing?: boolean; }
 // 보스 레이저: (x1,y1)에서 각도 ang 방향으로 len 만큼. tele>0 이면 예고(경고선), 아니면 발사 중.
-export interface SimBeam { x1: number; y1: number; ang: number; rot: number; len: number; w: number; t: number; tele: number; carve: boolean; carveT: number; }
+// full=true 면 앵커를 중심으로 양방향으로 뻗어 맵 전체를 관통하는 일자 레이저.
+export interface SimBeam { x1: number; y1: number; ang: number; rot: number; len: number; w: number; t: number; tele: number; carve: boolean; carveT: number; full: boolean; }
 export interface CaptureEvent { x: number; y: number; count: number; bonus: number; owner: number; }
 export interface BossEvent { x: number; y: number; kind: string; }   // 보스 출현 (클라 연출용)
 
@@ -228,6 +231,7 @@ export class GalSim {
       p.boost = false; p.boosting = false;
       p.claimed = 0; p.traps = 0; p.bonus = 0; p.acc = 0; p.idle = 0;
       p.drawOriginX = sx; p.drawOriginY = sy; p.trailCells.length = 0;
+      p.invuln = INVULN_SEC;   // 라운드 시작 직후 잠시 무적
     }
 
     this.enemies = [];
@@ -511,11 +515,11 @@ export class GalSim {
       case "homing": e.modeT = 2.6; break;
       case "web": e.modeT = 2.6; break;
       case "corruption": e.modeT = 3.0; break;
-      case "charge": {   // 조준 예고선 → 돌진
+      case "charge": {   // 조준 예고선 → 돌진 (방향 표시라 단방향 예고선)
         e.behaviorSaved = e.behavior; e.behavior = "hunt"; e.speed = base * 2.6; e.rTarget = bigR; e.modeT = 1.8;
         const tgt = this.nearestTarget(e);
         const ang = tgt ? Math.atan2(tgt.y - e.y, tgt.x - e.x) : this.rng() * TAU2;
-        this.beams.push({ x1: e.x, y1: e.y, ang, rot: 0, len: BEAM_LEN, w: 0.8, t: 0, tele: 0.6, carve: false, carveT: 0 });
+        this.beams.push({ x1: e.x, y1: e.y, ang, rot: 0, len: BEAM_LEN, w: 0.8, t: 0, tele: 0.6, carve: false, carveT: 0, full: false });
         this.renormVel(e); break;
       }
       case "devour":
@@ -528,14 +532,18 @@ export class GalSim {
       case "summon":   // 주변에 졸개 소환
         for (let k = 0; k < 4; k++) this.spawnEnemyNear(e.x, e.y);
         e.modeT = 0.15; break;
-      case "laser_sweep":   // 360° 회전 죽음의 레이저 (맵은 안 깎고 킬만)
+      case "laser_sweep": {   // 회전 없이 플레이어를 향해 일자로 발사, 맵을 관통하며 절단
         e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 2.9;
-        this.beams.push({ x1: e.x, y1: e.y, ang: this.rng() * TAU2, rot: TAU2 / 2.1, len: BEAM_LEN, w: 1.1, t: 2.1, tele: 0.7, carve: false, carveT: 0 });
+        const tgt = this.nearestTarget(e);
+        const ang = tgt ? Math.atan2(tgt.y - e.y, tgt.x - e.x) : this.rng() * TAU2;
+        // 단방향: 보스에서 조준 방향으로 한 줄, 맵 끝까지 관통. 두께 = 보스 지름(반폭 w = e.r).
+        this.beams.push({ x1: e.x, y1: e.y, ang, rot: 0, len: BEAM_LEN, w: e.r, t: 2.1, tele: 0.7, carve: true, carveT: 0, full: false });
         break;
-      case "cross_laser":   // 십자 레이저 4줄로 맵을 일자로 깎으며 천천히 회전
+      }
+      case "cross_laser":   // 십자(+) 레이저: 4방향 단방향 rays 로 맵을 절단 (두께 = 보스 지름)
         e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 3.0;
         for (let k = 0; k < 4; k++)
-          this.beams.push({ x1: e.x, y1: e.y, ang: k * (Math.PI / 2), rot: 0.55, len: BEAM_LEN, w: 1.1, t: 2.3, tele: 0.7, carve: true, carveT: 0 });
+          this.beams.push({ x1: e.x, y1: e.y, ang: k * (Math.PI / 2), rot: 0, len: BEAM_LEN, w: e.r, t: 2.3, tele: 0.7, carve: true, carveT: 0, full: false });
         break;
       default: e.modeT = 1.5; break;
     }
@@ -619,6 +627,13 @@ export class GalSim {
     this.spawnEnemy();
   }
 
+  // 레이저의 실제 양 끝점. full 이면 앵커(x1,y1)를 중심으로 양방향으로 뻗어 맵을 관통한다.
+  beamEnds(b: SimBeam): [number, number, number, number] {
+    const cx = Math.cos(b.ang) * b.len, sy = Math.sin(b.ang) * b.len;
+    const ax = b.full ? b.x1 - cx : b.x1, ay = b.full ? b.y1 - sy : b.y1;
+    return [ax, ay, b.x1 + cx, b.y1 + sy];
+  }
+
   // 점(px,py)과 선분(ax,ay)-(bx,by) 사이 거리.
   private distToSeg(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
     const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1;
@@ -641,19 +656,19 @@ export class GalSim {
   }
 
   private beamHit(b: SimBeam, doCarve: boolean) {
-    const x2 = b.x1 + Math.cos(b.ang) * b.len, y2 = b.y1 + Math.sin(b.ang) * b.len;
+    const [ax, ay, bx, by] = this.beamEnds(b);   // full 이면 앵커 기준 양방향 관통
     for (const p of this.players) {   // 선 위 플레이어 즉사
       if (p.out) continue;
-      if (this.distToSeg(p.x, p.y, b.x1, b.y1, x2, y2) <= b.w + 0.6) this.killPlayer(p);
+      if (this.distToSeg(p.x, p.y, ax, ay, bx, by) <= b.w + 0.6) this.killPlayer(p);
     }
     if (!doCarve) return;
-    let erased = 0; const steps = Math.ceil(b.len), w = Math.ceil(b.w), w2 = (b.w + 0.5) * (b.w + 0.5);
+    let erased = 0; const steps = Math.ceil(Math.hypot(bx - ax, by - ay)), w = Math.ceil(b.w), w2 = (b.w + 0.5) * (b.w + 0.5);
     for (let s = 0; s <= steps; s++) {
-      const t = s / steps, px = b.x1 + (x2 - b.x1) * t, py = b.y1 + (y2 - b.y1) * t;
-      const bx = Math.floor(px), by = Math.floor(py);
+      const t = s / steps, px = ax + (bx - ax) * t, py = ay + (by - ay) * t;
+      const cxi = Math.floor(px), cyi = Math.floor(py);
       for (let dy = -w; dy <= w; dy++) for (let dx = -w; dx <= w; dx++) {
         if (dx * dx + dy * dy > w2) continue;
-        const gx = bx + dx, gy = by + dy;
+        const gx = cxi + dx, gy = cyi + dy;
         if (gx < B || gy < B || gx >= COLS - B || gy >= ROWS - B) continue;
         const idxc = idx(gx, gy);
         if (this.grid[idxc] === CLAIMED) { this.setGrid(idxc, EMPTY); this.claimedInterior--; erased++; }
@@ -754,7 +769,7 @@ export class GalSim {
       sessionId, owner, x: sx, y: sy, spawnX: sx, spawnY: sy,
       heldDir: null, boost: false, boosting: false, drawing: false, retreating: false, lives: START_LIVES,
       claimed: 0, traps: 0, bonus: 0, out: false, acc: 0, idle: 0,
-      drawOriginX: sx, drawOriginY: sy, trailCells: [],
+      drawOriginX: sx, drawOriginY: sy, trailCells: [], invuln: INVULN_SEC,
     };
     this.players.push(p);
     return p;
@@ -911,6 +926,7 @@ export class GalSim {
   }
 
   private killPlayer(p: SimPlayer) {
+    if (p.invuln > 0) return;   // 무적 중엔 죽지 않음 (모든 사망 판정을 여기서 한 번에 차단)
     for (const i of p.trailCells) this.setTrail(i, 0);
     p.trailCells.length = 0;
     p.drawing = false; p.retreating = false;
@@ -918,6 +934,7 @@ export class GalSim {
     const [sx, sy] = this.pickSafeSpawn(this.revealX, this.revealY);
     p.x = sx; p.y = sy; p.spawnX = sx; p.spawnY = sy;
     p.drawOriginX = sx; p.drawOriginY = sy; p.acc = 0; p.idle = 0;
+    p.invuln = INVULN_SEC;      // 부활 직후 잠시 무적
     p.lives--;
     if (p.lives <= 0) {
       p.out = true;
@@ -945,6 +962,7 @@ export class GalSim {
     // players: retrace if stalled mid-draw, otherwise advance on the step timer
     for (const p of this.players) {
       if (p.out) continue;
+      if (p.invuln > 0) p.invuln = Math.max(0, p.invuln - dtSec);   // 무적 시간 감소
       if (p.retreating) {
         // retrace faster than normal movement so the marker snaps back quickly
         p.acc += dtSec * 1000;

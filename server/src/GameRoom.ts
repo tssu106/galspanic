@@ -15,6 +15,7 @@ export class GameRoom extends Room<GameState> {
   sim!: GalSim;
   private wonElapsed = 0;   // ms accumulated on the between-stage win countdown
   private startLevel = 1;   // 이 방이 시작한 레벨 (loss 후 재시작도 이 레벨로 되돌린다)
+  private imageSeq: string[] = [];   // 스테이지별 배경 이미지 순서(랜덤 셔플, 한 바퀴 동안 비중복)
 
   onCreate(options: { level?: number } = {}) {
     // dev 에서만 방을 만든 클라이언트가 고른 스테이지로 시작. 그 외에는 레벨 1.
@@ -93,7 +94,7 @@ export class GameRoom extends Room<GameState> {
 
     this.state.level = level;
     this.state.claimedInterior = 0;
-    this.state.imageId = IMAGE_POOL[(level - 1) % IMAGE_POOL.length];
+    this.state.imageId = this.imageAt(level);   // 랜덤·비중복 배정
     this.state.phase = "playing";
     this.state.nextIn = 0;
     this.wonElapsed = 0;
@@ -143,6 +144,7 @@ export class GameRoom extends Room<GameState> {
       p.boosting = sp.boosting ? 1 : 0;
       p.lives = sp.lives; p.claimed = sp.claimed; p.out = sp.out ? 1 : 0;
       p.traps = sp.traps; p.bonus = sp.bonus;
+      p.inv = sp.invuln > 0 ? 1 : 0;   // 무적 표시(마커 희미하게)
     });
 
     // enemies can grow (reveal spawns) or shrink (captures) — match the list length
@@ -174,8 +176,8 @@ export class GameRoom extends Room<GameState> {
     while (this.state.beams.length > this.sim.beams.length) this.state.beams.pop();
     for (let i = 0; i < this.sim.beams.length; i++) {
       const sb = this.sim.beams[i]!, es = this.state.beams[i]!;
-      es.x1 = sb.x1; es.y1 = sb.y1;
-      es.x2 = sb.x1 + Math.cos(sb.ang) * sb.len; es.y2 = sb.y1 + Math.sin(sb.ang) * sb.len;
+      const [ax, ay, bx, by] = this.sim.beamEnds(sb);   // full 이면 양방향 관통 라인
+      es.x1 = ax; es.y1 = ay; es.x2 = bx; es.y2 = by;
       es.w = sb.w; es.on = sb.tele > 0 ? 0 : 1;
     }
 
@@ -199,7 +201,7 @@ export class GameRoom extends Room<GameState> {
         this.wonElapsed = 0;
         this.state.nextIn = WIN_COUNTDOWN_MS / 1000;
         // publish the next stage's image now so clients can preload it during the countdown
-        this.state.nextImageId = IMAGE_POOL[this.sim.level % IMAGE_POOL.length];
+        this.state.nextImageId = this.imageAt(this.sim.level + 1);
       }
     }
   }
@@ -209,6 +211,22 @@ export class GameRoom extends Room<GameState> {
     const n = Math.floor(Number(v));
     if (!Number.isFinite(n)) return 1;
     return Math.max(1, Math.min(99, n));
+  }
+
+  // 스테이지 배경 이미지를 랜덤 순서로 배정하되, 풀(37장)을 한 바퀴 도는 동안은 겹치지 않게 한다.
+  // 소진되면 다시 셔플해 이어 붙이고, 이음새에서 직전 이미지와 연속으로 겹치지 않도록 한다.
+  private imageAt(level: number): string {
+    while (this.imageSeq.length < level) {
+      const pool = IMAGE_POOL.slice();
+      for (let i = pool.length - 1; i > 0; i--) {   // Fisher-Yates 셔플
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      const last = this.imageSeq[this.imageSeq.length - 1];   // 이음새 연속 중복 방지
+      if (last && pool.length > 1 && pool[0] === last) [pool[0], pool[1]] = [pool[1], pool[0]];
+      this.imageSeq.push(...pool);
+    }
+    return this.imageSeq[level - 1];
   }
 
   private freeSlot(): number {

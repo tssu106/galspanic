@@ -17,6 +17,7 @@ export class Player extends Schema {
   @type("number") traps: number = 0;    // monsters captured
   @type("number") bonus: number = 0;    // capture bonus points
   @type("number") out: number = 0;      // 0/1 — eliminated this round
+  @type("number") inv: number = 0;      // 0/1 — invincible (spawn/respawn grace) → client draws marker faint
 }
 
 // An enemy marker. Position + aim sync; archetype look (kind/shape/size) too.

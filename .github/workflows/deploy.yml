@@ -23,8 +23,11 @@ jobs:
           git fetch origin main;            if ($LASTEXITCODE) { throw "git fetch failed ($LASTEXITCODE)" }
           git reset --hard origin/main;     if ($LASTEXITCODE) { throw "git reset failed ($LASTEXITCODE)" }
 
+          # npm ci 는 node_modules 를 통째로 지워 재설치하는데, 실행 중인 서버가 파일을
+          # 잠그고 있어 EPERM(-4048) 로 실패한다. npm install 은 제자리 갱신이라 서버를
+          # 켜둔 채로도 안전(코드만 바뀌면 node_modules 를 건드리지 않음).
           Set-Location C:\workspace\galspanic\server
-          npm ci;                           if ($LASTEXITCODE) { throw "npm ci failed ($LASTEXITCODE)" }
+          npm install --no-audit --no-fund; if ($LASTEXITCODE) { throw "npm install failed ($LASTEXITCODE)" }
           npm run build;                    if ($LASTEXITCODE) { throw "npm build failed ($LASTEXITCODE)" }
 
           # 서버(예약작업) 재시작

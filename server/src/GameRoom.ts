@@ -245,7 +245,7 @@ export class GameRoom extends Room<GameState> {
     return Math.max(1, Math.min(99, n));
   }
 
-  // 스테이지 배경 이미지를 랜덤 순서로 배정하되, 풀(37장)을 한 바퀴 도는 동안은 겹치지 않게 한다.
+  // 스테이지 배경 이미지를 랜덤 순서로 배정하되, 풀(IMAGE_POOL) 한 바퀴 동안은 겹치지 않게 한다.
   // 소진되면 다시 셔플해 이어 붙이고, 이음새에서 직전 이미지와 연속으로 겹치지 않도록 한다.
   private imageAt(level: number): string {
     while (this.imageSeq.length < level) {

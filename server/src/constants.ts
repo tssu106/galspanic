@@ -50,14 +50,20 @@ export const WIN_COUNTDOWN_MS = 5000;
 export const MAX_PLAYERS = 4;
 export const START_LIVES = 3;
 
-// Background artwork pool. The server picks one per stage via IMAGE_POOL[(level-1) % N]
-// (see GameRoom.startRound), so stages 1..N each get a distinct, non-overlapping image
-// and the sequence wraps only after the pool is exhausted.
+// Background artwork pool (100 images). GameRoom.imageAt shuffles this each cycle and
+// assigns one per stage, so every stage in a cycle gets a distinct, non-overlapping image
+// (and no repeat across the seam), reshuffling only after all 100 have been shown.
 export const IMAGE_POOL = [
   "art01", "art02", "art03", "art04", "art05", "art06", "art07", "art08", "art09", "art10",
   "art11", "art12", "art13", "art14", "art15", "art16", "art17", "art18", "art19", "art20",
   "art21", "art22", "art23", "art24", "art25", "art26", "art27", "art28", "art29", "art30",
-  "art31", "art32", "art33", "art34", "art35", "art36", "art37",
+  "art31", "art32", "art33", "art34", "art35", "art36", "art37", "art38", "art39", "art40",
+  "art41", "art42", "art43", "art44", "art45", "art46", "art47", "art48", "art49", "art50",
+  "art51", "art52", "art53", "art54", "art55", "art56", "art57", "art58", "art59", "art60",
+  "art61", "art62", "art63", "art64", "art65", "art66", "art67", "art68", "art69", "art70",
+  "art71", "art72", "art73", "art74", "art75", "art76", "art77", "art78", "art79", "art80",
+  "art81", "art82", "art83", "art84", "art85", "art86", "art87", "art88", "art89", "art90",
+  "art91", "art92", "art93", "art94", "art95", "art96", "art97", "art98", "art99", "art100",
 ];
 
 // Direction code (sent by clients) -> delta.

@@ -16,7 +16,15 @@ app.use(express.json());
 // Serve the online client from this same server → single origin, single port.
 // This makes one tunnel (e.g. `ngrok http 2567`) enough for external players:
 // they open the tunnel URL and the page connects back over the same origin.
-app.use(express.static(path.join(__dirname, "..", "..", "client")));
+app.use(express.static(path.join(__dirname, "..", "..", "client"), {
+  setHeaders: (res, filePath) => {
+    // The client (HTML + bundled sim) changes on every deploy. Don't let browsers pin an old
+    // copy — that's how a stale UI (e.g. the removed clear-countdown) keeps showing after an
+    // update. Force a revalidate for html/js so players always get the freshly deployed client.
+    if (/\.(html|js)$/i.test(filePath))
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  },
+}));
 
 // NOTE: In production, serve only a BLURRED/low-res version of images here.
 // The full-resolution original must never be sent to the client wholesale —

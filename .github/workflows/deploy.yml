@@ -14,35 +14,27 @@ jobs:
       - name: Pull, build, restart on this laptop
         shell: powershell
         run: |
-          Start-Transcript -Path C:\workspace\ci-deploy.log -Force | Out-Null
           $ErrorActionPreference = "Stop"
-          try {
-            $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
-            # 러너는 SYSTEM 으로 돌고 repo 는 사용자 소유 -> dubious ownership 방지
-            git config --global --add safe.directory '*'
+          $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
+          # 러너는 SYSTEM, repo 는 사용자 소유 -> dubious ownership 방지 (system 설정이 주 방어선, 이건 백업)
+          git config --global --add safe.directory '*' 2>$null
 
-            Set-Location C:\workspace\galspanic
-            git fetch origin main
-            git reset --hard origin/main
+          Set-Location C:\workspace\galspanic
+          git fetch origin main;            if ($LASTEXITCODE) { throw "git fetch failed ($LASTEXITCODE)" }
+          git reset --hard origin/main;     if ($LASTEXITCODE) { throw "git reset failed ($LASTEXITCODE)" }
 
-            Set-Location C:\workspace\galspanic\server
-            npm ci
-            npm run build
+          Set-Location C:\workspace\galspanic\server
+          npm ci;                           if ($LASTEXITCODE) { throw "npm ci failed ($LASTEXITCODE)" }
+          npm run build;                    if ($LASTEXITCODE) { throw "npm build failed ($LASTEXITCODE)" }
 
-            # 서버(예약작업) 재시작
-            schtasks /end /tn GalspanicServer 2>$null
-            Start-Sleep 1
-            Get-NetTCPConnection -LocalPort 2567 -State Listen -ErrorAction SilentlyContinue |
-              ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
-            Start-Sleep 1
-            schtasks /run /tn GalspanicServer
+          # 서버(예약작업) 재시작
+          schtasks /end /tn GalspanicServer 2>$null
+          Start-Sleep 1
+          Get-NetTCPConnection -LocalPort 2567 -State Listen -ErrorAction SilentlyContinue |
+            ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+          Start-Sleep 1
+          schtasks /run /tn GalspanicServer; if ($LASTEXITCODE) { throw "task run failed ($LASTEXITCODE)" }
 
-            Start-Sleep 6
-            $h = Invoke-RestMethod http://localhost:2567/health -TimeoutSec 5
-            Write-Host "deployed OK, health: $($h | ConvertTo-Json -Compress)"
-          } catch {
-            Write-Host "DEPLOY FAILED: $($_.Exception.Message)"
-            Stop-Transcript | Out-Null
-            exit 1
-          }
-          Stop-Transcript | Out-Null
+          Start-Sleep 6
+          $h = Invoke-RestMethod http://localhost:2567/health -TimeoutSec 5
+          Write-Host "deployed OK, health: $($h | ConvertTo-Json -Compress)"

@@ -2,8 +2,8 @@ name: Deploy to laptop server
 
 # 이 노트북(self-hosted 러너)에서 직접 pull -> build -> 서버 재시작.
 # main 에 push 될 때만 실행(포크 PR 은 실행 안 됨 = self-hosted 러너 안전).
-# 실제 로직은 로컬(untracked) 스크립트 deploy/ci-deploy-impl.ps1 에 있고,
-# 전체 출력을 C:\workspace\ci-deploy.log 로 남겨 디버깅한다.
+# 실제 로직은 로컬(untracked) 스크립트 deploy/ci-deploy-impl.ps1 이 담당하고
+# 스스로 C:\workspace\ci-deploy.log 에 전 과정을 기록한다.
 on:
   push:
     branches: [main]
@@ -16,7 +16,7 @@ jobs:
       - name: Deploy (pull, build, restart)
         shell: powershell
         run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File C:\workspace\galspanic\deploy\ci-deploy-impl.ps1 *> C:\workspace\ci-deploy.log
+          & powershell -NoProfile -ExecutionPolicy Bypass -File C:\workspace\galspanic\deploy\ci-deploy-impl.ps1
           $code = $LASTEXITCODE
           Write-Host "==================== ci-deploy.log ===================="
           if (Test-Path C:\workspace\ci-deploy.log) { Get-Content C:\workspace\ci-deploy.log | Write-Host }

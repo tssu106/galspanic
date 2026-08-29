@@ -37,8 +37,8 @@ export const MOVE_MS = 24;    // one cell per 24ms = ~42 cells/s (2x the old 48m
 // slowly otherwise. Capture points (bonus) are kept purely as score now.
 export const BOOST_MULT = 1.5;
 export const STAMINA_MAX = 100;
-export const STAMINA_DRAIN = 15;    // 질주 중 초당 소모 (100 → 약 6.7초 지속)
-export const STAMINA_RECOVER = 10;  // 비질주 시 초당 회복 (0 → 100 약 10초)
+export const STAMINA_DRAIN = 120;   // 질주 중 초당 소모 (100 → 약 0.83초 지속)
+export const STAMINA_RECOVER = 20;  // 비질주 시 초당 회복 (0 → 100 약 5초, 회복 느림)
 
 // 라운드 시작 시 내부(interior)의 랜덤한 위치를 미리 밝힌다(안전지대). 이 값은 밝히는
 // 직사각형 넓이의 기준치로, 실제 넓이·가로세로 비율은 이 값 주변에서 매 판 랜덤하게 정해진다

@@ -18,10 +18,13 @@ app.use(express.json());
 // they open the tunnel URL and the page connects back over the same origin.
 app.use(express.static(path.join(__dirname, "..", "..", "client"), {
   setHeaders: (res, filePath) => {
+    const p = filePath.replace(/\\/g, "/");
+    // Vendored libraries (e.g. three.js) rarely change and are large — cache them a week.
+    if (p.includes("/vendor/")) { res.setHeader("Cache-Control", "public, max-age=604800"); return; }
     // The client (HTML + bundled sim) changes on every deploy. Don't let browsers pin an old
     // copy — that's how a stale UI (e.g. the removed clear-countdown) keeps showing after an
     // update. Force a revalidate for html/js so players always get the freshly deployed client.
-    if (/\.(html|js)$/i.test(filePath))
+    if (/\.(html|js)$/i.test(p))
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   },
 }));

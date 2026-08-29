@@ -66,6 +66,10 @@ export class GameRoom extends Room<GameState> {
     this.onMessage("devLaser", () => {
       if (DEV && this.state.phase === "playing") this.sim.devLaser();
     });
+    // dev 전용: "게임오버 미리보기" 버튼 → 즉시 lost 로 전환해 죽는 화면(3D 카운트다운)을 확인.
+    this.onMessage("devLose", () => {
+      if (DEV && this.state.phase === "playing") this.state.phase = "lost";
+    });
 
     // Chat: relay a short message to everyone as a speech bubble over the sender.
     this.onMessage("chat", (client, msg: { text?: string }) => {

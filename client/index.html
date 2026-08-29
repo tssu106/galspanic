@@ -41,6 +41,35 @@
                  box-shadow:0 20px 60px rgba(0,0,0,.5); }
   #start .rules { color:var(--muted); font-size:13px; line-height:1.7; text-align:left; }
   #start .rules b { color:var(--ink); }
+  /* ---- 조작 안내: CSS 로 그린 키보드 ---- */
+  #start .controls { display:flex; justify-content:center; align-items:flex-end; gap:20px; flex-wrap:wrap;
+                     padding:6px 0 2px; border-top:1px solid #232a44; }
+  #start .ctrl { display:flex; flex-direction:column; align-items:center; gap:8px; }
+  #start .clabel { font-size:12px; color:var(--muted); letter-spacing:.5px; }
+  #start .keys { display:flex; gap:4px; }
+  #start .key { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box;
+                min-width:30px; height:30px; padding:0 9px; font-size:14px; font-weight:700; line-height:1;
+                color:#dfe4f5; background:linear-gradient(#2b3352,#1a2038);
+                border:1px solid #3a4570; border-bottom:3px solid #10152a; border-radius:7px;
+                box-shadow:0 2px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08); }
+  #start .key.wide { min-width:auto; padding:0 12px; font-size:13px; }
+  #start .arrows { display:grid; grid-template-columns:repeat(3,30px); grid-template-rows:repeat(2,30px); gap:4px; }
+  #start .arrows .key:nth-child(1){ grid-area:1/2; }   /* ↑ */
+  #start .arrows .key:nth-child(2){ grid-area:2/1; }   /* ← */
+  #start .arrows .key:nth-child(3){ grid-area:2/2; }   /* ↓ */
+  #start .arrows .key:nth-child(4){ grid-area:2/3; }   /* → */
+  #start .arrows .key { animation:keypress 4s infinite; }
+  #start .arrows .key:nth-child(1){ animation-delay:0s; }
+  #start .arrows .key:nth-child(2){ animation-delay:1s; }
+  #start .arrows .key:nth-child(3){ animation-delay:2s; }
+  #start .arrows .key:nth-child(4){ animation-delay:3s; }
+  @keyframes keypress {
+    0%,18%,100% { transform:translateY(0); border-bottom-color:#10152a; color:#dfe4f5;
+                  box-shadow:0 2px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08); }
+    6% { transform:translateY(2px); border-bottom-color:#ff5db1; color:#fff;
+         box-shadow:0 0 12px rgba(255,93,177,.55), inset 0 1px 0 rgba(255,255,255,.1); }
+  }
+  @media (prefers-reduced-motion: reduce) { #start .arrows .key { animation:none; } }
   #start input { background:#0e1120; border:1px solid #2a3350; border-radius:10px; color:var(--ink);
                  padding:11px 13px; font-size:15px; outline:none; text-align:center; }
   #start input:focus { border-color:#ff5db1; }
@@ -128,8 +157,23 @@
     <div class="card">
       <div class="rules">
         <b>방향키</b>로 이동 · 안전지대에서 빈 공간으로 들어가 선을 긋고, 다시 안전지대에 닿으면 안쪽이 열립니다.<br>
-        빨간 <b>적</b>이 선에 닿으면 목숨을 잃어요 · 함께 <b>90%</b>를 열면 클리어!<br>
-        <b>Shift</b> 질주 · <b>Enter</b> 채팅
+        빨간 <b>적</b>이 선에 닿으면 목숨을 잃어요 · 함께 <b>90%</b>를 열면 클리어!
+      </div>
+      <div class="controls" aria-hidden="true">
+        <div class="ctrl">
+          <div class="keys arrows">
+            <span class="key">↑</span><span class="key">←</span><span class="key">↓</span><span class="key">→</span>
+          </div>
+          <div class="clabel">이동</div>
+        </div>
+        <div class="ctrl">
+          <div class="keys"><span class="key wide">Shift</span></div>
+          <div class="clabel">질주</div>
+        </div>
+        <div class="ctrl">
+          <div class="keys"><span class="key wide">Enter</span></div>
+          <div class="clabel">채팅</div>
+        </div>
       </div>
       <div id="onlineCount" class="online">🟢 접속자 <b id="onlineNum">--</b>명</div>
       <input id="nameInput" maxlength="12" placeholder="플레이어 이름 (선택)" autocomplete="off" />

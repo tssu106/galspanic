@@ -15,7 +15,8 @@ export class Player extends Schema {
   @type("number") lives: number = 3;
   @type("number") claimed: number = 0;  // interior cells this player has claimed
   @type("number") traps: number = 0;    // monsters captured
-  @type("number") bonus: number = 0;    // capture bonus points
+  @type("number") bonus: number = 0;    // capture score (accumulates; no longer spent on sprint)
+  @type("number") stamina: number = 100; // 0..100 sprint gauge (drains while boosting, recovers otherwise)
   @type("number") out: number = 0;      // 0/1 — eliminated this round
   @type("number") inv: number = 0;      // 0/1 — invincible (spawn/respawn grace) → client draws marker faint
 }

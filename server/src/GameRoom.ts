@@ -176,7 +176,7 @@ export class GameRoom extends Room<GameState> {
       p.retreating = sp.retreating ? 1 : 0;
       p.boosting = sp.boosting ? 1 : 0;
       p.lives = sp.lives; p.claimed = sp.claimed; p.out = sp.out ? 1 : 0;
-      p.traps = sp.traps; p.bonus = sp.bonus;
+      p.traps = sp.traps; p.bonus = sp.bonus; p.stamina = sp.stamina;
       p.inv = sp.invuln > 0 ? 1 : 0;   // 무적 표시(마커 희미하게)
     });
 

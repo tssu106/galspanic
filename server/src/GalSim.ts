@@ -1,4 +1,4 @@
-import { GRID_W, GRID_H, BORDER as B, CLEAR_RATIO, MOVE_MS, START_LIVES, BOOST_MULT, BOOST_COST, START_REVEAL_RATIO } from "./constants";
+import { GRID_W, GRID_H, BORDER as B, CLEAR_RATIO, MOVE_MS, START_LIVES, BOOST_MULT, STAMINA_MAX, STAMINA_DRAIN, STAMINA_RECOVER, START_REVEAL_RATIO } from "./constants";
 
 const COLS = GRID_W, ROWS = GRID_H, N = COLS * ROWS;
 const EMPTY = 0, CLAIMED = 1;
@@ -119,7 +119,8 @@ export interface SimPlayer {
   lives: number;
   claimed: number;
   traps: number;             // monsters captured
-  bonus: number;             // capture bonus points
+  bonus: number;             // capture score (accumulates)
+  stamina: number;           // 0..100 sprint gauge
   out: boolean;
   acc: number;               // ms accumulator for the move timer
   idle: number;              // ms stalled while drawing (triggers retrace)
@@ -230,7 +231,7 @@ export class GalSim {
       const [sx, sy] = this.pickSafeSpawn(this.revealX, this.revealY);   // 밝은 구역 위에서 시작
       p.x = sx; p.y = sy; p.spawnX = sx; p.spawnY = sy;
       p.drawing = false; p.retreating = false; p.out = false; p.lives = START_LIVES;
-      p.boost = false; p.boosting = false;
+      p.boost = false; p.boosting = false; p.stamina = STAMINA_MAX;
       p.claimed = 0; p.traps = 0; p.bonus = 0; p.acc = 0; p.idle = 0;
       p.drawOriginX = sx; p.drawOriginY = sy; p.trailCells.length = 0;
       p.invuln = INVULN_SEC;   // 라운드 시작 직후 잠시 무적
@@ -796,7 +797,7 @@ export class GalSim {
     const [sx, sy] = this.pickSafeSpawn(this.revealX, this.revealY);   // 밝은 구역 위에서 합류
     const p: SimPlayer = {
       sessionId, owner, x: sx, y: sy, spawnX: sx, spawnY: sy,
-      heldDir: null, boost: false, boosting: false, drawing: false, retreating: false, lives: START_LIVES,
+      heldDir: null, boost: false, boosting: false, stamina: STAMINA_MAX, drawing: false, retreating: false, lives: START_LIVES,
       claimed: 0, traps: 0, bonus: 0, out: false, acc: 0, idle: 0,
       drawOriginX: sx, drawOriginY: sy, trailCells: [], invuln: INVULN_SEC,
     };
@@ -1005,21 +1006,21 @@ export class GalSim {
         else { p.idle += dtSec * 1000; if (p.idle >= STALL_MS) { this.startRetreat(p); continue; } }
       } else p.idle = 0;
 
-      // Sprint (Shift) moves BOOST_MULT x faster, paid per boosted cell from capture bonus.
-      p.boosting = !!(p.boost && held && p.bonus >= BOOST_COST);
+      // Sprint (Shift) moves BOOST_MULT x faster while STAMINA lasts. Stamina is its own gauge
+      // (not the capture score): it drains while sprinting and refills otherwise, both slowly.
+      const canBoost = !!(p.boost && held && p.stamina > 0);
+      p.boosting = canBoost;
+      if (canBoost) p.stamina = Math.max(0, p.stamina - STAMINA_DRAIN * dtSec);
+      else          p.stamina = Math.min(STAMINA_MAX, p.stamina + STAMINA_RECOVER * dtSec);
       p.acc += dtSec * 1000;
       let guard = 0;
       while (guard++ < 8) {
-        const canBoost = !!(p.boost && held && p.bonus >= BOOST_COST);
         // 거미줄(web) 위에 서 있으면 이동이 느려진다(칸당 이동 시간 ×WEB_SLOW).
         const webF = this.web[idx(p.x, p.y)] ? WEB_SLOW : 1;
         const interval = (canBoost ? MOVE_MS / BOOST_MULT : MOVE_MS) * webF;
         if (p.acc < interval) break;
         p.acc -= interval;
-        if (held) {
-          if (canBoost) { p.bonus -= BOOST_COST; p.boosting = true; }
-          this.step(p, held[0], held[1]);
-        }
+        if (held) this.step(p, held[0], held[1]);
       }
     }
 

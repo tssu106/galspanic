@@ -32,10 +32,13 @@ export const MOVE_MS = 24;    // one cell per 24ms = ~42 cells/s (2x the old 48m
                               // extra host load). Rule of thumb for a 2-tick glide is SIM_MS =
                               // MOVE_MS / 2, but we keep SIM_MS at 24 to avoid doubling sim load.
 
-// Shift-to-sprint: hold Shift to move BOOST_MULT x faster, paid for out of capture
-// bonus points (BOOST_COST per boosted cell). No banked bonus -> no sprint.
+// Shift-to-sprint: hold Shift to move BOOST_MULT x faster while STAMINA lasts. Stamina is a
+// separate 0..100 gauge (NOT the capture score): it drains slowly while sprinting and refills
+// slowly otherwise. Capture points (bonus) are kept purely as score now.
 export const BOOST_MULT = 1.5;
-export const BOOST_COST = 6;
+export const STAMINA_MAX = 100;
+export const STAMINA_DRAIN = 15;    // 질주 중 초당 소모 (100 → 약 6.7초 지속)
+export const STAMINA_RECOVER = 10;  // 비질주 시 초당 회복 (0 → 100 약 10초)
 
 // 라운드 시작 시 내부(interior)의 랜덤한 위치를 미리 밝힌다(안전지대). 이 값은 밝히는
 // 직사각형 넓이의 기준치로, 실제 넓이·가로세로 비율은 이 값 주변에서 매 판 랜덤하게 정해진다

@@ -20,6 +20,31 @@
   .chip .meta { font-size:11px; color:var(--muted); display:flex; justify-content:space-between; }
   .chip.dead { opacity:.4; filter:grayscale(1); }
   .chip.me { outline:2px solid #ff5db1; }
+  /* 자기 칩의 질주 스태미나 바 */
+  .chip .stam { height:5px; border-radius:3px; background:#1b2138; overflow:hidden; margin-top:3px; }
+  .chip .stam i { display:block; height:100%; background:linear-gradient(90deg,#22d3ee,#a3e635); transition:width .12s linear; }
+  .chip .stam.low i { background:linear-gradient(90deg,#fb923c,#ff5db1); }
+  /* 좌측 포획 랭킹 패널 (채팅창과 대칭, 좌측 고정) */
+  #rank { position:fixed; left:14px; top:70px; width:210px; max-width:22vw;
+          background:rgba(22,26,43,.86); backdrop-filter:blur(6px);
+          border:1px solid #232a44; border-radius:14px; overflow:hidden;
+          box-shadow:0 14px 44px rgba(0,0,0,.45); z-index:30; }
+  #rank.hidden { display:none; }
+  #rank .rhead { padding:9px 13px; font-size:12px; font-weight:700; letter-spacing:.6px;
+                 color:var(--muted); border-bottom:1px solid #232a44; }
+  #rank .rlist { display:flex; flex-direction:column; }
+  #rank .rrow { display:flex; align-items:center; gap:8px; padding:8px 12px; font-size:13px;
+                border-bottom:1px solid rgba(35,42,68,.6); }
+  #rank .rrow:last-child { border-bottom:0; }
+  #rank .rrow.me { background:rgba(255,93,177,.12); }
+  #rank .rrow.dead { opacity:.45; filter:grayscale(1); }
+  #rank .rpos { width:18px; text-align:center; font-weight:800; color:var(--muted); font-variant-numeric:tabular-nums; }
+  #rank .rrow:nth-child(1) .rpos { color:#ffd54a; }
+  #rank .rdot { width:10px; height:10px; border-radius:3px; box-shadow:0 0 6px currentColor; flex:none; }
+  #rank .rname { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #rank .rscore { color:#ffd54a; font-weight:700; font-variant-numeric:tabular-nums; }
+  #rank .rtraps { color:var(--muted); font-size:11px; }
+  @media (max-width:900px){ #rank { display:none; } }
   canvas { background:#05060c; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.5);
            aspect-ratio:2/3; height:min(84vh, 860px); width:auto; max-width:94vw; }
   #help { color:var(--muted); font-size:12px; text-align:center; max-width:640px; line-height:1.5; }
@@ -206,6 +231,11 @@
   <h1>GALS <span>PANIC</span> — Online Co-op</h1>
   <div id="status">서버 연결 중…</div>
   <div id="hud"></div>
+  <!-- 좌측 포획 랭킹: 포획 점수(⭐) 순으로 정렬 -->
+  <div id="rank" class="hidden">
+    <div class="rhead">🏆 포획 랭킹</div>
+    <div id="rankList" class="rlist"></div>
+  </div>
   <canvas id="c" width="512" height="768"></canvas>
   <div id="help">
     <b>방향키</b>로 이동 — 안전지대에서 빈 공간으로 들어가면 선이 그려지고, 다시 안전지대에 닿으면 안쪽이 점유됩니다.
@@ -422,6 +452,7 @@ function returnToTitle() {
   bubbles.clear(); pmove.clear(); prevMarker.clear(); flashes.length = 0; warps.length = 0;
   lobby.classList.add("hidden");
   chatPanel.classList.add("hidden");
+  document.getElementById("rank").classList.add("hidden");
   devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden");
   startScreen.classList.remove("hidden");
   [startBtn, createBtn, joinBtn].forEach((b) => (b.disabled = false));
@@ -1320,14 +1351,29 @@ function drawHud() {
     const me = room && p.id === room.sessionId;
     const pct = Math.round(p.claimed / total * 100);
     const traps = p.traps ? `🕸${p.traps}` : "";
-    const score = p.bonus | 0;   // 점수: 포획으로 획득(등급별) · Shift 질주로 소모
+    const score = p.bonus | 0;   // 포획 점수(등급별 누적) — 질주와 무관하게 보관
+    const stam = Math.max(0, Math.min(100, p.stamina || 0));   // 질주 스태미나 (자기 것만 바로 표시)
+    const stamBar = me ? `<div class="stam${stam < 25 ? " low" : ""}" title="질주 스태미나"><i style="width:${stam}%"></i></div>` : "";
     html += `<div class="chip ${p.out ? "dead" : ""} ${me ? "me" : ""}">
       <div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}${me?" (나)":""}</div>
-      <div class="meta"><span style="color:#ffd54a">⭐${score}</span><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div></div>`;
+      <div class="meta"><span style="color:#ffd54a">⭐${score}</span><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div>${stamBar}</div>`;
   });
   html += `<div class="chip"><div class="top">진행 · Lv ${state.level}</div>
     <div class="meta"><span>${ratio}%</span><span>목표 90%</span></div></div>`;
   hud.innerHTML = html;
+
+  // 좌측 포획 랭킹: 포획 점수(⭐) 내림차순, 동점이면 포획 수(🕸)로. 로비에선 숨김.
+  const rankEl = document.getElementById("rank");
+  const ranked = [...state.players.values()].sort((a, b) => (b.bonus - a.bonus) || (b.traps - a.traps));
+  document.getElementById("rankList").innerHTML = ranked.map((p, i) => {
+    const me = room && p.id === room.sessionId;
+    return `<div class="rrow ${me ? "me" : ""} ${p.out ? "dead" : ""}">
+      <span class="rpos">${i + 1}</span>
+      <span class="rdot" style="color:${p.color};background:${p.color}"></span>
+      <span class="rname">${p.name}${me ? " (나)" : ""}</span>
+      <span class="rscore">⭐${p.bonus | 0}</span><span class="rtraps">🕸${p.traps | 0}</span></div>`;
+  }).join("");
+  rankEl.classList.toggle("hidden", state.phase === "lobby" || ranked.length === 0);
   restartBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
   // 클리어(승리) 화면에서는 채팅 입력창을 숨긴다
   chatInput.style.display = (state.phase === "won") ? "none" : "";

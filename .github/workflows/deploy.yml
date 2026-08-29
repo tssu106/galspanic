@@ -1,9 +1,9 @@
 name: Deploy to laptop server
 
-# 이 노트북(self-hosted 러너)에서 직접 pull -> build -> 서버 재시작.
-# main 에 push 될 때만 실행(포크 PR 은 실행 안 됨 = self-hosted 러너 안전).
-# 실제 로직은 로컬(untracked) 스크립트 deploy/ci-deploy-impl.ps1 이 담당하고
-# 스스로 C:\workspace\ci-deploy.log 에 전 과정을 기록한다.
+# 이 노트북(self-hosted 러너)에서 배포. 러너는 SYSTEM 예약작업 GalspanicDeploy 를
+# 트리거만 하고, 실제 pull/build/restart 는 그 작업이 깨끗한 SYSTEM 컨텍스트에서 수행한다
+# (러너 중첩 powershell 환경 quirk 우회). 전 과정은 C:\workspace\ci-deploy.log 에 기록된다.
+# main push 에서만 실행(포크 PR 실행 안 됨 = self-hosted 러너 안전).
 on:
   push:
     branches: [main]
@@ -13,15 +13,20 @@ jobs:
   deploy:
     runs-on: [self-hosted, windows]
     steps:
-      - name: Deploy (pull, build, restart)
+      - name: Trigger SYSTEM deploy task and wait
         shell: powershell
         run: |
-          # GitHub 이 강제하는 ErrorActionPreference=Stop 을 해제한다. 그러지 않으면 중첩
-          # powershell 이 stderr(예: git "From github", npm warn)를 뿜는 순간 즉시 throw 된다.
           $ErrorActionPreference = 'Continue'
-          & powershell -NoProfile -ExecutionPolicy Bypass -File C:\workspace\galspanic\deploy\ci-deploy-impl.ps1 2>&1 | Out-String | Write-Host
-          $code = $LASTEXITCODE
+          Remove-Item C:\workspace\ci-deploy.log -Force -ErrorAction SilentlyContinue
+          schtasks /run /tn GalspanicDeploy
+          $deadline = (Get-Date).AddSeconds(180)
+          $res = $null
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 3
+            $c = Get-Content C:\workspace\ci-deploy.log -Raw -ErrorAction SilentlyContinue
+            if ($c -and $c -match "DEPLOY RESULT: (OK|FAIL[^=]*)") { $res = $Matches[1].Trim(); break }
+          }
           Write-Host "==================== ci-deploy.log ===================="
           if (Test-Path C:\workspace\ci-deploy.log) { Get-Content C:\workspace\ci-deploy.log | Write-Host }
-          Write-Host "==================== impl exit: $code ===================="
-          if ($code -ne 0) { exit $code }
+          Write-Host "==================== RESULT: $res ===================="
+          if ($res -ne "OK") { exit 1 }

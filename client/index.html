@@ -1152,29 +1152,17 @@ function render() {
   requestAnimationFrame(render);
 }
 
-const WIN_COUNTDOWN_S = 5;   // matches the server's between-stage countdown
+// Loss overlay only — the win screen is drawn by drawWinCelebration (full-picture reveal).
 function drawOverlay() {
   const W = canvas.width, H = canvas.height;
-  const won = state.phase === "won";
   ctx.fillStyle = "rgba(8,10,20,.82)";
-  ctx.fillRect(W/2-190, H/2-80, 380, won ? 176 : 140);
+  ctx.fillRect(W/2-190, H/2-80, 380, 140);
   ctx.textAlign = "center";
-  ctx.fillStyle = won ? "#a3e635" : "#ff5db1";
+  ctx.fillStyle = "#ff5db1";
   ctx.font = "bold 34px system-ui";
-  ctx.fillText(won ? `LEVEL ${state.level} CLEAR!` : "GAME OVER", W/2, H/2-22);
-  if (won) {
-    const remain = Math.max(0, state.nextIn || 0);
-    const prog = Math.min(1, Math.max(0, 1 - remain / WIN_COUNTDOWN_S));   // bar fills over the countdown
-    const bw = 300, bh = 14, bx = W/2 - bw/2, by = H/2 + 6;
-    ctx.fillStyle = "#1b2138"; ctx.fillRect(bx, by, bw, bh);
-    ctx.fillStyle = "#a3e635"; ctx.fillRect(bx, by, bw * prog, bh);
-    ctx.strokeStyle = "#3a4670"; ctx.strokeRect(bx, by, bw, bh);
-    ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
-    ctx.fillText(`다음 스테이지까지 ${Math.ceil(remain)}초`, W/2, by + bh + 24);
-  } else {
-    ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
-    ctx.fillText("Enter 로 재시작", W/2, H/2 + 24);
-  }
+  ctx.fillText("GAME OVER", W/2, H/2-22);
+  ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
+  ctx.fillText("Enter 로 재시작", W/2, H/2 + 24);
   ctx.textAlign = "left";
 }
 
@@ -1236,14 +1224,12 @@ function drawWinCelebration(now, dt) {
   ctx.textAlign = "center";
   ctx.fillStyle = "#a3e635"; ctx.font = "bold 32px system-ui";
   ctx.fillText(`LEVEL ${state.level} CLEAR!`, W / 2, barY + 38);
-  const remain = Math.max(0, state.nextIn || 0);
-  const prog = Math.min(1, Math.max(0, 1 - remain / WIN_COUNTDOWN_S));
-  const bw = 340, bh = 12, bx = W / 2 - bw / 2, by = barY + 56;
-  ctx.fillStyle = "#1b2138"; ctx.fillRect(bx, by, bw, bh);
-  ctx.fillStyle = "#a3e635"; ctx.fillRect(bx, by, bw * prog, bh);
-  ctx.strokeStyle = "#3a4670"; ctx.lineWidth = 1; ctx.strokeRect(bx, by, bw, bh);
-  ctx.fillStyle = "#c9d0f0"; ctx.font = "13px system-ui";
-  ctx.fillText(`다음 스테이지까지 ${Math.ceil(remain)}초`, W / 2, by + bh + 16);
+  // No auto-advance: let players admire the picture, then press Enter to continue.
+  const pulse = 0.55 + 0.45 * Math.sin(now / 350);
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = "#c9d0f0"; ctx.font = "15px system-ui";
+  ctx.fillText("이미지를 충분히 감상하세요 · Enter ▶ 다음 스테이지", W / 2, barY + 66);
+  ctx.globalAlpha = 1;
   ctx.textAlign = "left";
 }
 

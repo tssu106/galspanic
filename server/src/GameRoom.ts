@@ -2,7 +2,7 @@ import { Room, Client } from "@colyseus/core";
 import { GameState, Player, Enemy, Projectile, Beam } from "./schema";
 import { GalSim } from "./GalSim";
 import type { SimEnemy } from "./GalSim";
-import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, WIN_COUNTDOWN_MS } from "./constants";
+import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS } from "./constants";
 
 const COLORS = ["#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
 
@@ -13,7 +13,6 @@ const DEV = process.env.NODE_ENV !== "production";
 export class GameRoom extends Room<GameState> {
   maxClients = MAX_PLAYERS;
   sim!: GalSim;
-  private wonElapsed = 0;   // ms accumulated on the between-stage win countdown
   private startLevel = 1;   // 이 방이 시작한 레벨 (loss 후 재시작도 이 레벨로 되돌린다)
   private imageSeq: string[] = [];   // 스테이지별 배경 이미지 순서(랜덤 셔플, 한 바퀴 동안 비중복)
 
@@ -52,10 +51,11 @@ export class GameRoom extends Room<GameState> {
     });
 
     this.onMessage("restart", () => {
-      // A win auto-advances via the between-stage countdown (no instant skip);
-      // only a loss restarts when a player hits Enter. Prod restarts from level 1;
-      // in dev we return to the room's chosen start level so testing stays put.
-      if (this.state.phase === "lost") this.startRound(this.startLevel);
+      // On the clear screen, Enter advances to the next stage (no auto-advance, so players
+      // can admire the picture as long as they like). On a loss, Enter restarts: prod from
+      // level 1, dev from the room's chosen start level so testing stays put.
+      if (this.state.phase === "won") this.startRound(this.sim.level + 1);
+      else if (this.state.phase === "lost") this.startRound(this.startLevel);
     });
 
     // dev 전용: 클라이언트의 "보스 소환" 버튼 → 10초 카운트다운 후 보스 등장 (4종 순환).
@@ -120,7 +120,6 @@ export class GameRoom extends Room<GameState> {
     this.state.imageId = this.imageAt(level);   // 랜덤·비중복 배정
     this.state.phase = "playing";
     this.state.nextIn = 0;
-    this.wonElapsed = 0;
 
     // reflect reset player stats
     this.sim.players.forEach((sp) => {
@@ -154,13 +153,9 @@ export class GameRoom extends Room<GameState> {
       }
       return;
     }
-    // between-stage countdown: after clearing, auto-advance to the next stage over ~5s
-    if (this.state.phase === "won") {
-      this.wonElapsed += dt;
-      this.state.nextIn = Math.max(0, (WIN_COUNTDOWN_MS - this.wonElapsed) / 1000);
-      if (this.wonElapsed >= WIN_COUNTDOWN_MS) this.startRound(this.sim.level + 1);
-      return;
-    }
+    // Stage cleared: stay on the celebration/reveal screen indefinitely so players can
+    // enjoy the picture. No auto-advance — a player presses Enter to go on (see "restart").
+    if (this.state.phase === "won") return;
     if (this.state.phase !== "playing") return;
     this.sim.update(dt / 1000);
 
@@ -236,9 +231,8 @@ export class GameRoom extends Room<GameState> {
     if (this.sim.over) {
       this.state.phase = this.sim.over;   // "won" | "lost"
       if (this.sim.over === "won") {
-        this.wonElapsed = 0;
-        this.state.nextIn = WIN_COUNTDOWN_MS / 1000;
-        // publish the next stage's image now so clients can preload it during the countdown
+        this.state.nextIn = 0;   // no countdown — wait for a player's Enter
+        // publish the next stage's image now so clients can preload it while admiring this one
         this.state.nextImageId = this.imageAt(this.sim.level + 1);
       }
     }

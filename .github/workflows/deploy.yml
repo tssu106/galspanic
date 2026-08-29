@@ -16,7 +16,10 @@ jobs:
       - name: Deploy (pull, build, restart)
         shell: powershell
         run: |
-          & powershell -NoProfile -ExecutionPolicy Bypass -File C:\workspace\galspanic\deploy\ci-deploy-impl.ps1
+          # GitHub 이 강제하는 ErrorActionPreference=Stop 을 해제한다. 그러지 않으면 중첩
+          # powershell 이 stderr(예: git "From github", npm warn)를 뿜는 순간 즉시 throw 된다.
+          $ErrorActionPreference = 'Continue'
+          & powershell -NoProfile -ExecutionPolicy Bypass -File C:\workspace\galspanic\deploy\ci-deploy-impl.ps1 2>&1 | Out-String | Write-Host
           $code = $LASTEXITCODE
           Write-Host "==================== ci-deploy.log ===================="
           if (Test-Path C:\workspace\ci-deploy.log) { Get-Content C:\workspace\ci-deploy.log | Write-Host }

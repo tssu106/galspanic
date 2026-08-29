@@ -163,6 +163,38 @@
   #gameover .go-num-fallback { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
                                font-size:min(24vh,190px); font-weight:900; color:#fff; display:none;
                                text-shadow:0 0 26px #ff5db1, 0 0 60px #ff2a7a; }
+  /* ---- 도감(컬렉션) + 이미지 저장 ---- */
+  #start .ghost { background:#141a2e; color:#c9d0f0; border:1px solid #2a3350; font-size:14px; font-weight:700;
+                  padding:10px 14px; border-radius:12px; cursor:pointer; }
+  #start .ghost:hover { border-color:#ff5db1; }
+  #start .gcount { color:#a3e635; font-weight:800; }
+  #gallery { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:20px;
+             background:rgba(5,7,14,.9); backdrop-filter:blur(4px); }
+  #gallery.hidden { display:none; }
+  #gallery .gwrap { background:var(--panel); border:1px solid #232a44; border-radius:16px; width:min(1000px,96vw);
+                    max-height:90vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 24px 70px rgba(0,0,0,.6); }
+  #gallery .ghead { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #232a44; }
+  #gallery .gtitle { font-size:18px; font-weight:800; } #gallery .gprog { color:#a3e635; font-size:14px; margin-left:8px; }
+  #gallery .gclose { background:#232a44; color:#e8ebf7; border:0; border-radius:8px; padding:7px 12px; font-size:13px; cursor:pointer; }
+  #gallery .ggrid { overflow-y:auto; padding:16px; display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); }
+  #gallery .gcell { position:relative; aspect-ratio:2/3; border-radius:10px; overflow:hidden; border:1px solid #2a3350; background:#0e1120; }
+  #gallery .gcell:not(.locked) { cursor:pointer; transition:transform .1s, border-color .1s; }
+  #gallery .gcell:not(.locked):hover { transform:scale(1.04); border-color:#ff5db1; }
+  #gallery .gcell img { width:100%; height:100%; object-fit:cover; display:block; }
+  #gallery .gcell .gnum { position:absolute; left:6px; top:6px; font-size:11px; font-weight:800; color:#fff;
+                          background:rgba(0,0,0,.55); padding:1px 6px; border-radius:6px; }
+  #gallery .gcell.locked { display:flex; align-items:center; justify-content:center; font-size:30px; }
+  #gallery .gcell.locked::after { content:"🔒"; opacity:.4; }
+  #galleryView { position:fixed; inset:0; z-index:70; display:flex; flex-direction:column; align-items:center; justify-content:center;
+                 gap:14px; padding:24px; background:rgba(3,4,10,.95); backdrop-filter:blur(6px); }
+  #galleryView.hidden { display:none; }
+  #galleryView img { max-width:min(92vw,720px); max-height:80vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.7); }
+  #galleryView .gvclose { position:absolute; top:16px; right:20px; background:#232a44; color:#e8ebf7; border:0; border-radius:10px;
+                          width:42px; height:42px; font-size:18px; cursor:pointer; }
+  #galleryView .gvbar { display:flex; align-items:center; gap:16px; }
+  #galleryView .gvcap { color:#c9d0f0; font-weight:800; font-size:16px; }
+  #galleryView .gvsave { background:linear-gradient(90deg,#37d39b,#22b07f); color:#fff; border:0; border-radius:10px;
+                         padding:9px 16px; font-weight:800; font-size:14px; cursor:pointer; }
   #chatHead { padding:9px 13px; font-size:12px; font-weight:700; letter-spacing:.6px;
               color:var(--muted); border-bottom:1px solid #232a44; display:flex;
               align-items:center; gap:7px; }
@@ -197,6 +229,10 @@
                 border-radius:8px; padding:8px 12px; font-size:13px; cursor:pointer; }
   #devLoseBtn:hover { background:#4d4d4d; }
   #devLoseBtn.hidden { display:none; }
+  #devWinBtn { position:fixed; left:14px; top:202px; z-index:40; background:#1d4e2e; color:#d7ffe4;
+               border-radius:8px; padding:8px 12px; font-size:13px; cursor:pointer; }
+  #devWinBtn:hover { background:#276b3f; }
+  #devWinBtn.hidden { display:none; }
 </style>
 </head>
 <body>
@@ -236,6 +272,7 @@
         <input id="codeInput" maxlength="16" placeholder="방 코드로 참가" autocomplete="off" />
         <button id="joinBtn">참가</button>
       </div>
+      <button id="galleryBtn" class="ghost">📖 도감 · 수집한 그림 <span id="galleryCount" class="gcount"></span></button>
       <div id="startErr" class="err"></div>
     </div>
   </div>
@@ -282,12 +319,31 @@
     <div class="go-hint"><b>GAME OVER</b> · <b>Enter</b> ▶ 재시작</div>
   </div>
 
+  <!-- 도감(컬렉션): 수집한 그림을 모아 보는 모달. 각자 브라우저(localStorage)에 저장. -->
+  <div id="gallery" class="hidden">
+    <div class="gwrap">
+      <div class="ghead">
+        <div class="gtitle">📖 도감 <span id="galleryProgress" class="gprog"></span></div>
+        <button id="galleryClose" class="gclose">✕ 닫기</button>
+      </div>
+      <div id="galleryGrid" class="ggrid"></div>
+    </div>
+  </div>
+  <!-- 도감에서 그림 클릭 시 크게 보는 라이트박스 -->
+  <div id="galleryView" class="hidden">
+    <button id="gvClose" class="gvclose" title="닫기">✕</button>
+    <img id="gvImg" alt="">
+    <div class="gvbar"><span id="gvCap" class="gvcap"></span><button id="gvSave" class="gvsave">🖼 저장</button></div>
+  </div>
+
   <!-- dev 전용: 클릭하면 10초 카운트다운 후 보스 출현 -->
   <button id="devBossBtn" class="hidden" title="dev: 10초 뒤 보스 출현">🕳 보스 소환</button>
   <!-- dev 전용: 레이저 보스를 바로 소환(곧 레이저 발사) -->
   <button id="devLaserBtn" class="hidden" title="dev: 레이저 보스 즉시 소환 (곧 레이저 발사)">⚡ 레이저 보스</button>
   <!-- dev 전용: 즉시 게임오버(죽는 화면·3D 카운트다운 미리보기) -->
   <button id="devLoseBtn" class="hidden" title="dev: 즉시 게임오버 — 죽는 화면 미리보기">💀 게임오버</button>
+  <!-- dev 전용: 즉시 스테이지 완료(클리어 화면·그림 리빌 미리보기) -->
+  <button id="devWinBtn" class="hidden" title="dev: 즉시 스테이지 완료 — 클리어 화면 미리보기">🏆 스테이지 완료</button>
 
 <!-- three.js 애드온이 bare 'three' 를 import 하므로, 로컬 vendored 빌드로 매핑한다. -->
 <script type="importmap">
@@ -296,6 +352,7 @@
 <script type="module">
 import { Client } from "https://esm.sh/colyseus.js@0.15.0";
 import { showCountdown3D, hideCountdown3D, renderCountdown3D } from "./countdown3d.js";
+import { initAudio, sfxCapture, sfxClear, sfxGameover } from "./sfx.js";
 
 // 서버 주소를 "이 페이지를 연 origin" 기준으로 자동 결정.
 // - 게임 서버(2567)가 이 페이지를 직접 서빙하는 경우(권장): 같은 origin으로 접속.
@@ -326,6 +383,7 @@ const stageSelect = document.getElementById("stageSelect");
 const devBossBtn = document.getElementById("devBossBtn");  // dev 전용 보스 소환 버튼
 const devLaserBtn = document.getElementById("devLaserBtn"); // dev 전용 레이저 보스 버튼
 const devLoseBtn = document.getElementById("devLoseBtn");   // dev 전용 게임오버 미리보기 버튼
+const devWinBtn = document.getElementById("devWinBtn");     // dev 전용 스테이지 완료 미리보기 버튼
 const onlineNum = document.getElementById("onlineNum");
 const createBtn = document.getElementById("createBtn");
 const codeInput = document.getElementById("codeInput");
@@ -372,6 +430,7 @@ async function connect(name, level, mode = "quick", code = "") {
       x: ev.x, y: ev.y, color: playerColor(ev.owner), life: 1.2, ttl: 1.2,
       text: ev.count > 1 ? `포획 x${ev.count}! +${ev.bonus}` : `포획! +${ev.bonus}`,
     });
+    sfxCapture(ev.count);   // 포획 효과음
   });
   // 블랙홀 예고: 그 자리에 블랙홀을 띄워 회피를 유도(예고가 끝나면 서버가 맵을 지우고 보스 등장)
   room.onMessage("warp", (ev) => {
@@ -388,12 +447,96 @@ async function connect(name, level, mode = "quick", code = "") {
 // ---- 초기 화면: "게임 시작"을 눌러야 접속·합류한다 ----
 try { nameInput.value = localStorage.getItem("galspanic:name") || ""; } catch {}
 
+// ── 도감(컬렉션): 클리어한 그림을 각자 브라우저(localStorage)에 모아 개인 갤러리로 본다 ──
+const COLLECTION_KEY = "galspanic:collection";
+let imageCount = 0;                 // 전체 그림 수 (서버 /config 로 채움)
+let lastWonImageId = null;          // 이번 클리어에서 이미 도감에 넣었는지 추적
+const galleryEl = document.getElementById("gallery");
+function getCollection() {
+  try { return new Set(JSON.parse(localStorage.getItem(COLLECTION_KEY) || "[]")); } catch { return new Set(); }
+}
+function addToCollection(imageId) {
+  if (!imageId) return;
+  const set = getCollection();
+  if (set.has(imageId)) return;
+  set.add(imageId);
+  try { localStorage.setItem(COLLECTION_KEY, JSON.stringify([...set])); } catch {}
+  updateGalleryCount();
+}
+function updateGalleryCount() {
+  const el = document.getElementById("galleryCount");
+  if (el) el.textContent = `(${getCollection().size}${imageCount ? " / " + imageCount : ""})`;
+}
+const artId = (i) => "art" + String(i).padStart(2, "0");   // 서버 명명과 일치 (art01.. art100)
+function openGallery() {
+  const grid = document.getElementById("galleryGrid");
+  const owned = getCollection();
+  const total = imageCount || owned.size || 1;
+  grid.innerHTML = "";
+  for (let i = 1; i <= total; i++) {
+    const id = artId(i);
+    const cell = document.createElement("div");
+    if (owned.has(id)) {
+      cell.className = "gcell";
+      cell.dataset.id = id; cell.dataset.num = i;   // 클릭 시 크게 보기
+      cell.innerHTML = `<img loading="lazy" src="${HTTP_URL}/images/${id}_blur.jpg" alt=""><span class="gnum">${i}</span>`;
+    } else {
+      cell.className = "gcell locked";
+      cell.innerHTML = `<span class="gnum">${i}</span>`;
+    }
+    grid.appendChild(cell);
+  }
+  document.getElementById("galleryProgress").textContent = `${owned.size} / ${total} 수집`;
+  updateGalleryCount();
+  galleryEl.classList.remove("hidden");
+}
+function closeGallery() { galleryEl.classList.add("hidden"); }
+document.getElementById("galleryBtn").addEventListener("click", openGallery);
+document.getElementById("galleryClose").addEventListener("click", closeGallery);
+galleryEl.addEventListener("click", (e) => { if (e.target === galleryEl) closeGallery(); });
+
+// 그림 다운로드 (도감·클리어 화면·라이트박스에서 공통 사용)
+async function downloadImage(id) {
+  if (!id) return;
+  try {
+    const blob = await fetch(`${HTTP_URL}/images/${id}_blur.jpg`).then((r) => r.blob());
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = `galspanic_${id}.jpg`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch (err) { console.warn("이미지 저장 실패:", err); }
+}
+// 도감에서 그림 클릭 → 크게 보기(라이트박스)
+const galleryViewEl = document.getElementById("galleryView");
+function openGalleryView(id, num) {
+  document.getElementById("gvImg").src = `${HTTP_URL}/images/${id}_blur.jpg`;
+  document.getElementById("gvCap").textContent = `#${num}`;
+  galleryViewEl.dataset.id = id;
+  galleryViewEl.classList.remove("hidden");
+}
+function closeGalleryView() { galleryViewEl.classList.add("hidden"); }
+document.getElementById("galleryGrid").addEventListener("click", (e) => {
+  const cell = e.target.closest(".gcell");
+  if (cell && cell.dataset.id) openGalleryView(cell.dataset.id, cell.dataset.num);
+});
+document.getElementById("gvClose").addEventListener("click", closeGalleryView);
+document.getElementById("gvSave").addEventListener("click", () => downloadImage(galleryViewEl.dataset.id));
+galleryViewEl.addEventListener("click", (e) => { if (e.target === galleryViewEl) closeGalleryView(); });
+// ESC: 라이트박스 먼저, 그다음 도감
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!galleryViewEl.classList.contains("hidden")) { closeGalleryView(); e.stopPropagation(); }
+  else if (!galleryEl.classList.contains("hidden")) { closeGallery(); e.stopPropagation(); }
+}, true);
+updateGalleryCount();
+
 // dev 서버면 시작 화면에 스테이지 선택을 노출한다. 서버 /config 로 판별하며,
 // 프로덕션(dev=false)에선 선택 UI가 나타나지 않는다.
 let devMode = false;
 (async () => {
   try {
     const cfg = await fetch(`${HTTP_URL}/config`).then((r) => r.json());
+    imageCount = cfg?.imageCount || 0; updateGalleryCount();
     if (!cfg?.dev) return;
     devMode = true;
     const MAX_STAGE = 12;   // 선택 가능한 최대 스테이지 (포탑은 4스테이지+ 등장)
@@ -415,6 +558,7 @@ let devMode = false;
 let gameShown = false;   // 게임 화면(캔버스)이 이미 드러났는지
 async function enterGame(mode) {
   if (startBtn.disabled) return;
+  initAudio();   // 사용자 클릭 제스처로 오디오 활성화 (브라우저 정책)
   const name = (nameInput.value || "").trim().slice(0, 12) || "Guest";
   try { localStorage.setItem("galspanic:name", name === "Guest" ? "" : name); } catch {}
   let level;
@@ -472,13 +616,14 @@ function updateOverlays() {
     if (!gameShown) {
       gameShown = true;
       chatPanel.classList.remove("hidden");
-      if (devMode) { devBossBtn.classList.remove("hidden"); devLaserBtn.classList.remove("hidden"); devLoseBtn.classList.remove("hidden"); }
+      if (devMode) { devBossBtn.classList.remove("hidden"); devLaserBtn.classList.remove("hidden"); devLoseBtn.classList.remove("hidden"); devWinBtn.classList.remove("hidden"); }
     }
     // 게임 오버: 화면 전체 3D 카운트다운(10초). 그 안에 Enter 면 이 방에서 재시작(window keydown),
     // 시간이 지나면 방을 떠나 첫(타이틀) 화면으로 되돌린다.
     if (state.phase === "lost") {
       if (lostSince === 0) {
         lostSince = performance.now();
+        sfxGameover();                                         // 게임오버 효과음
         const ok = showCountdown3D();                          // three.js 시작(실패 시 false)
         gameoverEl.classList.remove("hidden");
         goNumEl.style.display = ok ? "none" : "";              // WebGL 없으면 2D 숫자 폴백
@@ -490,6 +635,12 @@ function updateOverlays() {
       lostSince = 0;
       gameoverEl.classList.add("hidden");
       hideCountdown3D();
+    }
+    // 클리어: 복원한 그림을 도감에 자동 추가(다운로드는 도감에서). 사운드도 한 번 재생.
+    if (state.phase === "won") {
+      if (state.imageId && lastWonImageId !== state.imageId) { lastWonImageId = state.imageId; addToCollection(state.imageId); sfxClear(); }
+    } else {
+      lastWonImageId = null;
     }
   }
 }
@@ -506,7 +657,8 @@ function returnToTitle() {
   chatPanel.classList.add("hidden");
   document.getElementById("rank").classList.add("hidden");
   document.getElementById("gameover").classList.add("hidden"); hideCountdown3D();
-  devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden"); devLoseBtn.classList.add("hidden");
+  lastWonImageId = null;
+  devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden"); devLoseBtn.classList.add("hidden"); devWinBtn.classList.add("hidden");
   startScreen.classList.remove("hidden");
   [startBtn, createBtn, joinBtn].forEach((b) => (b.disabled = false));
   startErr.textContent = "";
@@ -525,6 +677,7 @@ devBossBtn.addEventListener("click", () => { room?.send("devBoss"); devBossBtn.b
 // dev 레이저 보스: 즉시 소환 → 곧 레이저 발사 (반복 클릭 가능, 최대 3마리)
 devLaserBtn.addEventListener("click", () => { room?.send("devLaser"); devLaserBtn.blur(); });
 devLoseBtn.addEventListener("click", () => { room?.send("devLose"); devLoseBtn.blur(); });
+devWinBtn.addEventListener("click", () => { room?.send("devWin"); devWinBtn.blur(); });
 // 이름 칸에서 Enter 로도 시작 (IME 조합 중 Enter 는 무시 — 부분 입력 방지)
 nameInput.addEventListener("keydown", (e) => {
   e.stopPropagation();

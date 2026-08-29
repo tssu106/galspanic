@@ -224,6 +224,8 @@ const lobbyStatus = document.getElementById("lobbyStatus");
 const startNowBtn = document.getElementById("startNowBtn");
 
 let room = null, state = null, GW = 64, GH = 64;
+let lostSince = 0;                 // 게임 오버가 시작된 시각(ms). 0 이면 오버 아님.
+const LOST_TIMEOUT_MS = 10000;    // 오버 후 이 시간 안에 Enter 면 재시작, 지나면 첫 화면으로.
 const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
 let imgVersion = 0;   // bumps on every (re)load so the cached grid layer rebuilds
 img.onload = () => { imgReady = true; imgVersion++; };
@@ -358,7 +360,29 @@ function updateOverlays() {
       chatPanel.classList.remove("hidden");
       if (devMode) { devBossBtn.classList.remove("hidden"); devLaserBtn.classList.remove("hidden"); }
     }
+    // 게임 오버: 10초 카운트다운. 그 안에 Enter 면 이 방에서 재시작(window keydown),
+    // 시간이 지나면 방을 떠나 첫(타이틀) 화면으로 되돌린다.
+    if (state.phase === "lost") {
+      if (lostSince === 0) lostSince = performance.now();
+      else if (performance.now() - lostSince >= LOST_TIMEOUT_MS) { returnToTitle(); return; }
+    } else {
+      lostSince = 0;
+    }
   }
+}
+
+// 게임 오버 후(또는 나가기) 첫 화면으로 복귀: 방을 떠나고 상태를 초기화한 뒤 타이틀을 다시 띄운다.
+function returnToTitle() {
+  try { room?.leave(); } catch {}
+  room = null; state = null; gameShown = false; lostSince = 0; lastLobbyKey = "";
+  bubbles.clear(); pmove.clear(); prevMarker.clear(); flashes.length = 0; warps.length = 0;
+  lobby.classList.add("hidden");
+  chatPanel.classList.add("hidden");
+  devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden");
+  startScreen.classList.remove("hidden");
+  [startBtn, createBtn, joinBtn].forEach((b) => (b.disabled = false));
+  startErr.textContent = "";
+  statusEl.textContent = "";
 }
 
 // 메인화면 접속자 수 표시 (몇 초마다 /stats 폴링). 로비/게임 중엔 갱신 불필요.
@@ -813,27 +837,34 @@ function enemyPos(br, i, live) {
 // newest (head) trail cell — the moving marker stands in for the line's tip, and each
 // cell solidifies into the line as the marker passes it (like the arcade line growing).
 const STEP_MS = 48;                  // fallback for state.moveMs (matches server MOVE_MS)
-const pmove = new Map();             // id -> { px, py, cx, cy, t0 }
+const pmove = new Map();             // id -> { x, y, tPrev } — displayed pos + last frame time
 const prevMarker = new Map();        // id -> { x, y } last frame's render pos (for boost streaks)
+// Constant-velocity chaser: the marker glides toward the LATEST server cell at the nominal
+// server speed (one cell per moveMs), never pausing. Because state broadcasts (PATCH_MS≈33ms)
+// are slower than the sim's cell steps (MOVE_MS≈24ms), each patch advances the target by 1–2
+// cells irregularly; an "arrive-then-pause" glide would stutter and 2-cell jumps would snap.
+// Moving at a steady speed instead absorbs that irregularity: the marker simply keeps tracking
+// the head, catching up a touch faster when it falls more than a cell behind, and settling
+// exactly on the cell at rest.
 function playerRenderPos(id, sx, sy, now) {
   let m = pmove.get(id);
-  if (!m) { m = { px: sx, py: sy, cx: sx, cy: sy, t0: now - 1e4 }; pmove.set(id, m); return { x: sx, y: sy }; }
-  const glide = (state.moveMs || STEP_MS);   // glide one full step → constant-velocity, no pause
-  if (sx !== m.cx || sy !== m.cy) {           // server advanced to a new cell
-    if (Math.abs(sx - m.cx) + Math.abs(sy - m.cy) > 1) {   // teleport / respawn → snap
-      m.px = sx; m.py = sy;
-    } else {
-      // Continue from the CURRENT displayed position (not the old target cell) so motion
-      // is seamless even when the previous glide hadn't finished — the marker keeps
-      // tracking the latest cell smoothly, with no mid-step jump or "arrive-then-pause".
-      const u = Math.min(1, (now - m.t0) / glide);
-      m.px = m.px + (m.cx - m.px) * u;
-      m.py = m.py + (m.cy - m.py) * u;
-    }
-    m.cx = sx; m.cy = sy; m.t0 = now;
-  }
-  const u = Math.min(1, (now - m.t0) / glide);
-  return { x: m.px + (m.cx - m.px) * u, y: m.py + (m.cy - m.py) * u };
+  if (!m) { m = { x: sx, y: sy, tPrev: now }; pmove.set(id, m); return { x: sx, y: sy }; }
+  const dt = Math.max(0, Math.min(64, now - m.tPrev));   // clamp long frame gaps (tab wake)
+  m.tPrev = now;
+  const dx = sx - m.x, dy = sy - m.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist === 0) return { x: m.x, y: m.y };
+  if (dist > 6) { m.x = sx; m.y = sy; return { x: sx, y: sy }; }   // teleport / respawn → snap
+  // Move at the steady nominal speed (one cell per moveMs) — this matches the target's average
+  // advance, so velocity stays near-constant and the ride is smooth. Only when the marker falls
+  // well over a cell behind (a boost run or a network hiccup) does it speed up, and only gently
+  // and with a hard cap, so catching up never looks like a jump.
+  let speed = 1 / (state.moveMs || STEP_MS);
+  if (dist > 1.6) speed *= Math.min(2.2, dist / 1.6);
+  const step = speed * dt;
+  if (step >= dist) { m.x = sx; m.y = sy; }               // arrived — settle exactly on the cell
+  else { m.x += dx / dist * step; m.y += dy / dist * step; }
+  return { x: m.x, y: m.y };
 }
 
 
@@ -1155,14 +1186,17 @@ function render() {
 // Loss overlay only — the win screen is drawn by drawWinCelebration (full-picture reveal).
 function drawOverlay() {
   const W = canvas.width, H = canvas.height;
-  ctx.fillStyle = "rgba(8,10,20,.82)";
-  ctx.fillRect(W/2-190, H/2-80, 380, 140);
+  const remain = lostSince ? Math.max(0, Math.ceil((LOST_TIMEOUT_MS - (performance.now() - lostSince)) / 1000)) : 10;
+  ctx.fillStyle = "rgba(8,10,20,.86)";
+  ctx.fillRect(W/2-210, H/2-86, 420, 160);
   ctx.textAlign = "center";
   ctx.fillStyle = "#ff5db1";
   ctx.font = "bold 34px system-ui";
-  ctx.fillText("GAME OVER", W/2, H/2-22);
-  ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
-  ctx.fillText("Enter 로 재시작", W/2, H/2 + 24);
+  ctx.fillText("GAME OVER", W/2, H/2-32);
+  ctx.fillStyle = "#c9d0f0"; ctx.font = "15px system-ui";
+  ctx.fillText("Enter ▶ 이 방에서 재시작", W/2, H/2 + 6);
+  ctx.fillStyle = "#8b93b2"; ctx.font = "13px system-ui";
+  ctx.fillText(`${remain}초 후 첫 화면으로 돌아갑니다`, W/2, H/2 + 34);
   ctx.textAlign = "left";
 }
 

@@ -14,7 +14,9 @@ jobs:
     runs-on: [self-hosted, windows]
     steps:
       - name: Trigger SYSTEM deploy task and wait
-        shell: powershell
+        # 러너 기본 shell 은 ExecutionPolicy 지정 없이 dot-source 하는데, 이 머신은 정책이
+        # Restricted 라 step 스크립트가 실행조차 안 된다(즉시 exit 1). Bypass 로 실행한다.
+        shell: 'powershell -NoProfile -ExecutionPolicy Bypass -File "{0}"'
         run: |
           $ErrorActionPreference = 'Continue'
           Remove-Item C:\workspace\ci-deploy.log -Force -ErrorAction SilentlyContinue

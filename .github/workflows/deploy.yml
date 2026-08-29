@@ -2,6 +2,8 @@ name: Deploy to laptop server
 
 # 이 노트북(self-hosted 러너)에서 직접 pull -> build -> 서버 재시작.
 # main 에 push 될 때만 실행(포크 PR 은 실행 안 됨 = self-hosted 러너 안전).
+# 실제 로직은 로컬(untracked) 스크립트 deploy/ci-deploy-impl.ps1 에 있고,
+# 전체 출력을 C:\workspace\ci-deploy.log 로 남겨 디버깅한다.
 on:
   push:
     branches: [main]
@@ -11,33 +13,12 @@ jobs:
   deploy:
     runs-on: [self-hosted, windows]
     steps:
-      - name: Pull, build, restart on this laptop
+      - name: Deploy (pull, build, restart)
         shell: powershell
         run: |
-          $ErrorActionPreference = "Stop"
-          $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
-          # 러너는 SYSTEM, repo 는 사용자 소유 -> dubious ownership 방지 (system 설정이 주 방어선, 이건 백업)
-          git config --global --add safe.directory '*' 2>$null
-
-          Set-Location C:\workspace\galspanic
-          git fetch origin main;            if ($LASTEXITCODE) { throw "git fetch failed ($LASTEXITCODE)" }
-          git reset --hard origin/main;     if ($LASTEXITCODE) { throw "git reset failed ($LASTEXITCODE)" }
-
-          # npm ci 는 node_modules 를 통째로 지워 재설치하는데, 실행 중인 서버가 파일을
-          # 잠그고 있어 EPERM(-4048) 로 실패한다. npm install 은 제자리 갱신이라 서버를
-          # 켜둔 채로도 안전(코드만 바뀌면 node_modules 를 건드리지 않음).
-          Set-Location C:\workspace\galspanic\server
-          npm install --no-audit --no-fund; if ($LASTEXITCODE) { throw "npm install failed ($LASTEXITCODE)" }
-          npm run build;                    if ($LASTEXITCODE) { throw "npm build failed ($LASTEXITCODE)" }
-
-          # 서버(예약작업) 재시작
-          schtasks /end /tn GalspanicServer 2>$null
-          Start-Sleep 1
-          Get-NetTCPConnection -LocalPort 2567 -State Listen -ErrorAction SilentlyContinue |
-            ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
-          Start-Sleep 1
-          schtasks /run /tn GalspanicServer; if ($LASTEXITCODE) { throw "task run failed ($LASTEXITCODE)" }
-
-          Start-Sleep 6
-          $h = Invoke-RestMethod http://localhost:2567/health -TimeoutSec 5
-          Write-Host "deployed OK, health: $($h | ConvertTo-Json -Compress)"
+          powershell -NoProfile -ExecutionPolicy Bypass -File C:\workspace\galspanic\deploy\ci-deploy-impl.ps1 *> C:\workspace\ci-deploy.log
+          $code = $LASTEXITCODE
+          Write-Host "==================== ci-deploy.log ===================="
+          if (Test-Path C:\workspace\ci-deploy.log) { Get-Content C:\workspace\ci-deploy.log | Write-Host }
+          Write-Host "==================== impl exit: $code ===================="
+          if ($code -ne 0) { exit $code }

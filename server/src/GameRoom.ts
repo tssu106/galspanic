@@ -70,6 +70,14 @@ export class GameRoom extends Room<GameState> {
     this.onMessage("devLose", () => {
       if (DEV && this.state.phase === "playing") this.state.phase = "lost";
     });
+    // dev 전용: "스테이지 완료" 버튼 → 즉시 won 으로 전환해 클리어 화면(그림 리빌)을 확인.
+    this.onMessage("devWin", () => {
+      if (DEV && this.state.phase === "playing") {
+        this.state.phase = "won";
+        this.state.nextIn = 0;
+        this.state.nextImageId = this.imageAt(this.sim.level + 1);   // 다음 스테이지 그림 미리 로드
+      }
+    });
 
     // Chat: relay a short message to everyone as a speech bubble over the sender.
     this.onMessage("chat", (client, msg: { text?: string }) => {

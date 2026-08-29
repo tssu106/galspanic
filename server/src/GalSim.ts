@@ -375,9 +375,9 @@ export class GalSim {
       vx: Math.cos(ang) * sp || sp, vy: Math.sin(ang) * sp || sp,
       kind: t.key, shape: t.shape, behavior: t.behavior, speed: sp, r: t.r,
       spin: this.rng() * 6, wanderT: 0.5 + this.rng(),
-      gun: false, fireEvery: t.fireEvery, cooldown: t.fireEvery * 0.5, aim: ang,
+      gun: false, fireEvery: t.fireEvery, cooldown: 10 + this.rng() * 5, aim: ang,   // 첫 투사체 발사는 10~15초 뒤부터
       boss: true, pattern: t.pattern, bullets: t.bullets, phase: 0,
-      mode: "normal", modeT: 4 + this.rng() * 3, baseSpeed: sp, fireEveryBase: t.fireEvery, behaviorSaved: t.behavior, baseR: t.r, rTarget: t.r,
+      mode: "normal", modeT: 10 + this.rng() * 5, baseSpeed: sp, fireEveryBase: t.fireEvery, behaviorSaved: t.behavior, baseR: t.r, rTarget: t.r,   // 첫 특수공격은 10~15초 뒤부터
       laserCd: LASER_COOLDOWN * 0.5,   // 스폰 후 첫 레이저는 ~15초 뒤부터 (이후 30초 간격)
     });
   }
@@ -580,7 +580,7 @@ export class GalSim {
   // 특수 종료 — 평상시로 복귀.
   private endSpecial(e: SimEnemy) {
     if (e.behaviorSaved) e.behavior = e.behaviorSaved;
-    e.mode = "normal"; e.modeT = 5 + this.rng() * 3;
+    e.mode = "normal"; e.modeT = 10 + this.rng() * 5;   // 다음 특수공격까지 10~15초 랜덤
     e.speed = e.baseSpeed || e.speed;
     e.fireEvery = e.fireEveryBase || e.fireEvery;
     e.rTarget = e.baseR || e.r;
@@ -1070,7 +1070,7 @@ export class GalSim {
         if (tgt) e.aim = Math.atan2(tgt.y - e.y, tgt.x - e.x);
         if (!e.mode || e.mode === "normal") {
           e.cooldown -= dtSec;
-          if (e.cooldown <= 0) { e.cooldown = e.fireEvery!; this.fireBossVolley(e, tgt); }
+          if (e.cooldown <= 0) { e.cooldown = 10 + this.rng() * 5; this.fireBossVolley(e, tgt); }   // 투사체 발사 간격 10~15초 랜덤
         }
       } else if (e.gun) {
         const tgt = this.nearestTarget(e);

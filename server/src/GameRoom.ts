@@ -93,11 +93,17 @@ export class GameRoom extends Room<GameState> {
 
   startRound(level: number) {
     this.sim.resetRound(level);
-    // push full grid once (dirty sets already hold every changed cell, but be explicit)
+    // Rebuild the grid arrays wholesale. Colyseus ArraySchema index-assignment
+    // (arr[i] = v) is O(N) per set → O(N²) for the whole 160×240×3 grid, i.e. a
+    // ~32s freeze at each round start. splice-then-push is O(N) total (~0.6s), so
+    // clear each array and repush instead of assigning by index. (see deploy/bench2.js)
+    this.state.cells.splice(0, this.state.cells.length);
+    this.state.trail.splice(0, this.state.trail.length);
+    this.state.web.splice(0, this.state.web.length);
     for (let i = 0; i < this.sim.cellCount; i++) {
-      this.state.cells[i] = this.sim.grid[i];
-      this.state.trail[i] = this.sim.trail[i];
-      this.state.web[i] = this.sim.web[i];
+      this.state.cells.push(this.sim.grid[i]);
+      this.state.trail.push(this.sim.trail[i]);
+      this.state.web.push(this.sim.web[i]);
     }
     this.sim.gridDirty.clear();
     this.sim.trailDirty.clear();

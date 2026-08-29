@@ -67,9 +67,9 @@ interface BossType {
 }
 // r 은 현재의 2배로 키운 거대 보스. speed 는 큰 덩치에 맞춰 살짝 낮춤.
 const BOSS_TYPES: BossType[] = [
-  { key: "boss_ring",   shape: "boss_ring",   behavior: "bounce", pattern: "radial", speed: 0.30, r: 12.0, bullets: 16, fireEvery: 2.0, score: 2500 },
-  { key: "boss_spiral", shape: "boss_spiral", behavior: "wander", pattern: "spiral", speed: 0.28, r: 11.0, bullets: 5,  fireEvery: 0.32, score: 3200 },
-  { key: "boss_spread", shape: "boss_spread", behavior: "hunt",   pattern: "spread", speed: 0.42, r: 10.0, bullets: 7,  fireEvery: 1.5, score: 3600 },
+  { key: "boss_ring",   shape: "boss_ring",   behavior: "bounce", pattern: "radial", speed: 0.30, r: 12.0, bullets: 22, fireEvery: 2.0, score: 2500 },
+  { key: "boss_spiral", shape: "boss_spiral", behavior: "wander", pattern: "spiral", speed: 0.28, r: 11.0, bullets: 8,  fireEvery: 0.32, score: 3200 },
+  { key: "boss_spread", shape: "boss_spread", behavior: "hunt",   pattern: "spread", speed: 0.42, r: 10.0, bullets: 10, fireEvery: 1.5, score: 3600 },
   { key: "boss_cross",  shape: "boss_cross",  behavior: "bounce", pattern: "cross",  speed: 0.35, r: 11.0, bullets: 8,  fireEvery: 1.1, score: 2800 },
 ];
 
@@ -375,7 +375,7 @@ export class GalSim {
       vx: Math.cos(ang) * sp || sp, vy: Math.sin(ang) * sp || sp,
       kind: t.key, shape: t.shape, behavior: t.behavior, speed: sp, r: t.r,
       spin: this.rng() * 6, wanderT: 0.5 + this.rng(),
-      gun: false, fireEvery: t.fireEvery, cooldown: 10 + this.rng() * 5, aim: ang,   // 첫 투사체 발사는 10~15초 뒤부터
+      gun: false, fireEvery: t.fireEvery, cooldown: 5 + this.rng() * 5, aim: ang,   // 첫 투사체 발사는 5~10초 뒤부터
       boss: true, pattern: t.pattern, bullets: t.bullets, phase: 0,
       mode: "normal", modeT: 10 + this.rng() * 5, baseSpeed: sp, fireEveryBase: t.fireEvery, behaviorSaved: t.behavior, baseR: t.r, rTarget: t.r,   // 첫 특수공격은 10~15초 뒤부터
       laserCd: LASER_COOLDOWN * 0.5,   // 스폰 후 첫 레이저는 ~15초 뒤부터 (이후 30초 간격)
@@ -767,8 +767,9 @@ export class GalSim {
       const off = (e.phase % 2) ? Math.PI / 4 : 0;
       for (let k = 0; k < 4; k++) {
         const a = off + k * (Math.PI / 2);
-        this.fireBullet(e, a, sp);
-        this.fireBullet(e, a, sp * 0.6);
+        this.fireBullet(e, a, sp);         // 바깥
+        this.fireBullet(e, a, sp * 0.8);   // 중간 (겹 추가)
+        this.fireBullet(e, a, sp * 0.6);   // 안쪽
       }
     } else { // spread: 가장 가까운 플레이어를 향한 부채꼴
       if (!tgt) return;
@@ -1070,7 +1071,7 @@ export class GalSim {
         if (tgt) e.aim = Math.atan2(tgt.y - e.y, tgt.x - e.x);
         if (!e.mode || e.mode === "normal") {
           e.cooldown -= dtSec;
-          if (e.cooldown <= 0) { e.cooldown = 10 + this.rng() * 5; this.fireBossVolley(e, tgt); }   // 투사체 발사 간격 10~15초 랜덤
+          if (e.cooldown <= 0) { e.cooldown = 5 + this.rng() * 5; this.fireBossVolley(e, tgt); }   // 투사체 발사 간격 5~10초 랜덤
         }
       } else if (e.gun) {
         const tgt = this.nearestTarget(e);

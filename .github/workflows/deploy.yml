@@ -14,27 +14,35 @@ jobs:
       - name: Pull, build, restart on this laptop
         shell: powershell
         run: |
+          Start-Transcript -Path C:\workspace\ci-deploy.log -Force | Out-Null
           $ErrorActionPreference = "Stop"
-          $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
-          git config --global --add safe.directory C:/workspace/galspanic
+          try {
+            $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
+            # 러너는 SYSTEM 으로 돌고 repo 는 사용자 소유 -> dubious ownership 방지
+            git config --global --add safe.directory '*'
 
-          Set-Location C:\workspace\galspanic
-          git fetch origin main
-          git reset --hard origin/main
+            Set-Location C:\workspace\galspanic
+            git fetch origin main
+            git reset --hard origin/main
 
-          Set-Location C:\workspace\galspanic\server
-          npm ci
-          npm run build
+            Set-Location C:\workspace\galspanic\server
+            npm ci
+            npm run build
 
-          # 서버(예약작업) 재시작
-          schtasks /end /tn GalspanicServer 2>$null
-          Start-Sleep 1
-          Get-NetTCPConnection -LocalPort 2567 -State Listen -ErrorAction SilentlyContinue |
-            ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
-          Start-Sleep 1
-          schtasks /run /tn GalspanicServer
+            # 서버(예약작업) 재시작
+            schtasks /end /tn GalspanicServer 2>$null
+            Start-Sleep 1
+            Get-NetTCPConnection -LocalPort 2567 -State Listen -ErrorAction SilentlyContinue |
+              ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+            Start-Sleep 1
+            schtasks /run /tn GalspanicServer
 
-          # 헬스체크
-          Start-Sleep 6
-          $h = Invoke-RestMethod http://localhost:2567/health -TimeoutSec 5
-          Write-Host "deployed OK, health: $($h | ConvertTo-Json -Compress)"
+            Start-Sleep 6
+            $h = Invoke-RestMethod http://localhost:2567/health -TimeoutSec 5
+            Write-Host "deployed OK, health: $($h | ConvertTo-Json -Compress)"
+          } catch {
+            Write-Host "DEPLOY FAILED: $($_.Exception.Message)"
+            Stop-Transcript | Out-Null
+            exit 1
+          }
+          Stop-Transcript | Out-Null

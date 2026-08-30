@@ -1,3 +1,4 @@
+import "./loadenv";   // .env → process.env (가장 먼저)
 import http from "http";
 import path from "path";
 import express from "express";
@@ -5,6 +6,7 @@ import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { GameRoom } from "./GameRoom";
 import { IMAGE_POOL } from "./constants";
+import { supaReady } from "./supa";
 
 const port = Number(process.env.PORT || 2567);
 const host = process.env.HOST || "0.0.0.0"; // bind all interfaces so LAN/tunnel clients can reach us
@@ -44,7 +46,7 @@ app.use("/images", express.static(path.join(__dirname, "..", "public", "images")
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 // 클라이언트가 시작 화면에서 이 값을 읽어 dev 전용 스테이지 선택 UI 노출 여부를 정한다.
-app.get("/config", (_req, res) => res.json({ dev: DEV, imageCount: IMAGE_POOL.length }));
+app.get("/config", (_req, res) => res.json({ dev: DEV, imageCount: IMAGE_POOL.length, supaReady: supaReady() }));
 // 현재 접속자 수(모든 game 방 합산)와 방 개수 — 메인화면에 표시.
 app.get("/stats", async (_req, res) => {
   try {

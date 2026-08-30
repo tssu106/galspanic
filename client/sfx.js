@@ -34,6 +34,11 @@ export function sfxClear() {
   [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.5, "triangle", 0.17));
   tone(1568, 0.5, 0.6, "sine", 0.11);
 }
+// 아이템 획득(파워업): 짧게 위로 튀는 두 음 블립 (클리어보다 가볍게)
+export function sfxItem() {
+  tone(660, 0, 0.09, "square", 0.12);
+  tone(990, 0.06, 0.14, "triangle", 0.14);
+}
 // 게임 오버: 하강 톤
 export function sfxGameover() {
   [440, 392, 330, 262].forEach((f, i) => tone(f, i * 0.16, 0.5, "sawtooth", 0.13));

@@ -30,7 +30,16 @@ const CAPTURE_SCORE: Record<string, number> = {
   blob:   250,   // 느린 방황 (Lv2+)
   ghost:  300,   // 예측불가 방황 (Lv2+)
   dart:   500,   // 빠른 추적자 (Lv3+)
-  gunner: 700,   // 원거리 포수 (Lv4+, 최고 등급)
+  gunner: 700,   // 원거리 포수 (Lv4+)
+  // 특수 몬스터 (등급별)
+  splitter: 350,  // 분열 (Lv2+)
+  bomber:   450,  // 자폭 (Lv3+)
+  weaver:   500,  // 거미줄 (Lv4+)
+  sniper:   800,  // 유도탄 저격 (Lv5+)
+  shielder: 600,  // 무적 주기 (Lv5+)
+  blinker:  650,  // 순간이동 (Lv6+)
+  phantom:  700,  // 은신 (Lv6+)
+  patrol:   750,  // 추격 순찰 (Lv7+)
   // 보스: 덩치 크고 다방향 난사. 포획 시 큰 점수.
   boss_ring:   2500,
   boss_spiral: 3200,
@@ -81,6 +90,18 @@ const BOSS_SPECIALS: Record<string, string[]> = {
   boss_cross:  ["cross_laser", "corruption", "summon"], // 십자 레이저 + 오염 자국 + 졸개 소환
 };
 
+// 아이템 효과
+const STAMINA_REARM = STAMINA_MAX * 0.35;   // 소진 후 이만큼 회복돼야 다시 질주 가능(핑퐁 방지)
+const FREEZE_SEC = 4;      // 프리즈: 적 정지 시간(초)
+const MISSILE_SPEED = 44;  // 유도 미사일 속도(셀/초) — 적보다 훨씬 빨라 반드시 따라잡는다
+const MISSILE_LIFE = 4;    // 미사일 수명(초) — 표적이 있는 한 소멸하지 않음(잡을 적이 없을 때만)
+const MISSILE_COUNT = 3;   // 미사일 아이템 1개당 발사 수
+// 맵 아이템 등장/소멸: 라운드 내내 랜덤 간격으로 가끔 하나씩 생겨 잠깐 유지되다 깜빡이며 사라진다.
+const ITEM_LIFE = 10;        // 맵에 유지되는 시간(초)
+const ITEM_BLINK_SEC = 2.2;  // 소멸 직전 깜빡이기 시작하는 남은 시간(초)
+const ITEM_SPAWN_MIN = 6;    // 다음 아이템까지 최소 간격(초)
+const ITEM_SPAWN_MAX = 14;   // 다음 아이템까지 최대 간격(초)
+const ITEM_MAX_ON_MAP = 3;   // 동시에 존재 가능한 최대 아이템 수
 // 거미줄(감속 필드)
 const WEB_SLOW = 2.0;      // 거미줄 위 이동 시간 배수(느려짐)
 const WEB_LIFE = 9;        // 거미줄 지속(초)
@@ -89,21 +110,38 @@ const WEB_R = 6;           // 한 번에 까는 반경(셀)
 const BEAM_LEN = Math.hypot(GRID_W, GRID_H);   // 맵을 가로지르는 길이
 const BEAM_CARVE_EVERY = 0.1;                  // 카브(맵 삭제) 간격(초) — 매 틱 삭제 방지
 const LASER_COOLDOWN = 30;                     // 보스별 레이저 재사용 대기(초) — 30초에 한 번꼴
+// 보스 크기 변화: 시간이 갈수록 서서히 커지고(상한), 미사일에 맞으면 작아진다(하한).
+// 레이저 두께(w = e.r)도 크기에 비례하므로 함께 얇아지고 두꺼워진다.
+const BOSS_GROW_RATE = 0.25;                   // 초당 baseR 증가량(셀)
+const BOSS_GROW_MAX = 1.8;                     // 최대 크기 = 스폰 크기 × 1.8
+const BOSS_SHRINK_HIT = 0.8;                   // 미사일 1발 명중 시 크기 배율(곱)
+const BOSS_SHRINK_MIN = 0.55;                  // 최소 크기 = 스폰 크기 × 0.55
 const isLaser = (name: string) => name === "laser_sweep" || name === "cross_laser";
 
 type Behavior = "bounce" | "wander" | "hunt" | "turret";
 interface EnemyType {
   key: string; speed: number; behavior: Behavior; shape: string;
   minLevel: number; weight: number; gun?: boolean; fireEvery?: number;
+  special?: string;   // 특수 능력: split/bomb/web/snipe/shield/blink/stealth/patrol
 }
 // speed is a multiplier on the level's base enemySpeed; size derives from speed.
+// 뒤 레벨일수록 강한/특수한 종류가 섞인다(minLevel 로 난이도 스테이징).
 const ENEMY_TYPES: EnemyType[] = [
   { key: "star",   speed: 1.00, behavior: "bounce", shape: "star",     minLevel: 1, weight: 3 },
   { key: "saw",    speed: 1.15, behavior: "bounce", shape: "saw",      minLevel: 1, weight: 2 },
   { key: "blob",   speed: 0.70, behavior: "wander", shape: "blob",     minLevel: 2, weight: 2 },
   { key: "ghost",  speed: 0.90, behavior: "wander", shape: "ghost",    minLevel: 2, weight: 1 },
-  { key: "gunner", speed: 0.55, behavior: "turret", shape: "turret",   minLevel: 4, weight: 2, gun: true, fireEvery: 2.4 },
   { key: "dart",   speed: 1.55, behavior: "hunt",   shape: "triangle", minLevel: 3, weight: 2 },
+  { key: "gunner", speed: 0.55, behavior: "turret", shape: "turret",   minLevel: 4, weight: 2, gun: true, fireEvery: 2.4 },
+  // ── 특수 몬스터 (레벨별로 점점 등장) ──
+  { key: "splitter", speed: 0.85, behavior: "bounce", shape: "splitter", minLevel: 2, weight: 2, special: "split" },   // 포획되면 2마리로 분열
+  { key: "bomber",   speed: 0.80, behavior: "wander", shape: "bomber",   minLevel: 3, weight: 2, special: "bomb" },    // 포획 시 사방 폭발탄
+  { key: "weaver",   speed: 0.75, behavior: "wander", shape: "weaver",   minLevel: 4, weight: 2, special: "web" },     // 지나간 자리에 거미줄
+  { key: "sniper",   speed: 0.45, behavior: "turret", shape: "sniper",   minLevel: 5, weight: 2, gun: true, fireEvery: 3.6, special: "snipe" }, // 유도탄 저격
+  { key: "shielder", speed: 0.80, behavior: "bounce", shape: "shielder", minLevel: 5, weight: 2, special: "shield" },  // 주기적 무적(포획 불가)
+  { key: "blinker",  speed: 0.95, behavior: "wander", shape: "blinker",  minLevel: 6, weight: 2, special: "blink" },   // 가끔 순간이동
+  { key: "phantom",  speed: 0.90, behavior: "wander", shape: "phantom",  minLevel: 6, weight: 1, special: "stealth" }, // 주기적 은신(반투명)
+  { key: "patrol",   speed: 1.35, behavior: "hunt",   shape: "patrol",   minLevel: 7, weight: 2, special: "patrol" },  // 선 긋는 플레이어 추격
 ];
 
 export interface SimPlayer {
@@ -114,6 +152,7 @@ export interface SimPlayer {
   heldDir: [number, number] | null;
   boost: boolean;            // Shift held (sprint requested)
   boosting: boolean;         // actually sprinting this tick (requested + moving + can afford)
+  exhausted: boolean;        // 스태미너 소진 후 잠금 — REARM 까지 회복해야 다시 질주 가능
   drawing: boolean;
   retreating: boolean;
   lives: number;
@@ -137,7 +176,13 @@ export interface SimEnemy {
   boss?: boolean; pattern?: BossPattern; bullets?: number; phase?: number;   // 보스 전용
   // 보스 행동/특수 패턴: 평상시("normal") ↔ 시그니처 특수를 번갈아 쓴다. mode=현재 특수명,
   // modeT=남은 시간, subT=하위 타이머(연속 발사/카브용).
-  mode?: string; modeT?: number; subT?: number; baseSpeed?: number; fireEveryBase?: number; behaviorSaved?: Behavior; baseR?: number; rTarget?: number; forceLaser?: boolean; laserCd?: number;
+  mode?: string; modeT?: number; subT?: number; baseSpeed?: number; fireEveryBase?: number; behaviorSaved?: Behavior; baseR?: number; baseR0?: number; rTarget?: number; forceLaser?: boolean; laserCd?: number;
+  // 특수 몬스터 상태
+  special?: string;      // split/bomb/web/snipe/shield/blink/stealth/patrol
+  gen?: number;          // splitter 세대(1이면 더 안 쪼개짐)
+  abilT?: number;        // 능력 타이머(거미줄 배출/텔레포트/상태 전환 간격)
+  shieldOn?: boolean;    // shielder: 현재 무적인지 (무적이면 포획 불가)
+  hidden?: boolean;      // phantom: 현재 은신(반투명)인지
 }
 
 export interface SimProjectile { x: number; y: number; vx: number; vy: number; life: number; r: number; homing?: boolean; }
@@ -163,6 +208,12 @@ export class GalSim {
   private webTimers = new Map<number, number>();   // 거미줄 셀 → 남은 수명(초)
   webDirty = new Set<number>();        // 변경된 거미줄 셀 (룸이 동기화)
   captureEvents: CaptureEvent[] = [];   // drained by the room, broadcast to clients
+  // 아이템(맵 위 파워업) / 미사일 / 프리즈
+  items: { x: number; y: number; kind: string; life: number; blink: boolean }[] = [];
+  private itemSpawnT = 0;               // 다음 아이템 스폰까지 남은 시간(초)
+  missiles: { x: number; y: number; vx: number; vy: number; life: number; owner: number; target: SimEnemy | null }[] = [];
+  freezeT = 0;                          // >0 이면 적 정지(프리즈 아이템)
+  itemEvents: { x: number; y: number; kind: string; owner: number }[] = [];   // 획득 연출용 (룸이 drain)
   warpEvents: BossEvent[] = [];         // 블랙홀 예고 시작 이벤트 (룸이 drain → "warp" 브로드캐스트)
   // 예고 중인 블랙홀들. 타이머가 끝나면 맵을 원형으로 지우고 플레이어를 죽인 뒤 보스를 생성한다.
   private pendingWarps: { x: number; y: number; type: BossType; t: number }[] = [];
@@ -211,6 +262,7 @@ export class GalSim {
     this.claimedInterior = 0;
     this.projectiles = [];
     this.captureEvents = [];
+    this.items = []; this.missiles = []; this.freezeT = 0; this.itemEvents = [];
     this.warpEvents = [];
     this.pendingWarps = [];
     this.beams = [];
@@ -231,7 +283,7 @@ export class GalSim {
       const [sx, sy] = this.pickSafeSpawn(this.revealX, this.revealY);   // 밝은 구역 위에서 시작
       p.x = sx; p.y = sy; p.spawnX = sx; p.spawnY = sy;
       p.drawing = false; p.retreating = false; p.out = false; p.lives = START_LIVES;
-      p.boost = false; p.boosting = false; p.stamina = STAMINA_MAX;
+      p.boost = false; p.boosting = false; p.exhausted = false; p.stamina = STAMINA_MAX;
       p.claimed = 0; p.traps = 0; p.bonus = 0; p.acc = 0; p.idle = 0;
       p.drawOriginX = sx; p.drawOriginY = sy; p.trailCells.length = 0;
       p.invuln = INVULN_SEC;   // 라운드 시작 직후 잠시 무적
@@ -247,6 +299,17 @@ export class GalSim {
       const [ex, ey] = this.randomEmptySpot();
       this.enemies.push(this.makeEnemy(ex, ey));
     }
+    // 아이템은 라운드 내내 랜덤 간격으로 하나씩 등장한다. 시작 직후 첫 아이템까지 약간의 딜레이.
+    this.itemSpawnT = 2 + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN);
+  }
+
+  // 맵 위 빈 셀에 아이템 하나를 놓는다(동시 존재 상한 이하일 때만). 점유하며 획득한다.
+  private spawnOneItem() {
+    if (this.items.length >= ITEM_MAX_ON_MAP) return;
+    const KINDS = ["missile", "freeze", "life"];
+    const [ex, ey] = this.randomEmptySpot();
+    const kind = KINDS[Math.floor(this.rng() * KINDS.length)];
+    this.items.push({ x: ex, y: ey, kind, life: ITEM_LIFE, blink: false });
   }
 
   // 라운드 시작용 안전지대: 내부의 랜덤 위치에 START_REVEAL_RATIO 만큼 직사각형으로 밝힌다.
@@ -291,6 +354,24 @@ export class GalSim {
     return [COLS / 2, ROWS / 2];
   }
 
+  // (cx,cy) 에서 가장 가까운 EMPTY(열린) 셀을 나선형으로 찾는다. 못 찾으면 randomEmptySpot 폴백.
+  // splitter 자식이 방금 점유된 영역 안에 갇히지 않도록 열린 공간으로 내보낼 때 쓴다.
+  private nearestEmptySpot(cx: number, cy: number): [number, number] {
+    const sx = Math.floor(cx), sy = Math.floor(cy);
+    if (inBounds(sx, sy) && this.grid[idx(sx, sy)] === EMPTY) return [sx + 0.5, sy + 0.5];
+    const maxR = Math.max(COLS, ROWS);
+    for (let r = 1; r < maxR; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;   // 현재 반경 링의 테두리만 검사
+          const x = sx + dx, y = sy + dy;
+          if (inBounds(x, y) && this.grid[idx(x, y)] === EMPTY) return [x + 0.5, y + 0.5];
+        }
+      }
+    }
+    return this.randomEmptySpot();
+  }
+
   // 현재 안전지대(claimed)의 프론티어 셀들 — 빈칸과 맞닿은 가장자리. (재)생성 후보.
   private collectFrontier(): number[] {
     const out: number[] = [];
@@ -331,7 +412,7 @@ export class GalSim {
     // slower monsters are bigger (visual only; collisions use the center cell). Base bumped
     // 1.1 -> 2.2 so monsters stay clearly visible on the larger, zoomed-out map.
     const r = 2.2 / Math.pow(t.speed, 0.7);
-    return {
+    const e: SimEnemy = {
       x, y,
       vx: Math.cos(ang) * sp || sp,
       vy: Math.sin(ang) * sp || sp,
@@ -339,7 +420,72 @@ export class GalSim {
       spin: this.rng() * 6, wanderT: 0.4 + this.rng() * 1.0,
       gun: !!t.gun, fireEvery: t.fireEvery || 0, aim: ang,
       cooldown: (t.fireEvery || 2) * (0.5 + this.rng() * 0.8),
+      special: t.special,
     };
+    // 특수 능력 초기 타이머
+    if (t.special === "web") e.abilT = 0.8 + this.rng();
+    else if (t.special === "blink") e.abilT = 2 + this.rng() * 3;
+    else if (t.special === "shield") { e.abilT = 3 + this.rng() * 2; e.shieldOn = false; }
+    else if (t.special === "stealth") { e.abilT = 2 + this.rng() * 2; e.hidden = false; }
+    return e;
+  }
+
+  // splitter 가 포획될 때 나오는 작은 자식 (더 안 쪼개짐)
+  private makeSplitChild(x: number, y: number): SimEnemy {
+    const ang = this.rng() * Math.PI * 2;
+    const sp = this.enemySpeed * 1.25;
+    return {
+      x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+      kind: "splitter", shape: "splitter", behavior: "bounce", speed: sp, r: 1.4,
+      spin: this.rng() * 6, wanderT: 0.5, gun: false, fireEvery: 0, aim: ang, cooldown: 0,
+      special: "split", gen: 1,
+    };
+  }
+
+  // 특수 몬스터의 주기적 능력 (이동 전에 매 틱 호출). sniper/patrol 은 이동·발사 로직에서 처리.
+  private updateSpecial(e: SimEnemy, dt: number) {
+    if (e.abilT === undefined) return;
+    e.abilT -= dt;
+    if (e.abilT > 0) return;
+    switch (e.special) {
+      case "web":                                            // weaver: 지나간 자리에 거미줄
+        e.abilT = 1.1; this.layWeb(e.x, e.y, 2); break;
+      case "blink": {                                        // blinker: 순간이동
+        e.abilT = 3 + this.rng() * 3;
+        const [bx, by] = this.randomEmptySpot(); e.x = bx; e.y = by; break;
+      }
+      case "shield":                                         // shielder: 무적 ↔ 취약 전환
+        e.shieldOn = !e.shieldOn; e.abilT = e.shieldOn ? 2.5 : 3.5; break;
+      case "stealth":                                        // phantom: 은신 ↔ 노출 전환
+        e.hidden = !e.hidden; e.abilT = e.hidden ? 1.8 : 2.6; break;
+    }
+  }
+
+  // 아이템 효과 적용
+  private applyItem(p: SimPlayer, kind: string) {
+    switch (kind) {
+      case "life":   p.lives += 1; break;                                 // 추가 목숨
+      case "freeze": this.freezeT = Math.max(this.freezeT, FREEZE_SEC); break;  // 적 정지
+      case "missile": this.fireMissiles(p); break;                        // 유도 미사일 발사
+    }
+  }
+
+  // 플레이어 위치에서 유도 미사일 여러 발 발사. 발사 순간 가까운 적부터 서로 다른 표적을
+  // 하나씩 배정 → 여러 마리를 동시에, 각 미사일이 반드시 한 마리를 명중·포획한다.
+  private fireMissiles(p: SimPlayer) {
+    const foes = this.enemies.filter(e => !e.boss).sort(
+      (a, b) => ((a.x - p.x) ** 2 + (a.y - p.y) ** 2) - ((b.x - p.x) ** 2 + (b.y - p.y) ** 2));
+    for (let i = 0; i < MISSILE_COUNT; i++) {
+      const target = foes.length ? foes[i % foes.length]! : null;
+      // 표적 방향으로 발사(없으면 방사형). 살짝 흩뿌려 일제사격처럼 보이게 한 뒤 유도가 끌어당긴다.
+      const a = target
+        ? Math.atan2(target.y - p.y, target.x - p.x) + (this.rng() - 0.5) * 0.6
+        : (i / MISSILE_COUNT) * Math.PI * 2 + this.rng();
+      this.missiles.push({
+        x: p.x, y: p.y, vx: Math.cos(a) * MISSILE_SPEED, vy: Math.sin(a) * MISSILE_SPEED,
+        life: MISSILE_LIFE, owner: p.owner, target,
+      });
+    }
   }
 
   // spawn one enemy at a random empty (and trail-free) cell
@@ -378,7 +524,7 @@ export class GalSim {
       spin: this.rng() * 6, wanderT: 0.5 + this.rng(),
       gun: false, fireEvery: t.fireEvery, cooldown: 5 + this.rng() * 5, aim: ang,   // 첫 투사체 발사는 5~10초 뒤부터
       boss: true, pattern: t.pattern, bullets: t.bullets, phase: 0,
-      mode: "normal", modeT: 10 + this.rng() * 5, baseSpeed: sp, fireEveryBase: t.fireEvery, behaviorSaved: t.behavior, baseR: t.r, rTarget: t.r,   // 첫 특수공격은 10~15초 뒤부터
+      mode: "normal", modeT: 10 + this.rng() * 5, baseSpeed: sp, fireEveryBase: t.fireEvery, behaviorSaved: t.behavior, baseR: t.r, baseR0: t.r, rTarget: t.r,   // 첫 특수공격은 10~15초 뒤부터
       laserCd: LASER_COOLDOWN * 0.5,   // 스폰 후 첫 레이저는 ~15초 뒤부터 (이후 30초 간격)
     });
   }
@@ -502,8 +648,23 @@ export class GalSim {
     const c = Math.hypot(e.vx, e.vy) || 1; e.vx = e.vx / c * e.speed; e.vy = e.vy / c * e.speed;
   }
 
+  // 미사일이 보스에 명중 → 크기를 한 단계 줄인다(하한까지). r 을 즉시 당겨 반응감을 준다.
+  private shrinkBoss(e: SimEnemy) {
+    if (e.baseR == null || e.baseR0 == null) return;
+    const min = e.baseR0 * BOSS_SHRINK_MIN;
+    e.baseR = Math.max(min, e.baseR * BOSS_SHRINK_HIT);
+    e.rTarget = Math.max(min, (e.rTarget ?? e.baseR) * BOSS_SHRINK_HIT);
+    e.r = Math.max(min, e.r * BOSS_SHRINK_HIT);
+  }
+
   // 보스 행동/특수 패턴 스케줄러: 평상시(기본 발사) ↔ 보스별 시그니처 특수를 번갈아 쓴다.
   private updateBossMode(e: SimEnemy, dtSec: number) {
+    // 시간이 갈수록 baseR 을 상한까지 서서히 키운다. 크기는 곧 레이저 두께(w=e.r)에도 반영된다.
+    if (e.baseR != null && e.baseR0 != null) {
+      const cap = e.baseR0 * BOSS_GROW_MAX;
+      if (e.baseR < cap) e.baseR = Math.min(cap, e.baseR + BOSS_GROW_RATE * dtSec);
+      if (!e.mode || e.mode === "normal") e.rTarget = e.baseR;   // 평상시 목표 크기 = 현재 baseR
+    }
     // 크기를 목표값(rTarget)으로 매 틱 부드럽게 접근 (돌진 시 서서히 커졌다 작아짐).
     if (e.rTarget != null && e.r !== e.rTarget) {
       e.r += (e.rTarget - e.r) * Math.min(1, dtSec * 7);
@@ -797,7 +958,7 @@ export class GalSim {
     const [sx, sy] = this.pickSafeSpawn(this.revealX, this.revealY);   // 밝은 구역 위에서 합류
     const p: SimPlayer = {
       sessionId, owner, x: sx, y: sy, spawnX: sx, spawnY: sy,
-      heldDir: null, boost: false, boosting: false, stamina: STAMINA_MAX, drawing: false, retreating: false, lives: START_LIVES,
+      heldDir: null, boost: false, boosting: false, exhausted: false, stamina: STAMINA_MAX, drawing: false, retreating: false, lives: START_LIVES,
       claimed: 0, traps: 0, bonus: 0, out: false, acc: 0, idle: 0,
       drawOriginX: sx, drawOriginY: sy, trailCells: [], invuln: INVULN_SEC,
     };
@@ -920,6 +1081,8 @@ export class GalSim {
     const trapThreshold = this.totalInterior * TRAP_RATIO;
     const claimIt = new Uint8Array(nComp);
     const trapped = new Set<SimEnemy>();
+    const splits: [number, number][] = [];   // splitter: 분열 위치
+    const bombs: [number, number][] = [];     // bomber: 폭발 위치
     let trapCount = 0, trapSX = 0, trapSY = 0;
     for (let id = 0; id < nComp; id++) {
       const es = enemiesOf[id];
@@ -927,7 +1090,12 @@ export class GalSim {
       const keepOpen = (id === mainId) && size[id] > trapThreshold;
       if (!keepOpen) {
         claimIt[id] = 1;
-        for (const e of es) { trapped.add(e); trapSX += e.x; trapSY += e.y; trapCount++; }
+        for (const e of es) {
+          if (e.special === "shield" && e.shieldOn) continue;       // 무적 상태면 포획 불가(생존)
+          trapped.add(e); trapSX += e.x; trapSY += e.y; trapCount++;
+          if (e.special === "split" && (e.gen || 0) < 1) splits.push([e.x, e.y]);
+          else if (e.special === "bomb") bombs.push([e.x, e.y]);
+        }
       }
     }
     for (let i = 0; i < N; i++)
@@ -938,12 +1106,39 @@ export class GalSim {
       let bonus = 0;
       for (const e of trapped) bonus += CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT;
       this.enemies = this.enemies.filter(e => !trapped.has(e));
+      // splitter: 잡히면 작은 2마리로 분열. 점유된 자리 대신 가장 가까운 열린 칸으로 내보내
+      // 자식이 갇히지 않게 한다.
+      for (const [sx, sy] of splits) {
+        const [ex, ey] = this.nearestEmptySpot(sx, sy);
+        this.enemies.push(this.makeSplitChild(ex, ey));
+        this.enemies.push(this.makeSplitChild(ex, ey));
+      }
+      // bomber: 잡히면 사방으로 폭발탄
+      for (const [bx, by] of bombs) {
+        const n = 10;
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * Math.PI * 2;
+          this.projectiles.push({ x: bx, y: by, vx: Math.cos(a) * BULLET_SPEED, vy: Math.sin(a) * BULLET_SPEED, life: BULLET_LIFE, r: 0.9 });
+        }
+      }
       p.traps += trapCount;
       p.bonus += bonus;
       this.captureEvents.push({
         x: trapSX / trapCount, y: trapSY / trapCount,
         count: trapCount, bonus, owner: p.owner,
       });
+    }
+
+    // 아이템 획득: 방금 점유(CLAIMED)된 셀 위의 아이템을 이 플레이어가 먹는다.
+    if (this.items.length) {
+      const remain: typeof this.items = [];
+      for (const it of this.items) {
+        if (this.grid[idx(Math.floor(it.x), Math.floor(it.y))] === CLAIMED) {
+          this.applyItem(p, it.kind);
+          this.itemEvents.push({ x: it.x, y: it.y, kind: it.kind, owner: p.owner });
+        } else remain.push(it);
+      }
+      this.items = remain;
     }
 
     p.claimed += gained;
@@ -1008,7 +1203,11 @@ export class GalSim {
 
       // Sprint (Shift) moves BOOST_MULT x faster while STAMINA lasts. Stamina is its own gauge
       // (not the capture score): it drains while sprinting and refills otherwise, both slowly.
-      const canBoost = !!(p.boost && held && p.stamina > 0);
+      // 소진되면 exhausted 잠금 → REARM 까지 회복해야 다시 질주 가능. (없으면 0 부근에서 매 프레임
+      // 회복↔소모를 반복하며 스태미너가 0인데도 계속 빨라지는 버그가 생긴다.)
+      if (p.stamina <= 0) p.exhausted = true;
+      else if (p.stamina >= STAMINA_REARM) p.exhausted = false;
+      const canBoost = !!(p.boost && held && p.stamina > 0 && !p.exhausted);
       p.boosting = canBoost;
       if (canBoost) p.stamina = Math.max(0, p.stamina - STAMINA_DRAIN * dtSec);
       else          p.stamina = Math.min(STAMINA_MAX, p.stamina + STAMINA_RECOVER * dtSec);
@@ -1024,10 +1223,27 @@ export class GalSim {
       }
     }
 
+    // 맵 아이템: 랜덤 간격으로 가끔 하나씩 등장하고, ITEM_LIFE 초 뒤 사라진다(막판엔 깜빡임).
+    this.itemSpawnT -= dtSec;
+    if (this.itemSpawnT <= 0) {
+      this.spawnOneItem();
+      this.itemSpawnT = ITEM_SPAWN_MIN + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN);
+    }
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i]!;
+      it.life -= dtSec;
+      if (it.life <= 0) { this.items.splice(i, 1); continue; }
+      it.blink = it.life <= ITEM_BLINK_SEC;   // 소멸 직전 깜빡임 신호(클라 렌더)
+    }
+
+    // 프리즈 아이템: 모든 적이 잠시 정지 (이동·발사·능력 멈춤)
+    this.freezeT = Math.max(0, this.freezeT - dtSec);
     // enemies: per-archetype steering, bounce, kill on trail contact, shoot
     for (const e of this.enemies) {
       e.spin += dtSec * 8;
+      if (this.freezeT > 0) continue;   // 프리즈 중엔 적 로직 전체 정지
       if (e.boss) this.updateBossMode(e, dtSec);   // 주기적 격노(추격/질주/난사) 전환
+      else if (e.special) this.updateSpecial(e, dtSec);   // 특수 몬스터 능력(거미줄/텔레포트/무적/은신)
       // turrets are stationary emplacements — they never move, only aim and fire (below)
       if (e.behavior !== "turret") {
         if (e.behavior === "wander") {
@@ -1080,10 +1296,11 @@ export class GalSim {
         e.cooldown -= dtSec;
         if (e.cooldown <= 0 && tgt) {
           e.cooldown = e.fireEvery * (0.85 + this.rng() * 0.3);
+          const homing = e.special === "snipe";   // sniper: 유도탄
           this.projectiles.push({
             x: e.x, y: e.y,
             vx: Math.cos(e.aim) * BULLET_SPEED, vy: Math.sin(e.aim) * BULLET_SPEED,
-            life: BULLET_LIFE, r: 0.9,
+            life: BULLET_LIFE, r: 0.9, homing,
           });
         }
       }
@@ -1121,6 +1338,53 @@ export class GalSim {
         }
       }
       if (gone) this.projectiles.splice(k, 1);
+    }
+
+    // 유도 미사일(미사일 아이템): 배정된 표적을 급선회로 추적한다. 미사일이 적보다 훨씬 빨라
+    // 반드시 따라잡고, 표적이 있는 한 수명/경계로 사라지지 않으므로 무조건 명중·포획한다.
+    for (let k = this.missiles.length - 1; k >= 0; k--) {
+      const m = this.missiles[k];
+      // 배정 표적이 사라졌으면 재지정: 일반 몬스터 우선, 없으면 보스(크기 축소용)를 노린다.
+      if (!m.target || this.enemies.indexOf(m.target) < 0) {
+        let tgt: SimEnemy | null = null, bd = Infinity;
+        for (const e of this.enemies) { if (e.boss) continue; const d = (e.x - m.x) ** 2 + (e.y - m.y) ** 2; if (d < bd) { bd = d; tgt = e; } }
+        if (!tgt) for (const e of this.enemies) { if (!e.boss) continue; const d = (e.x - m.x) ** 2 + (e.y - m.y) ** 2; if (d < bd) { bd = d; tgt = e; } }
+        m.target = tgt;
+      }
+      if (m.target) {
+        // 강한 유도: 표적 방향으로 급선회하되 항상 전속력 유지.
+        const dx = m.target.x - m.x, dy = m.target.y - m.y, dd = Math.hypot(dx, dy) || 1;
+        const turn = Math.min(1, dtSec * 12);
+        m.vx += ((dx / dd) * MISSILE_SPEED - m.vx) * turn;
+        m.vy += ((dy / dd) * MISSILE_SPEED - m.vy) * turn;
+        const c = Math.hypot(m.vx, m.vy) || 1; m.vx = m.vx / c * MISSILE_SPEED; m.vy = m.vy / c * MISSILE_SPEED;
+      }
+      m.x += m.vx * dtSec; m.y += m.vy * dtSec; m.life -= dtSec;
+      // 명중 판정: 일반 몬스터를 우선 포획, 없으면 닿은 보스를 축소한다.
+      let hit = -1, bossHit = -1;
+      for (let j = 0; j < this.enemies.length; j++) {
+        const e = this.enemies[j];
+        const rr = e.r + 1.4;
+        if ((e.x - m.x) ** 2 + (e.y - m.y) ** 2 < rr * rr) {
+          if (e.boss) { if (bossHit < 0) bossHit = j; }
+          else { hit = j; break; }
+        }
+      }
+      if (hit >= 0) {
+        const e = this.enemies[hit];
+        const bonus = CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT;
+        const p = this.players.find(q => q.owner === m.owner);
+        if (p) { p.bonus += bonus; p.traps += 1; }
+        this.enemies.splice(hit, 1);
+        this.captureEvents.push({ x: e.x, y: e.y, count: 1, bonus, owner: m.owner });   // 포획 연출 재사용
+        this.missiles.splice(k, 1); continue;
+      }
+      if (bossHit >= 0) {   // 보스에 명중 → 크기 축소(포획 아님). 레이저 두께(w=e.r)도 함께 얇아진다.
+        this.shrinkBoss(this.enemies[bossHit]!);
+        this.missiles.splice(k, 1); continue;
+      }
+      // 잡을 적이 없을 때만(표적 없음) 수명 종료로 소멸. 표적이 있으면 끝까지 추적한다.
+      if (!m.target && (m.life <= 0 || m.x < 0 || m.y < 0 || m.x >= COLS || m.y >= ROWS)) this.missiles.splice(k, 1);
     }
   }
 }

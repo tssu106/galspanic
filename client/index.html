@@ -185,6 +185,9 @@
                           background:rgba(0,0,0,.55); padding:1px 6px; border-radius:6px; }
   #gallery .gcell.locked { display:flex; align-items:center; justify-content:center; font-size:30px; }
   #gallery .gcell.locked::after { content:"🔒"; opacity:.4; }
+  #gallery .gneedlogin { grid-column:1/-1; text-align:center; color:var(--muted); font-size:15px; line-height:2; padding:40px 10px; }
+  #gallery .gneedlogin button { background:linear-gradient(90deg,#7c5cff,#6a4bff); color:#fff; border:0; border-radius:10px;
+                                padding:10px 22px; font-size:15px; font-weight:700; cursor:pointer; margin-top:10px; }
   #galleryView { position:fixed; inset:0; z-index:70; display:flex; flex-direction:column; align-items:center; justify-content:center;
                  gap:14px; padding:24px; background:rgba(3,4,10,.95); backdrop-filter:blur(6px); }
   #galleryView.hidden { display:none; }
@@ -195,6 +198,28 @@
   #galleryView .gvcap { color:#c9d0f0; font-weight:800; font-size:16px; }
   #galleryView .gvsave { background:linear-gradient(90deg,#37d39b,#22b07f); color:#fff; border:0; border-radius:10px;
                          padding:9px 16px; font-weight:800; font-size:14px; cursor:pointer; }
+  /* 로그인 모달 */
+  #login { position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center; padding:20px;
+           background:rgba(5,7,14,.9); backdrop-filter:blur(4px); }
+  #login.hidden { display:none; }
+  #login .lgwrap { background:var(--panel); border:1px solid #232a44; border-radius:16px; padding:24px; width:min(380px,94vw);
+                   display:flex; flex-direction:column; gap:12px; box-shadow:0 24px 70px rgba(0,0,0,.6); text-align:center; }
+  #login .lgtitle { font-size:19px; font-weight:800; }
+  #login .lgsub { color:var(--muted); font-size:12.5px; line-height:1.5; }
+  #login input { background:#0e1120; border:1px solid #2a3350; border-radius:10px; color:var(--ink); padding:11px 13px; font-size:15px; outline:none; }
+  #login input:focus { border-color:#ff5db1; }
+  #login .lgmsg { font-size:12.5px; min-height:16px; color:#ffb4c4; }
+  #login .lgmsg.ok { color:#a3e635; }
+  #login .lgbtns { display:flex; gap:8px; }
+  #login .lgprimary { flex:1; background:linear-gradient(90deg,#7c5cff,#6a4bff); color:#fff; border:0; border-radius:10px; padding:11px; font-size:15px; font-weight:700; cursor:pointer; }
+  #login .lgghost { flex:1; background:#232a44; color:var(--ink); border:0; border-radius:10px; padding:11px; font-size:15px; font-weight:700; cursor:pointer; }
+  #login .lgclose { background:none; border:0; color:var(--muted); font-size:13px; cursor:pointer; margin-top:2px; }
+  #login .lgswitch { font-size:13px; color:var(--muted); margin-top:2px; }
+  #login .lgswitch b { color:#7c5cff; cursor:pointer; font-weight:700; }
+  #login .lgswitch b:hover { text-decoration:underline; }
+  #login.mode-in #lgName { display:none; }   /* 로그인 모드에선 이름 칸 숨김 */
+  #start .authrow { display:flex; gap:8px; }
+  #start .authrow button { flex:1; }
   #chatHead { padding:9px 13px; font-size:12px; font-weight:700; letter-spacing:.6px;
               color:var(--muted); border-bottom:1px solid #232a44; display:flex;
               align-items:center; gap:7px; }
@@ -272,7 +297,11 @@
         <input id="codeInput" maxlength="16" placeholder="방 코드로 참가" autocomplete="off" />
         <button id="joinBtn">참가</button>
       </div>
-      <button id="galleryBtn" class="ghost">📖 도감 · 수집한 그림 <span id="galleryCount" class="gcount"></span></button>
+      <button id="galleryBtn" class="ghost">📖 도감 <span id="galleryCount" class="gcount"></span></button>
+      <div class="authrow">
+        <button id="loginBtn" class="ghost">🔑 로그인</button>
+        <button id="signupBtn" class="ghost">📝 회원가입</button>
+      </div>
       <div id="startErr" class="err"></div>
     </div>
   </div>
@@ -336,6 +365,21 @@
     <div class="gvbar"><span id="gvCap" class="gvcap"></span><button id="gvSave" class="gvsave">🖼 저장</button></div>
   </div>
 
+  <!-- 로그인 / 회원가입 모달 (모드 전환) -->
+  <div id="login" class="hidden mode-in">
+    <div class="lgwrap">
+      <div class="lgtitle" id="lgTitle">🔑 로그인</div>
+      <div class="lgsub" id="lgSub"></div>
+      <input id="lgName" type="text" maxlength="12" placeholder="플레이어 이름 (게임에서 표시)" autocomplete="nickname" />
+      <input id="lgEmail" type="email" placeholder="이메일" autocomplete="username" />
+      <input id="lgPass" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password" />
+      <div id="lgMsg" class="lgmsg"></div>
+      <button id="lgSubmit" class="lgprimary">로그인</button>
+      <div class="lgswitch" id="lgSwitch"></div>
+      <button id="lgClose" class="lgclose">닫기</button>
+    </div>
+  </div>
+
   <!-- dev 전용: 클릭하면 10초 카운트다운 후 보스 출현 -->
   <button id="devBossBtn" class="hidden" title="dev: 10초 뒤 보스 출현">🕳 보스 소환</button>
   <!-- dev 전용: 레이저 보스를 바로 소환(곧 레이저 발사) -->
@@ -352,7 +396,8 @@
 <script type="module">
 import { Client } from "https://esm.sh/colyseus.js@0.15.0";
 import { showCountdown3D, hideCountdown3D, renderCountdown3D } from "./countdown3d.js";
-import { initAudio, sfxCapture, sfxClear, sfxGameover } from "./sfx.js";
+import { initAudio, sfxCapture, sfxClear, sfxGameover, sfxItem } from "./sfx.js";
+import { onAuth, signIn, signUp, signOut, getToken, dbGetCollection } from "./supabase.js";
 
 // 서버 주소를 "이 페이지를 연 origin" 기준으로 자동 결정.
 // - 게임 서버(2567)가 이 페이지를 직접 서빙하는 경우(권장): 같은 origin으로 접속.
@@ -411,9 +456,13 @@ const preImg = new Image(); preImg.crossOrigin = "anonymous";
 async function connect(name, level, mode = "quick", code = "") {
   const client = new Client(WS_URL);
   // level 은 dev 서버에서만 서버가 신뢰한다 (프로덕션에선 무시되고 레벨 1로 시작).
-  const opts = level ? { name, level } : { name };
+  // token: 로그인했으면 Supabase access token 을 서버로 전달 → 서버가 검증해 클리어 시 도감 기록.
+  const token = await getToken();
+  const opts = { name };
+  if (level) opts.level = level;
+  if (token) opts.token = token;
   if (mode === "create") room = await client.create("game", { ...opts, private: true });   // 비공개 방
-  else if (mode === "join") room = await client.joinById(code, { name });                   // 코드로 특정 방
+  else if (mode === "join") room = await client.joinById(code, { ...opts });                 // 코드로 특정 방
   else room = await client.joinOrCreate("game", opts);                                       // 빠른 참가(순차 입장)
   statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
   // Keep this handler TRIVIAL: just latch the latest state. The heavy per-update work
@@ -432,6 +481,14 @@ async function connect(name, level, mode = "quick", code = "") {
     });
     sfxCapture(ev.count);   // 포획 효과음
   });
+  // 아이템 획득: 점유한 칸의 아이템을 먹으면 서버가 종류/위치를 알려준다 → 이름 팝업 + 효과음
+  room.onMessage("item", (ev) => {
+    flashes.push({
+      x: ev.x, y: ev.y, color: ITEM_COLOR[ev.kind] || "#fff", life: 1.4, ttl: 1.4,
+      text: `${ITEM_ICON[ev.kind] || "★"} ${ITEM_NAME[ev.kind] || "아이템!"}`,
+    });
+    sfxItem();    // 파워업 획득음
+  });
   // 블랙홀 예고: 그 자리에 블랙홀을 띄워 회피를 유도(예고가 끝나면 서버가 맵을 지우고 보스 등장)
   room.onMessage("warp", (ev) => {
     warps.push({ x: ev.x, y: ev.y, t0: performance.now(), burst: false });
@@ -445,31 +502,38 @@ async function connect(name, level, mode = "quick", code = "") {
 }
 
 // ---- 초기 화면: "게임 시작"을 눌러야 접속·합류한다 ----
-try { nameInput.value = localStorage.getItem("galspanic:name") || ""; } catch {}
+// 이름은 계정 기준(로그인) 또는 Guest(비로그인) — 직접 편집 불가. onAuth 가 값을 채운다.
+nameInput.value = "Guest"; nameInput.disabled = true;
 
 // ── 도감(컬렉션): 클리어한 그림을 각자 브라우저(localStorage)에 모아 개인 갤러리로 본다 ──
-const COLLECTION_KEY = "galspanic:collection";
 let imageCount = 0;                 // 전체 그림 수 (서버 /config 로 채움)
-let lastWonImageId = null;          // 이번 클리어에서 이미 도감에 넣었는지 추적
+let lastWonImageId = null;          // 이번 클리어에서 이미 도감에 표시했는지 추적
 const galleryEl = document.getElementById("gallery");
-function getCollection() {
-  try { return new Set(JSON.parse(localStorage.getItem(COLLECTION_KEY) || "[]")); } catch { return new Set(); }
-}
+// 도감은 계정 전용(로그인 필요). remoteCache = 로그인 시 도감 Set, null = 로그아웃(도감 없음).
+// 실제 unlock 기록은 서버가 하며(서버 권위), 여기 캐시는 즉시 표시용이다.
+let remoteCache = null;
+function getCollection() { return remoteCache ? new Set(remoteCache) : new Set(); }
 function addToCollection(imageId) {
-  if (!imageId) return;
-  const set = getCollection();
-  if (set.has(imageId)) return;
-  set.add(imageId);
-  try { localStorage.setItem(COLLECTION_KEY, JSON.stringify([...set])); } catch {}
+  if (!imageId || !remoteCache) return;   // 로그인 상태에서만 수집(서버가 durable 기록)
+  if (remoteCache.has(imageId)) return;
+  remoteCache.add(imageId);               // 즉시 표시용 optimistic 업데이트
   updateGalleryCount();
 }
 function updateGalleryCount() {
   const el = document.getElementById("galleryCount");
-  if (el) el.textContent = `(${getCollection().size}${imageCount ? " / " + imageCount : ""})`;
+  if (!el) return;
+  el.textContent = remoteCache ? `(${remoteCache.size}/${imageCount || "?"})` : "(로그인 필요)";
 }
 const artId = (i) => "art" + String(i).padStart(2, "0");   // 서버 명명과 일치 (art01.. art100)
 function openGallery() {
   const grid = document.getElementById("galleryGrid");
+  galleryEl.classList.remove("hidden");
+  if (!remoteCache) {   // 로그인 필요 — 도감은 계정 전용
+    document.getElementById("galleryProgress").textContent = "";
+    grid.innerHTML = `<div class="gneedlogin">🔑 로그인하면 수집한 그림을 볼 수 있어요.<br><button id="glLogin">로그인</button></div>`;
+    document.getElementById("glLogin").onclick = () => { closeGallery(); openLogin(); };
+    return;
+  }
   const owned = getCollection();
   const total = imageCount || owned.size || 1;
   grid.innerHTML = "";
@@ -528,6 +592,95 @@ document.addEventListener("keydown", (e) => {
   if (!galleryViewEl.classList.contains("hidden")) { closeGalleryView(); e.stopPropagation(); }
   else if (!galleryEl.classList.contains("hidden")) { closeGallery(); e.stopPropagation(); }
 }, true);
+
+// ── 로그인/회원가입 + 도감 클라우드 동기화 ──
+let accountName = null;   // 로그인 시 계정 플레이어 이름. null = 비로그인(게임에서 Guest).
+let authMode = "in";      // "in"=로그인, "up"=회원가입 (같은 팝업이 모드 전환)
+const loginEl = document.getElementById("login");
+const lgMsg = document.getElementById("lgMsg");
+function setAuthMode(mode) {
+  authMode = mode;
+  const login = mode === "in";
+  loginEl.classList.toggle("mode-in", login);
+  loginEl.classList.toggle("mode-up", !login);
+  document.getElementById("lgTitle").textContent = login ? "🔑 로그인" : "📝 회원가입";
+  document.getElementById("lgSub").innerHTML = login
+    ? "로그인하면 도감이 클라우드에 저장돼 어느 기기에서나 이어집니다."
+    : "이름·이메일·비밀번호로 <b>바로 가입</b>됩니다 (가입 즉시 로그인).";
+  document.getElementById("lgSubmit").textContent = login ? "로그인" : "회원가입";
+  document.getElementById("lgSwitch").innerHTML = login
+    ? '계정이 없으신가요? <b data-mode="up">회원가입</b>'
+    : '이미 계정이 있으신가요? <b data-mode="in">로그인</b>';
+  lgMsg.textContent = ""; lgMsg.className = "lgmsg";
+}
+function openLogin(mode = "in") {
+  setAuthMode(mode);
+  loginEl.classList.remove("hidden");
+  document.getElementById(mode === "up" ? "lgName" : "lgEmail").focus();
+}
+function closeLogin() { loginEl.classList.add("hidden"); }
+function updateLoginUI(user) {
+  const login = document.getElementById("loginBtn");
+  const signup = document.getElementById("signupBtn");
+  if (user) { login.textContent = "로그아웃"; login.dataset.in = "1"; signup.style.display = "none"; }
+  else { login.textContent = "🔑 로그인"; login.dataset.in = ""; signup.style.display = ""; }
+}
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  if (document.getElementById("loginBtn").dataset.in) await signOut();   // 로그아웃 (onAuth 가 처리)
+  else openLogin("in");
+});
+document.getElementById("signupBtn").addEventListener("click", () => openLogin("up"));
+document.getElementById("lgClose").addEventListener("click", closeLogin);
+document.getElementById("lgSwitch").addEventListener("click", (e) => {
+  const b = e.target.closest("b[data-mode]"); if (b) setAuthMode(b.dataset.mode);
+});
+loginEl.addEventListener("click", (e) => { if (e.target === loginEl) closeLogin(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !loginEl.classList.contains("hidden")) { closeLogin(); e.stopPropagation(); } }, true);
+// Supabase 인증 에러 메시지를 한글로 (매핑 안 된 건 원문 표시)
+function krAuthError(msg) {
+  const m = (msg || "").toLowerCase();
+  if (m.includes("invalid login credentials")) return "이메일 또는 비밀번호가 올바르지 않습니다.";
+  if (m.includes("already registered") || m.includes("already been registered") || m.includes("user already")) return "이미 가입된 이메일입니다. 로그인해 주세요.";
+  if (m.includes("email not confirmed")) return "이메일 확인이 필요합니다. 메일함을 확인하세요.";
+  if (m.includes("should be at least") || (m.includes("password") && m.includes("6 char"))) return "비밀번호는 6자 이상이어야 합니다.";
+  if (m.includes("unable to validate email") || m.includes("invalid email") || m.includes("invalid format")) return "이메일 형식이 올바르지 않습니다.";
+  if (m.includes("weak password")) return "비밀번호가 너무 약합니다. 더 복잡하게 만들어 주세요.";
+  if (m.includes("rate limit") || m.includes("too many")) return "요청이 너무 많습니다. 잠시 후 다시 시도하세요.";
+  if (m.includes("for security purposes")) return "잠시 후 다시 시도하세요.";
+  if (m.includes("signups not allowed") || (m.includes("signup") && m.includes("disabled"))) return "현재 회원가입이 비활성화되어 있습니다.";
+  if (m.includes("failed to fetch") || m.includes("networkerror") || m.includes("network")) return "네트워크 오류입니다. 연결을 확인하세요.";
+  return "오류: " + (msg || "알 수 없는 오류");
+}
+async function doAuth(kind) {
+  const email = document.getElementById("lgEmail").value.trim();
+  const pass = document.getElementById("lgPass").value;
+  const name = document.getElementById("lgName").value.trim();
+  if (!email || !pass) { lgMsg.className = "lgmsg"; lgMsg.textContent = "이메일과 비밀번호를 입력하세요."; return; }
+  if (kind === "up" && !name) { lgMsg.className = "lgmsg"; lgMsg.textContent = "플레이어 이름을 입력하세요."; return; }
+  lgMsg.className = "lgmsg"; lgMsg.textContent = "처리 중…";
+  const { data, error } = kind === "up" ? await signUp(email, pass, name) : await signIn(email, pass);
+  if (error) { lgMsg.className = "lgmsg"; lgMsg.textContent = krAuthError(error.message); return; }
+  if (kind === "up" && !(data && data.session)) {   // 이메일 확인이 켜져 있으면 세션이 바로 안 생김
+    lgMsg.className = "lgmsg ok"; lgMsg.textContent = "확인 메일을 보냈습니다. 링크 클릭 후 로그인하세요.";
+    return;
+  }
+  closeLogin();   // onAuth 가 도감 로드/병합 처리
+}
+document.getElementById("lgSubmit").addEventListener("click", () => doAuth(authMode));
+["lgName", "lgEmail", "lgPass"].forEach((id) =>
+  document.getElementById(id).addEventListener("keydown", (e) => { if (e.key === "Enter") doAuth(authMode); }));
+
+// 로그인 상태 변화 → 도감 소스 전환 + 게임 이름 반영 (로그인=계정이름, 비로그인=Guest)
+onAuth(async (user) => {
+  remoteCache = user ? new Set(await dbGetCollection()) : null;
+  accountName = user ? (((user.user_metadata && user.user_metadata.name) || "").trim() || (user.email || "").split("@")[0] || "Player") : null;
+  nameInput.value = accountName || "Guest";   // 표시용(비편집) — 실제 이름은 accountName/Guest
+  nameInput.disabled = true;
+  updateLoginUI(user);
+  updateGalleryCount();
+  if (!galleryEl.classList.contains("hidden")) openGallery();
+});
+
 updateGalleryCount();
 
 // dev 서버면 시작 화면에 스테이지 선택을 노출한다. 서버 /config 로 판별하며,
@@ -559,8 +712,7 @@ let gameShown = false;   // 게임 화면(캔버스)이 이미 드러났는지
 async function enterGame(mode) {
   if (startBtn.disabled) return;
   initAudio();   // 사용자 클릭 제스처로 오디오 활성화 (브라우저 정책)
-  const name = (nameInput.value || "").trim().slice(0, 12) || "Guest";
-  try { localStorage.setItem("galspanic:name", name === "Guest" ? "" : name); } catch {}
+  const name = accountName ? accountName.slice(0, 12) : "Guest";   // 로그인=계정 이름, 비로그인=Guest
   let level;
   if (devMode) {
     level = parseInt(stageSelect.value, 10) || 1;
@@ -652,7 +804,7 @@ function returnToTitle() {
   try { room?.leave(); } catch {}
   room = null; state = null; gameShown = false; lostSince = 0; lastLobbyKey = "";
   bubbles.clear(); pmove.clear(); prevMarker.clear(); flashes.length = 0; warps.length = 0;
-  prevCells = null; lastClaimed = -1; gridBuilt = false;   // force a full grid repaint on the next game
+  prevCells = null; lastClaimed = -1; gridBuilt = false; gridDirty = true; gridScan = 0;   // force a full grid repaint on the next game
   lobby.classList.add("hidden");
   chatPanel.classList.add("hidden");
   document.getElementById("rank").classList.add("hidden");
@@ -703,9 +855,12 @@ function syncInput() {
     lastSentDir = d; lastSentBoost = boostHeld;
   }
 }
-window.addEventListener("keydown", (e) => {
+function typingInField() {
   const ae = document.activeElement;
-  if (ae === chatInput || ae === nameInput) return;   // typing in a text field: let it handle keys
+  return !!(ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.tagName === "SELECT" || ae.isContentEditable));
+}
+window.addEventListener("keydown", (e) => {
+  if (typingInField()) return;   // 입력창/셀렉트에 타이핑 중이면 게임 입력으로 가로채지 않음
   if (CODE_DIR[e.code] != null || e.code === "Enter") e.preventDefault();
   if (e.repeat) return;                       // ignore OS key auto-repeat
   if (e.code === "Enter") {
@@ -718,8 +873,7 @@ window.addEventListener("keydown", (e) => {
   syncInput();
 });
 window.addEventListener("keyup", (e) => {
-  const ae = document.activeElement;
-  if (ae === chatInput || ae === nameInput) return;
+  if (typingInField()) return;
   if (e.code === "ShiftLeft" || e.code === "ShiftRight") { boostHeld = false; syncInput(); return; }
   const i = pressOrder.indexOf(e.code); if (i >= 0) pressOrder.splice(i, 1);
   syncInput();
@@ -830,9 +984,68 @@ window.addEventListener("pointerup", () => {
 // monster archetype colors (kind -> color); shape comes from the synced e.shape
 const KIND_COLOR = {
   star:"#ff3b5c", saw:"#f59e0b", blob:"#a855f7", ghost:"#e0e7ff", gunner:"#ef4444", dart:"#22d3ee",
+  // 특수 몬스터
+  splitter:"#a3e635", bomber:"#f97316", weaver:"#8b5cf6", sniper:"#dc2626",
+  shielder:"#38bdf8", blinker:"#e879f9", phantom:"#cbd5e1", patrol:"#22c55e",
   // 보스: 종류별로 뚜렷이 다른 색
   boss_ring:"#ef4444", boss_spiral:"#a855f7", boss_spread:"#fb923c", boss_cross:"#ec4899",
 };
+// 새 몬스터 모양은 기존 그리기 케이스를 재사용(색으로 구분 + 상태 오버레이)
+const SHAPE_ALIAS = {
+  splitter:"blob", bomber:"saw", weaver:"ghost", sniper:"turret",
+  shielder:"star", blinker:"ghost", phantom:"ghost", patrol:"triangle",
+};
+// 맵 아이템(파워업) 아이콘(팝업 이모지)·색·이름
+const ITEM_ICON = { missile:"🚀", freeze:"❄", life:"❤" };
+const ITEM_COLOR = { missile:"#f97316", freeze:"#67e8f9", life:"#ff5db1" };
+const ITEM_NAME = { missile:"미사일!", freeze:"프리즈!", life:"목숨 +1!" };
+// 맵 위 아이템을 종류별 벡터 아이콘으로 그린다. (x,y)=중심, s=아이콘 반지름(캔버스 단위).
+// 벡터라 카메라 줌/팬에 항상 선명하게 정렬된다.
+function drawItemIcon(kind, x, y, s) {
+  const col = ITEM_COLOR[kind] || "#fff";
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  if (kind === "missile") {
+    ctx.fillStyle = col; ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.lineWidth = Math.max(0.5, s * 0.14);
+    ctx.beginPath();                                   // 몸통 (위가 뾰족한 로켓)
+    ctx.moveTo(0, -s);
+    ctx.quadraticCurveTo(s * 0.5, -s * 0.3, s * 0.4, s * 0.35);
+    ctx.lineTo(-s * 0.4, s * 0.35);
+    ctx.quadraticCurveTo(-s * 0.5, -s * 0.3, 0, -s);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath();                                   // 핀
+    ctx.moveTo(-s * 0.4, s * 0.08); ctx.lineTo(-s * 0.82, s * 0.6); ctx.lineTo(-s * 0.28, s * 0.42);
+    ctx.moveTo(s * 0.4, s * 0.08); ctx.lineTo(s * 0.82, s * 0.6); ctx.lineTo(s * 0.28, s * 0.42);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.95)";          // 창문
+    ctx.beginPath(); ctx.arc(0, -s * 0.18, s * 0.2, 0, 7); ctx.fill();
+  } else if (kind === "freeze") {
+    ctx.strokeStyle = col; ctx.lineWidth = Math.max(0.5, s * 0.14);
+    for (let k = 0; k < 6; k++) {                      // 눈송이: 6갈래 + 곁가지
+      ctx.save(); ctx.rotate(k * Math.PI / 3);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -s); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 0.62); ctx.lineTo(-s * 0.3, -s * 0.84);
+      ctx.moveTo(0, -s * 0.62); ctx.lineTo(s * 0.3, -s * 0.84);
+      ctx.moveTo(0, -s * 0.34); ctx.lineTo(-s * 0.22, -s * 0.5);
+      ctx.moveTo(0, -s * 0.34); ctx.lineTo(s * 0.22, -s * 0.5);
+      ctx.stroke(); ctx.restore();
+    }
+  } else if (kind === "life") {
+    ctx.fillStyle = col; ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = Math.max(0.5, s * 0.14);
+    ctx.beginPath();                                   // 하트
+    ctx.moveTo(0, s * 0.82);
+    ctx.bezierCurveTo(-s * 1.12, -s * 0.12, -s * 0.5, -s, 0, -s * 0.34);
+    ctx.bezierCurveTo(s * 0.5, -s, s * 1.12, -s * 0.12, 0, s * 0.82);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, s * 0.7, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
 const flashes = [];   // capture popups {x,y,text,color,life,ttl}, fed by the "trap" broadcast
 
 // ── 보스 연출 상태 ──────────────────────────────────────────────────────────
@@ -869,32 +1082,40 @@ function enemyEyes(R) {
 // draw one enemy at screen px (px,py); shape/kind/r/aim come from the synced schema
 function drawEnemy(px, py, e, R, spin) {
   const color = KIND_COLOR[e.kind] || "#ff3b5c";
+  const shape = SHAPE_ALIAS[e.shape] || e.shape;   // 특수 몬스터는 기존 모양 재사용
   ctx.save();
   ctx.translate(px, py);
+  if (e.st) ctx.globalAlpha = 0.22;   // phantom 은신: 반투명 (여전히 위험)
   ctx.fillStyle = color;   // shadowBlur removed — it's a canvas perf killer (per-enemy gaussian blur)
-  if (e.shape === "triangle") {
+  if (shape === "triangle") {
     ctx.save(); ctx.rotate((e.aim||0) + Math.PI/2);
     ctx.beginPath(); ctx.moveTo(0,-R*1.1); ctx.lineTo(R*0.85,R*0.8); ctx.lineTo(-R*0.85,R*0.8); ctx.closePath(); ctx.fill();
     ctx.restore(); ctx.shadowBlur = 0; enemyEyes(R*0.85);
-  } else if (e.shape === "saw") {
+  } else if (shape === "saw") {
     ctx.save(); ctx.rotate(spin); spikePath(11, R, 0.72); ctx.fill(); ctx.restore();
     ctx.shadowBlur = 0; ctx.fillStyle = "#1a1206"; ctx.beginPath(); ctx.arc(0,0,R*0.4,0,7); ctx.fill(); enemyEyes(R);
-  } else if (e.shape === "blob") {
+  } else if (shape === "blob") {
     ctx.beginPath();
     for (let a=0;a<=Math.PI*2+0.01;a+=0.4){ const rr=R*(1+0.14*Math.sin(a*3+spin)); const x=Math.cos(a)*rr,y=Math.sin(a)*rr*0.9; a===0?ctx.moveTo(x,y):ctx.lineTo(x,y);} ctx.closePath(); ctx.fill();
     ctx.shadowBlur = 0; enemyEyes(R);
-  } else if (e.shape === "ghost") {
-    ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(0,-R*0.1,R,Math.PI,0);
+  } else if (shape === "ghost") {
+    ctx.globalAlpha *= 0.9; ctx.beginPath(); ctx.arc(0,-R*0.1,R,Math.PI,0);
     const feet=4, w=R*2/feet; for(let f=0;f<feet;f++){const x0=R-f*w; ctx.lineTo(x0,R*0.7); ctx.quadraticCurveTo(x0-w/2,R,x0-w,R*0.7);} ctx.closePath(); ctx.fill();
-    ctx.globalAlpha = 1; ctx.shadowBlur = 0; enemyEyes(R);
-  } else if (e.shape === "turret") {
+    ctx.globalAlpha = e.st ? 0.22 : 1; ctx.shadowBlur = 0; enemyEyes(R);
+  } else if (shape === "turret") {
     ctx.save(); ctx.rotate(e.aim||0); ctx.fillStyle="#7f1d1d"; ctx.fillRect(0,-R*0.26,R*1.7,R*0.52); ctx.restore();
     ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0,0,R,0,7); ctx.fill(); ctx.shadowBlur = 0;
     ctx.fillStyle = "#3f0d0d"; ctx.beginPath(); ctx.arc(0,0,R*0.55,0,7); ctx.fill(); enemyEyes(R);
-  } else if (e.shape && e.shape.indexOf("boss_") === 0) {
+  } else if (shape && shape.indexOf("boss_") === 0) {
     drawBoss(e, R, spin, color);
   } else {
     ctx.save(); ctx.rotate(spin); spikePath(4, R, 0.55); ctx.fill(); ctx.restore(); ctx.shadowBlur = 0; enemyEyes(R);
+  }
+  // shielder 무적: 밝은 보호막 링
+  if (e.sh) {
+    ctx.globalAlpha = 0.55 + 0.35 * Math.sin(spin * 3);
+    ctx.strokeStyle = "#7dd3fc"; ctx.lineWidth = Math.max(1.5, R * 0.2);
+    ctx.beginPath(); ctx.arc(0, 0, R * 1.4, 0, 7); ctx.stroke();
   }
   ctx.restore();
 }
@@ -1111,6 +1332,61 @@ function syncWeb() {   // 거미줄 셀 목록 (trail 과 같은 방식: 스키�
   for (let i = 0; i < n; i++) if (w[i]) list.push(i);
   webList = list;
 }
+// 거미줄 셀을 연결 요소(클러스터)로 묶는다. 각 클러스터에 오브 웹 하나를 그린다. (cw,ch=셀 픽셀크기)
+function clusterWeb(cw, ch) {
+  const set = new Set(webList), seen = new Set(), clusters = [];
+  for (const start of webList) {
+    if (seen.has(start)) continue;
+    const cells = [], stack = [start]; seen.add(start);
+    let sx = 0, sy = 0, minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9, minIdx = start;
+    while (stack.length) {
+      const i = stack.pop(); cells.push(i);
+      const x = i % GW, y = (i / GW) | 0;
+      sx += x; sy += y;
+      if (x < minx) minx = x; if (x > maxx) maxx = x;
+      if (y < miny) miny = y; if (y > maxy) maxy = y;
+      if (i < minIdx) minIdx = i;
+      if (x > 0        && set.has(i - 1)  && !seen.has(i - 1))  { seen.add(i - 1);  stack.push(i - 1); }
+      if (x < GW - 1   && set.has(i + 1)  && !seen.has(i + 1))  { seen.add(i + 1);  stack.push(i + 1); }
+      if (set.has(i - GW) && !seen.has(i - GW)) { seen.add(i - GW); stack.push(i - GW); }
+      if (set.has(i + GW) && !seen.has(i + GW)) { seen.add(i + GW); stack.push(i + GW); }
+    }
+    const nC = cells.length;
+    clusters.push({
+      cells,
+      cx: (sx / nC + 0.5) * cw, cy: (sy / nC + 0.5) * ch,
+      r: (Math.max(maxx - minx, maxy - miny) / 2 + 1.2) * Math.max(cw, ch),
+      seed: minIdx,   // 회전 시드(셀이 늘어도 안정적)
+    });
+  }
+  return clusters;
+}
+// 오브 웹: 중심에서 뻗는 방사실 + 인접 실을 안쪽으로 처지게 잇는 동심 나선. (cw=셀 픽셀폭, 선 두께용)
+function drawOrbWeb(x, y, R, seed, cw) {
+  const spokes = 11, rings = 5, rot = (seed * 2.399963) % (Math.PI * 2);   // 황금각으로 흩뿌림
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(228,236,255,0.55)"; ctx.lineWidth = Math.max(0.5, cw * 0.13);
+  ctx.beginPath();                                   // 방사실
+  for (let s = 0; s < spokes; s++) {
+    const a = rot + s / spokes * Math.PI * 2;
+    ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * R, y + Math.sin(a) * R);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(224,232,255,0.42)"; ctx.lineWidth = Math.max(0.4, cw * 0.1);
+  for (let ring = 1; ring <= rings; ring++) {        // 동심 나선(살짝 처진 곡선)
+    const rr = R * (ring / (rings + 0.5));
+    ctx.beginPath();
+    for (let s = 0; s < spokes; s++) {
+      const a0 = rot + s / spokes * Math.PI * 2, a1 = rot + (s + 1) / spokes * Math.PI * 2, am = (a0 + a1) / 2;
+      const x0 = x + Math.cos(a0) * rr, y0 = y + Math.sin(a0) * rr;
+      const x1 = x + Math.cos(a1) * rr, y1 = y + Math.sin(a1) * rr;
+      const xm = x + Math.cos(am) * rr * 0.82, ym = y + Math.sin(am) * rr * 0.82;   // 안쪽으로 처짐
+      if (s === 0) ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(xm, ym, x1, y1);
+    }
+    ctx.stroke();
+  }
+}
 function captureSnapshot() {
   if (!state) return;
   const ex = [];
@@ -1129,8 +1405,10 @@ function enemyBracket(renderT) {
   return { a: a.ex, b: b.ex, alpha };
 }
 // interpolated position for enemy index i (fallback to live x,y; snap on reindex/respawn)
+// 두 스냅샷의 적 수가 다르면(누가 포획/스폰돼 배열 인덱스가 밀림) 인덱스가 서로 다른 적을 가리키므로
+// 보간하지 않고 현재 위치를 쓴다. (안 그러면 앞 인덱스의 적이 사라질 때 뒤 적/보스가 튀며 깜빡인다.)
 function enemyPos(br, i, live) {
-  if (!br || br.a.length <= i*2+1 || br.b.length <= i*2+1) return live;
+  if (!br || br.a.length !== br.b.length || br.a.length <= i*2+1 || br.b.length <= i*2+1) return live;
   const ax = br.a[i*2], ay = br.a[i*2+1], bx = br.b[i*2], by = br.b[i*2+1];
   if (Math.abs(bx - ax) + Math.abs(by - ay) > 6) return { x: bx, y: by };
   return { x: ax + (bx - ax) * br.alpha, y: ay + (by - ay) * br.alpha };
@@ -1181,18 +1459,26 @@ const gridCanvas = document.createElement("canvas");
 const gctx = gridCanvas.getContext("2d");
 let gridBuilt = false, lastClaimed = -1, lastLevel = -1, lastImgVer = -1, lastGW = 0, lastGH = 0;
 let prevCells = null;   // last-drawn cell states, so a claim only redraws the cells that changed
-// A claim used to redraw ALL claimed cells (up to GW*GH drawImage slices) every time, so the
-// more area was revealed the longer each claim hitched. Now we diff against prevCells and draw
-// only the cells that actually flipped; a FULL repaint happens only on level/image/resize.
-function rebuildGrid(full) {
+let gridDirty = true, gridScan = 0;
+// 큰 영역을 한 번에 점유하면 새로 밝아진 셀 수천 개를 셀당 drawImage 로 그리는데, 이걸 한 프레임에
+// 몰아 그리면 그 프레임만 수십~100ms 로 늘어져 "끊김"이 생긴다. 그래서 프레임당 예산(GRID_PAINT_BUDGET)
+// 만큼만 칠하고 나머지는 다음 프레임으로 이어 칠한다 → 큰 점유가 몇 프레임에 걸쳐 부드럽게 채워진다.
+const GRID_PAINT_BUDGET = 2200;
+// 전체 다시 칠하기 예약(레벨/이미지/리사이즈): prevCells 를 비워 paintGridStep 이 캔버스를 어둡게
+// 지우고 점유 셀만 다시 그리게 한다.
+function markGridFull() { prevCells = null; gridScan = 0; gridDirty = true; }
+// 변경된 셀을 프레임당 예산만큼만 칠한다. 남으면 gridDirty 를 유지해 다음 프레임에 이어서 칠한다.
+function paintGridStep() {
   const W = canvas.width, H = canvas.height, cw = W / GW, ch = H / GH;
-  const resized = gridCanvas.width !== W || gridCanvas.height !== H;
-  if (resized) { gridCanvas.width = W; gridCanvas.height = H; }
+  if (gridCanvas.width !== W || gridCanvas.height !== H) { gridCanvas.width = W; gridCanvas.height = H; prevCells = null; gridScan = 0; }
   // one-shot plain-array copy — see syncTrail(): indexing the ArraySchema per cell is ~500x slower
   const cells = [...state.cells];
   const n = cells.length;
-  const doFull = full || resized || !prevCells || prevCells.length !== n;
-  if (doFull) prevCells = new Uint8Array(n);
+  if (!prevCells || prevCells.length !== n) {
+    prevCells = new Uint8Array(n);                              // 0 = "어둡게 칠해진" 상태
+    gctx.fillStyle = "#080a14"; gctx.fillRect(0, 0, W, H);     // 빈 칸 기본색으로 전체 초기화
+    gridScan = 0;
+  }
   const paint = (i) => {
     const cx = i % GW, cy = (i / GW) | 0;
     // Snap each cell to INTEGER pixel bounds so adjacent cells share the exact same edge and
@@ -1210,9 +1496,17 @@ function rebuildGrid(full) {
     }
     prevCells[i] = cells[i];
   };
-  if (doFull) { for (let i = 0; i < n; i++) paint(i); }
-  else { for (let i = 0; i < n; i++) if (cells[i] !== prevCells[i]) paint(i); }   // only the changed cells
-  gridBuilt = true;
+  let budget = GRID_PAINT_BUDGET, i = gridScan, scanned = 0, remaining = false;
+  while (scanned < n) {
+    if (cells[i] !== prevCells[i]) {
+      if (budget <= 0) { remaining = true; break; }             // 이번 프레임 예산 소진 → 다음 프레임에 이어서
+      paint(i); budget--;
+    }
+    i++; if (i >= n) i = 0;
+    scanned++;
+  }
+  gridScan = remaining ? i : 0;
+  gridBuilt = true; gridDirty = remaining;
 }
 
 function bubbleRect(x, y, w, h, r) {
@@ -1292,15 +1586,13 @@ function render() {
     captureSnapshot();   // enemy snapshot for interpolation
     syncTrail();         // rebuild the active-trail list from the grid
     syncWeb();           // rebuild the web-cell list
-    // rebuild the cached grid layer only when it changed (claim / new level / image load / resize)
-    if (state.claimedInterior !== lastClaimed || state.level !== lastLevel ||
-        imgVersion !== lastImgVer || GW !== lastGW || GH !== lastGH) {
-      // full repaint only when the whole layer must change; a claim just diffs the changed cells
-      const full = state.level !== lastLevel || imgVersion !== lastImgVer || GW !== lastGW || GH !== lastGH;
-      rebuildGrid(full);
-      lastClaimed = state.claimedInterior; lastLevel = state.level;
-      lastImgVer = imgVersion; lastGW = GW; lastGH = GH;
-    }
+    // 캐시된 그리드 레이어: 변경 시 예약(gridDirty)하고, 매 프레임 예산만큼 이어 칠한다(끊김 방지).
+    const full = state.level !== lastLevel || imgVersion !== lastImgVer || GW !== lastGW || GH !== lastGH;
+    if (full) markGridFull();
+    if (full || state.claimedInterior !== lastClaimed) gridDirty = true;
+    lastClaimed = state.claimedInterior; lastLevel = state.level;
+    lastImgVer = imgVersion; lastGW = GW; lastGH = GH;
+    if (gridDirty || !gridBuilt) paintGridStep();
     // ---- self-centered camera: ~VIEW cells across, follows my predicted marker ----
     let me = null;
     if (room) state.players.forEach((p) => { if (p.id === room.sessionId) me = p; });
@@ -1329,14 +1621,20 @@ function render() {
     ctx.translate(-camX*camS + shX, -camY*camS + shY); ctx.scale(camS, camS);
 
     if (gridBuilt) ctx.drawImage(gridCanvas, 0, 0);   // one blit instead of GW*GH draws
-    // 거미줄(감속 필드) — 바닥에 반투명하게. 그 위에선 플레이어가 느려진다.
+    // 거미줄(감속 필드) — 그 위에선 플레이어가 느려진다. 연결된 셀 덩어리마다 오브 웹(방사실+
+    // 동심 나선)을 그리고 셀 영역으로 클립해, 실제 거미줄처럼 보이게 한다.
     if (webList.length) {
       ctx.save();
-      ctx.fillStyle = "rgba(210,220,255,0.26)";
+      ctx.fillStyle = "rgba(200,214,255,0.12)";        // 슬로우 구역 발자국(옅게)
       for (const i of webList) { const cx = i % GW, cy = (i / GW) | 0; ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1); }
-      ctx.strokeStyle = "rgba(230,236,255,0.55)"; ctx.lineWidth = Math.max(0.6, cw*0.16);
-      for (const i of webList) { const cx = (i % GW)*cw, cy = ((i/GW)|0)*ch;   // X 무늬(끈적한 거미줄 느낌)
-        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx+cw, cy+ch); ctx.moveTo(cx+cw, cy); ctx.lineTo(cx, cy+ch); ctx.stroke(); }
+      for (const cl of clusterWeb(cw, ch)) {
+        ctx.save();
+        const clip = new Path2D();                     // 오브 웹을 실제 셀 모양으로 클립
+        for (const i of cl.cells) { const x = i % GW, y = (i / GW) | 0; clip.rect(x*cw, y*ch, cw + 1.2, ch + 1.2); }
+        ctx.clip(clip);
+        drawOrbWeb(cl.cx, cl.cy, cl.r * 1.15, cl.seed, cw);
+        ctx.restore();
+      }
       ctx.restore();
     }
     // trails — draw ONLY the active trail cells (built on each patch), so per-frame
@@ -1376,6 +1674,25 @@ function render() {
       }
       ctx.restore();
     });
+    // map items (파워업) — 바닥에 놓여 있고, 그 칸을 점유하면 획득.
+    // 어두운 토큰(발광 원) 위에 종류별 벡터 아이콘을 그린다.
+    (state.items || []).forEach((it) => {
+      const x = it.x*cw, y = it.y*ch, R = cw*1.9;
+      const pulse = 0.86 + 0.14*Math.sin(now/260 + x);
+      ctx.save();
+      // 소멸 직전(blink)엔 빠르게 깜빡인다.
+      if (it.blink) ctx.globalAlpha = 0.18 + 0.82 * (0.5 + 0.5*Math.sin(now/80));
+      ctx.save();
+      ctx.shadowColor = ITEM_COLOR[it.kind] || "#fff"; ctx.shadowBlur = cw*2.6;
+      ctx.fillStyle = "rgba(8,12,24,0.86)";
+      ctx.beginPath(); ctx.arc(x, y, R*pulse, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = Math.max(1, cw*0.4); ctx.strokeStyle = ITEM_COLOR[it.kind] || "#fff";
+      ctx.stroke();
+      ctx.restore();
+      drawItemIcon(it.kind, x, y, R*0.62);
+      ctx.restore();
+    });
     // enemies — snapshot-buffer interpolation (render ~SNAP_DELAY ms in the past)
     const spin = now / 120;
     const br = enemyBracket(now - SNAP_DELAY);
@@ -1400,6 +1717,16 @@ function render() {
       ctx.fillStyle = "#ffe066";
       ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
       ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x-R*0.25, y-R*0.25, R*0.4, 0, 7); ctx.fill();
+      ctx.restore();
+    });
+    // homing missiles (미사일 아이템) — 청록 총알, 흰 꼬리
+    (state.missiles || []).forEach((mm) => {
+      const x = mm.x*cw, y = mm.y*ch, R = cw*0.85;
+      ctx.save();
+      ctx.shadowColor = "#67e8f9"; ctx.shadowBlur = cw*3;
+      ctx.fillStyle = "#22d3ee"; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#e0fbff"; ctx.beginPath(); ctx.arc(x-R*0.28, y-R*0.28, R*0.4, 0, 7); ctx.fill();
       ctx.restore();
     });
     // players — every marker glides at constant velocity toward the latest server cell,
@@ -1445,6 +1772,14 @@ function render() {
       ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cxp, cyp, mr + 1, 0, 7); ctx.fill();
       ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(cxp, cyp, mr, 0, 7); ctx.fill();
       ctx.restore();
+      // 보호막(무적) 중이면 마커 둘레에 청록 링을 두른다.
+      if (p.inv) {
+        ctx.save();
+        ctx.globalAlpha = 0.5 + 0.28 * Math.sin(now / 110);
+        ctx.strokeStyle = "#67e8f9"; ctx.lineWidth = 2.4 / camS;
+        ctx.beginPath(); ctx.arc(cxp, cyp, mr + cw * 0.5 + 4 / camS, 0, 7); ctx.stroke();
+        ctx.restore();
+      }
     });
     // capture popups
     for (let i = flashes.length-1; i >= 0; i--) {
@@ -1459,6 +1794,18 @@ function render() {
       ctx.restore();
     }
     ctx.restore();          // end camera transform (HUD/overlay stay in screen space)
+
+    // 프리즈 아이템: 적이 얼어있는 동안 화면을 옅은 청록으로 물들이고 상단에 표시.
+    if (state.frozen) {
+      ctx.save();
+      ctx.fillStyle = "rgba(103,232,249,0.12)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = "#a5f3fc"; ctx.textAlign = "center";
+      ctx.font = "bold 16px system-ui, sans-serif";
+      ctx.fillText("❄ FREEZE", W / 2, 26);
+      ctx.restore();
+    }
 
     // ── 보스 블랙홀: 합성된 화면을 렌즈로 굴절시켜 왜곡한다 (스크린 공간) ──
     if (warps.length) {

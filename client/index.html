@@ -73,7 +73,7 @@
   #langMenu button.on { background:#2b3a66; font-weight:600; }
   /* 모바일 터치 컨트롤 (D-패드 + 질주) */
   #touch { position:fixed; left:0; right:0; bottom:0; z-index:35; display:flex; justify-content:space-between;
-           align-items:flex-end; padding:18px 22px calc(18px + env(safe-area-inset-bottom, 0px));
+           align-items:flex-end; padding:18px 22px calc(34px + env(safe-area-inset-bottom, 0px));
            pointer-events:none; }
   #touch.hidden { display:none; }
   #dpad { position:relative; width:168px; height:168px; pointer-events:auto; touch-action:none; }
@@ -1135,28 +1135,63 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) relea
 restartBtn.onclick = () => room?.send("restart");
 
 // ── 모바일 터치 컨트롤: D-패드 + 질주 버튼. 기존 pressOrder/boostHeld/syncInput 을 그대로 재사용
-// 하므로 키보드와 완전히 동일하게 동작한다(방향은 "마지막으로 누른 것" 우선). ──
+// 하므로 키보드와 동일하게 동작한다(방향은 "마지막으로 누른 것" 우선).
+// 실기기에서 버튼이 눌린 채 고정되는 것을 막기 위해: (1) setPointerCapture 로 손가락이 살짝
+// 벗어나도 pointerup 이 반드시 그 버튼에서 발생하게 하고, (2) lostpointercapture 와 (3) window
+// 전역 pointerup/cancel 안전망으로 놓친 해제를 잡아 항상 멈추게 한다. ──
 const IS_TOUCH = matchMedia("(pointer: coarse)").matches || "ontouchstart" in window || navigator.maxTouchPoints > 0;
 if (IS_TOUCH) document.body.classList.add("touch");
 const touchEl = document.getElementById("touch");
-function touchDir(code, on) {
+const DIR_CODES = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+const touchHeld = new Map();   // pointerId -> code ("__sprint__" 은 질주)
+const sprintBtn = document.getElementById("sprintBtn");
+function pressCode(code, on) {
   const i = pressOrder.indexOf(code);
   if (on) { if (i < 0) pressOrder.push(code); }
   else if (i >= 0) pressOrder.splice(i, 1);
+  const btn = touchEl?.querySelector(`[data-dir="${code}"]`);
+  if (btn) btn.classList.toggle("on", on);
+  syncInput();
+}
+function releaseTouchPointer(pid) {
+  const code = touchHeld.get(pid);
+  if (code === undefined) return;   // 이 포인터는 터치 버튼이 아니었음 → 무시
+  touchHeld.delete(pid);
+  if (code === "__sprint__") { boostHeld = false; sprintBtn?.classList.remove("on"); syncInput(); }
+  else pressCode(code, false);
+}
+function releaseAllTouch() {
+  touchHeld.clear();
+  for (const c of DIR_CODES) { const i = pressOrder.indexOf(c); if (i >= 0) pressOrder.splice(i, 1); }
+  boostHeld = false;
+  touchEl?.querySelectorAll(".tbtn.on").forEach((b) => b.classList.remove("on"));
   syncInput();
 }
 touchEl?.querySelectorAll("[data-dir]").forEach((b) => {
   const code = b.dataset.dir;
-  b.addEventListener("pointerdown", (e) => { e.preventDefault(); b.classList.add("on"); touchDir(code, true); });
-  const rel = (e) => { e.preventDefault(); b.classList.remove("on"); touchDir(code, false); };
+  b.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    try { b.setPointerCapture(e.pointerId); } catch {}
+    touchHeld.set(e.pointerId, code);
+    pressCode(code, true);
+  });
+  const rel = (e) => { e.preventDefault(); releaseTouchPointer(e.pointerId); };
   b.addEventListener("pointerup", rel);
   b.addEventListener("pointercancel", rel);
+  b.addEventListener("lostpointercapture", rel);
 });
-const sprintBtn = document.getElementById("sprintBtn");
-sprintBtn?.addEventListener("pointerdown", (e) => { e.preventDefault(); sprintBtn.classList.add("on"); boostHeld = true; syncInput(); });
-["pointerup", "pointercancel"].forEach((ev) => sprintBtn?.addEventListener(ev, (e) => {
-  e.preventDefault(); sprintBtn.classList.remove("on"); boostHeld = false; syncInput();
-}));
+sprintBtn?.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  try { sprintBtn.setPointerCapture(e.pointerId); } catch {}
+  touchHeld.set(e.pointerId, "__sprint__");
+  sprintBtn.classList.add("on"); boostHeld = true; syncInput();
+});
+["pointerup", "pointercancel", "lostpointercapture"].forEach((ev) =>
+  sprintBtn?.addEventListener(ev, (e) => { e.preventDefault(); releaseTouchPointer(e.pointerId); }));
+// 전역 안전망: 버튼이 놓친 해제를 잡는다(시스템 제스처로 터치가 가로채진 경우 등).
+window.addEventListener("pointerup", (e) => releaseTouchPointer(e.pointerId));
+window.addEventListener("pointercancel", (e) => releaseTouchPointer(e.pointerId));
+window.addEventListener("blur", releaseAllTouch);
 // 모바일: 클리어/게임오버 화면에서 캔버스를 탭하면 다음 스테이지/재시작 (키보드 Enter 대체).
 if (IS_TOUCH) canvas.addEventListener("pointerdown", () => {
   if (state && (state.phase === "won" || state.phase === "lost")) room?.send("restart");
@@ -1863,9 +1898,10 @@ function render() {
     if (room) state.players.forEach((p) => { if (p.id === room.sessionId) me = p; });
     let camS = 1, camX = 0, camY = 0, myPos = null;
     if (me && !me.out) {
-      const VIEW = Math.min(GW, GH, 117);           // cells across the shorter side (higher = zoomed out)
-      camS = Math.min(GW, GH) / VIEW;               // zoom factor (~2.19x on the 256 grid — zoomed
-                                                    // back in 1.5x from VIEW=176 for a closer view)
+      // cells across the shorter side (higher = zoomed out). 모바일은 더 확대(작은 VIEW)해서
+      // 마커를 화면 중앙에 두고 맵이 스크롤되는 팔로우 카메라로 만든다.
+      const VIEW = Math.min(GW, GH, IS_TOUCH ? 68 : 117);
+      camS = Math.min(GW, GH) / VIEW;               // zoom factor
       // On low latency (localhost/LAN) prediction only adds snap-back jitter, so
       // render my own marker with the same smooth server interpolation as everyone
       // else. (Prediction is worth re-enabling only for a high-latency remote server,

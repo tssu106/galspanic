@@ -1,9 +1,12 @@
+import "./loadenv";   // .env → process.env (가장 먼저)
 import http from "http";
 import path from "path";
 import express from "express";
 import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { GameRoom } from "./GameRoom";
+import { IMAGE_POOL } from "./constants";
+import { supaReady } from "./supa";
 
 const port = Number(process.env.PORT || 2567);
 const host = process.env.HOST || "0.0.0.0"; // bind all interfaces so LAN/tunnel clients can reach us
@@ -16,7 +19,18 @@ app.use(express.json());
 // Serve the online client from this same server → single origin, single port.
 // This makes one tunnel (e.g. `ngrok http 2567`) enough for external players:
 // they open the tunnel URL and the page connects back over the same origin.
-app.use(express.static(path.join(__dirname, "..", "..", "client")));
+app.use(express.static(path.join(__dirname, "..", "..", "client"), {
+  setHeaders: (res, filePath) => {
+    const p = filePath.replace(/\\/g, "/");
+    // Vendored libraries (e.g. three.js) rarely change and are large — cache them a week.
+    if (p.includes("/vendor/")) { res.setHeader("Cache-Control", "public, max-age=604800"); return; }
+    // The client (HTML + bundled sim) changes on every deploy. Don't let browsers pin an old
+    // copy — that's how a stale UI (e.g. the removed clear-countdown) keeps showing after an
+    // update. Force a revalidate for html/js so players always get the freshly deployed client.
+    if (/\.(html|js)$/i.test(p))
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  },
+}));
 
 // NOTE: In production, serve only a BLURRED/low-res version of images here.
 // The full-resolution original must never be sent to the client wholesale —
@@ -32,7 +46,7 @@ app.use("/images", express.static(path.join(__dirname, "..", "public", "images")
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 // 클라이언트가 시작 화면에서 이 값을 읽어 dev 전용 스테이지 선택 UI 노출 여부를 정한다.
-app.get("/config", (_req, res) => res.json({ dev: DEV }));
+app.get("/config", (_req, res) => res.json({ dev: DEV, imageCount: IMAGE_POOL.length, supaReady: supaReady() }));
 // 현재 접속자 수(모든 game 방 합산)와 방 개수 — 메인화면에 표시.
 app.get("/stats", async (_req, res) => {
   try {

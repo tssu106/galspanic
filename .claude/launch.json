@@ -4,9 +4,9 @@
     {
       "name": "galspanic-server",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["start"],
-      "cwd": "server",
-      "port": 2567
+      "runtimeArgs": ["--prefix", "server", "start"],
+      "port": 2567,
+      "autoPort": true
     }
   ]
 }

@@ -20,6 +20,31 @@
   .chip .meta { font-size:11px; color:var(--muted); display:flex; justify-content:space-between; }
   .chip.dead { opacity:.4; filter:grayscale(1); }
   .chip.me { outline:2px solid #ff5db1; }
+  /* 자기 칩의 질주 스태미나 바 */
+  .chip .stam { height:5px; border-radius:3px; background:#1b2138; overflow:hidden; margin-top:3px; }
+  .chip .stam i { display:block; height:100%; background:linear-gradient(90deg,#22d3ee,#a3e635); transition:width .12s linear; }
+  .chip .stam.low i { background:linear-gradient(90deg,#fb923c,#ff5db1); }
+  /* 좌측 포획 랭킹 패널 (채팅창과 대칭, 좌측 고정) */
+  #rank { position:fixed; left:14px; top:70px; width:210px; max-width:22vw;
+          background:rgba(22,26,43,.86); backdrop-filter:blur(6px);
+          border:1px solid #232a44; border-radius:14px; overflow:hidden;
+          box-shadow:0 14px 44px rgba(0,0,0,.45); z-index:30; }
+  #rank.hidden { display:none; }
+  #rank .rhead { padding:9px 13px; font-size:12px; font-weight:700; letter-spacing:.6px;
+                 color:var(--muted); border-bottom:1px solid #232a44; }
+  #rank .rlist { display:flex; flex-direction:column; }
+  #rank .rrow { display:flex; align-items:center; gap:8px; padding:8px 12px; font-size:13px;
+                border-bottom:1px solid rgba(35,42,68,.6); }
+  #rank .rrow:last-child { border-bottom:0; }
+  #rank .rrow.me { background:rgba(255,93,177,.12); }
+  #rank .rrow.dead { opacity:.45; filter:grayscale(1); }
+  #rank .rpos { width:18px; text-align:center; font-weight:800; color:var(--muted); font-variant-numeric:tabular-nums; }
+  #rank .rrow:nth-child(1) .rpos { color:#ffd54a; }
+  #rank .rdot { width:10px; height:10px; border-radius:3px; box-shadow:0 0 6px currentColor; flex:none; }
+  #rank .rname { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #rank .rscore { color:#ffd54a; font-weight:700; font-variant-numeric:tabular-nums; }
+  #rank .rtraps { color:var(--muted); font-size:11px; }
+  @media (max-width:900px){ #rank { display:none; } }
   canvas { background:#05060c; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.5);
            aspect-ratio:2/3; height:min(84vh, 860px); width:auto; max-width:94vw; }
   #help { color:var(--muted); font-size:12px; text-align:center; max-width:640px; line-height:1.5; }
@@ -32,6 +57,39 @@
            align-items:center; justify-content:center; gap:16px; padding:24px; text-align:center;
            background:radial-gradient(1200px 800px at 50% -10%, #1a1f38, var(--bg)); }
   #start.hidden { display:none; }
+  /* 우측 상단 언어 전환 */
+  #langSwitch { position:absolute; top:14px; right:16px; z-index:20; }
+  #langBtn { background:rgba(22,26,43,.85); color:var(--ink); border:1px solid #2a3350; border-radius:10px;
+             padding:7px 11px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13px; }
+  #langBtn:hover { border-color:#3a4570; }
+  #langBtn .caret { opacity:.7; font-size:11px; }
+  #langMenu { position:absolute; top:calc(100% + 6px); right:0; background:#161a2b; border:1px solid #2a3350;
+              border-radius:10px; padding:5px; min-width:132px; box-shadow:0 8px 24px rgba(0,0,0,.45);
+              display:flex; flex-direction:column; gap:2px; }
+  #langMenu.hidden { display:none; }
+  #langMenu button { background:none; border:none; color:var(--ink); text-align:left; padding:8px 12px;
+                     border-radius:7px; cursor:pointer; font-size:13px; }
+  #langMenu button:hover { background:#222a45; }
+  #langMenu button.on { background:#2b3a66; font-weight:600; }
+  /* 모바일 터치 컨트롤 (D-패드 + 질주) */
+  #touch { position:fixed; left:0; right:0; bottom:0; z-index:35; display:flex; justify-content:space-between;
+           align-items:flex-end; padding:18px 22px calc(34px + env(safe-area-inset-bottom, 0px));
+           pointer-events:none; }
+  #touch.hidden { display:none; }
+  #dpad { position:relative; width:168px; height:168px; pointer-events:auto; touch-action:none; }
+  .tbtn { position:absolute; width:56px; height:56px; border-radius:14px; border:1px solid #3a4570;
+          background:rgba(22,26,43,.72); color:#cfe; font-size:20px; display:flex; align-items:center;
+          justify-content:center; cursor:pointer; user-select:none; -webkit-user-select:none;
+          touch-action:none; -webkit-tap-highlight-color:transparent; }
+  .tbtn.on { background:#2b3a66; border-color:#6a4bff; color:#fff; }
+  #dpad .tup    { left:56px;  top:0; }
+  #dpad .tleft  { left:0;     top:56px; }
+  #dpad .tright { left:112px; top:56px; }
+  #dpad .tdown  { left:56px;  top:112px; }
+  .tsprint { position:relative; width:88px; height:88px; border-radius:50%; font-size:15px; font-weight:800;
+             background:rgba(124,92,255,.28); border-color:#7c5cff; color:#dcd6ff; pointer-events:auto; }
+  .tsprint.on { background:rgba(124,92,255,.6); color:#fff; }
+  body.touch #chatPanel { display:none !important; }   /* 모바일: 채팅 로그 숨김 */
   #start .logo { margin:0; font-size:min(16vw,68px); font-weight:800; letter-spacing:3px;
                  text-shadow:0 6px 34px rgba(255,93,177,.4); }
   #start .logo span { color:#ff5db1; }
@@ -41,6 +99,35 @@
                  box-shadow:0 20px 60px rgba(0,0,0,.5); }
   #start .rules { color:var(--muted); font-size:13px; line-height:1.7; text-align:left; }
   #start .rules b { color:var(--ink); }
+  /* ---- 조작 안내: CSS 로 그린 키보드 ---- */
+  #start .controls { display:flex; justify-content:center; align-items:flex-end; gap:20px; flex-wrap:wrap;
+                     padding:6px 0 2px; border-top:1px solid #232a44; }
+  #start .ctrl { display:flex; flex-direction:column; align-items:center; gap:8px; }
+  #start .clabel { font-size:12px; color:var(--muted); letter-spacing:.5px; }
+  #start .keys { display:flex; gap:4px; }
+  #start .key { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box;
+                min-width:30px; height:30px; padding:0 9px; font-size:14px; font-weight:700; line-height:1;
+                color:#dfe4f5; background:linear-gradient(#2b3352,#1a2038);
+                border:1px solid #3a4570; border-bottom:3px solid #10152a; border-radius:7px;
+                box-shadow:0 2px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08); }
+  #start .key.wide { min-width:auto; padding:0 12px; font-size:13px; }
+  #start .arrows { display:grid; grid-template-columns:repeat(3,30px); grid-template-rows:repeat(2,30px); gap:4px; }
+  #start .arrows .key:nth-child(1){ grid-area:1/2; }   /* ↑ */
+  #start .arrows .key:nth-child(2){ grid-area:2/1; }   /* ← */
+  #start .arrows .key:nth-child(3){ grid-area:2/2; }   /* ↓ */
+  #start .arrows .key:nth-child(4){ grid-area:2/3; }   /* → */
+  #start .arrows .key { animation:keypress 4s infinite; }
+  #start .arrows .key:nth-child(1){ animation-delay:0s; }
+  #start .arrows .key:nth-child(2){ animation-delay:1s; }
+  #start .arrows .key:nth-child(3){ animation-delay:2s; }
+  #start .arrows .key:nth-child(4){ animation-delay:3s; }
+  @keyframes keypress {
+    0%,18%,100% { transform:translateY(0); border-bottom-color:#10152a; color:#dfe4f5;
+                  box-shadow:0 2px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08); }
+    6% { transform:translateY(2px); border-bottom-color:#ff5db1; color:#fff;
+         box-shadow:0 0 12px rgba(255,93,177,.55), inset 0 1px 0 rgba(255,255,255,.1); }
+  }
+  @media (prefers-reduced-motion: reduce) { #start .arrows .key { animation:none; } }
   #start input { background:#0e1120; border:1px solid #2a3350; border-radius:10px; color:var(--ink);
                  padding:11px 13px; font-size:15px; outline:none; text-align:center; }
   #start input:focus { border-color:#ff5db1; }
@@ -83,12 +170,89 @@
   #start .dev-stage select:focus { border-color:#ff5db1; }
 
   /* ---- 우측 채팅창: 대화 로그 + 입력 ---- */
-  #chatPanel { position:fixed; right:14px; top:70px; width:360px; max-width:36vw;
+  #chatPanel { position:fixed; right:14px; top:70px; width:340px; max-width:34vw;
                max-height:min(72vh, 640px); display:flex; flex-direction:column;
                background:rgba(22,26,43,.86); backdrop-filter:blur(6px);
                border:1px solid #232a44; border-radius:14px; overflow:hidden;
                box-shadow:0 14px 44px rgba(0,0,0,.45); z-index:30; }
   #chatPanel.hidden { display:none; }
+  /* 왼쪽 가장자리 드래그 핸들: 좌우로 끌어 채팅창 너비 조절 */
+  #chatResize { position:absolute; left:0; top:0; bottom:0; width:8px; cursor:ew-resize; z-index:2;
+                display:flex; align-items:center; justify-content:center; }
+  #chatResize::before { content:""; width:3px; height:34px; border-radius:3px; background:#3a4570; opacity:.7; transition:.12s; }
+  #chatResize:hover::before, #chatPanel.resizing #chatResize::before { background:#ff5db1; opacity:1; height:60px; }
+  #chatPanel.chat-stacked #chatResize { display:none; }
+  /* ---- 게임 오버 3D 카운트다운 오버레이 ---- */
+  /* 게임 화면을 가리지 않고(투명), 그 위에 3D 숫자만 떠 있게 한다. */
+  /* 반투명 베일: 숫자·원 외에는 뒤 게임 화면이 어둡게 비쳐 보인다. */
+  #gameover { position:fixed; inset:0; z-index:40; pointer-events:none; background:rgba(4,6,14,.45); }
+  #gameover.hidden { display:none; }
+  /* 전역 canvas 규칙의 background:#05060c 를 덮어 fx3d 를 투명하게 (안 그러면 게임이 안 보임). */
+  #gameover #fx3d { position:absolute; inset:0; width:100%; height:100%; background:transparent !important;
+                    aspect-ratio:auto; border-radius:0; box-shadow:none; }
+  #gameover .go-hint { position:absolute; left:0; right:0; bottom:5.5vh; text-align:center;
+                       color:#e8ebf7; font-size:15px; text-shadow:0 2px 10px rgba(0,0,0,.85); }
+  #gameover .go-hint b { color:#ffd54a; }
+  #gameover .go-num-fallback { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+                               font-size:min(24vh,190px); font-weight:900; color:#fff; display:none;
+                               text-shadow:0 0 26px #ff5db1, 0 0 60px #ff2a7a; }
+  /* ---- 도감(컬렉션) + 이미지 저장 ---- */
+  #start .ghost { background:#141a2e; color:#c9d0f0; border:1px solid #2a3350; font-size:14px; font-weight:700;
+                  padding:10px 14px; border-radius:12px; cursor:pointer; }
+  #start .ghost:hover { border-color:#ff5db1; }
+  #start .gcount { color:#a3e635; font-weight:800; }
+  #gallery { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:20px;
+             background:rgba(5,7,14,.9); backdrop-filter:blur(4px); }
+  #gallery.hidden { display:none; }
+  #gallery .gwrap { background:var(--panel); border:1px solid #232a44; border-radius:16px; width:min(1000px,96vw);
+                    max-height:90vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 24px 70px rgba(0,0,0,.6); }
+  #gallery .ghead { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #232a44; }
+  #gallery .gtitle { font-size:18px; font-weight:800; } #gallery .gprog { color:#a3e635; font-size:14px; margin-left:8px; }
+  #gallery .gclose { background:#232a44; color:#e8ebf7; border:0; border-radius:8px; padding:7px 12px; font-size:13px; cursor:pointer; }
+  #gallery .ggrid { overflow-y:auto; padding:16px; display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); }
+  #gallery .gcell { position:relative; aspect-ratio:2/3; border-radius:10px; overflow:hidden; border:1px solid #2a3350; background:#0e1120; }
+  #gallery .gcell:not(.locked) { cursor:pointer; transition:transform .1s, border-color .1s; }
+  #gallery .gcell:not(.locked):hover { transform:scale(1.04); border-color:#ff5db1; }
+  #gallery .gcell img { width:100%; height:100%; object-fit:cover; display:block; }
+  #gallery .gcell .gnum { position:absolute; left:6px; top:6px; font-size:11px; font-weight:800; color:#fff;
+                          background:rgba(0,0,0,.55); padding:1px 6px; border-radius:6px; }
+  #gallery .gcell.locked { display:flex; align-items:center; justify-content:center; font-size:30px; }
+  #gallery .gcell.locked::after { content:"🔒"; opacity:.4; }
+  #gallery .gneedlogin { grid-column:1/-1; text-align:center; color:var(--muted); font-size:15px; line-height:2; padding:40px 10px; }
+  #gallery .gneedlogin button { background:linear-gradient(90deg,#7c5cff,#6a4bff); color:#fff; border:0; border-radius:10px;
+                                padding:10px 22px; font-size:15px; font-weight:700; cursor:pointer; margin-top:10px; }
+  #galleryView { position:fixed; inset:0; z-index:70; display:flex; flex-direction:column; align-items:center; justify-content:center;
+                 gap:14px; padding:24px; background:rgba(3,4,10,.95); backdrop-filter:blur(6px); }
+  #galleryView.hidden { display:none; }
+  #galleryView img { max-width:min(92vw,720px); max-height:80vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.7); }
+  #galleryView .gvclose { position:absolute; top:16px; right:20px; background:#232a44; color:#e8ebf7; border:0; border-radius:10px;
+                          width:42px; height:42px; font-size:18px; cursor:pointer; }
+  #galleryView .gvbar { display:flex; align-items:center; gap:16px; }
+  #galleryView .gvcap { color:#c9d0f0; font-weight:800; font-size:16px; }
+  #galleryView .gvsave { background:linear-gradient(90deg,#37d39b,#22b07f); color:#fff; border:0; border-radius:10px;
+                         padding:9px 16px; font-weight:800; font-size:14px; cursor:pointer; }
+  /* 로그인 모달 */
+  #login { position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center; padding:20px;
+           background:rgba(5,7,14,.9); backdrop-filter:blur(4px); }
+  #login.hidden { display:none; }
+  #login .lgwrap { background:var(--panel); border:1px solid #232a44; border-radius:16px; padding:24px; width:min(380px,94vw);
+                   display:flex; flex-direction:column; gap:12px; box-shadow:0 24px 70px rgba(0,0,0,.6); text-align:center; }
+  #login .lgtitle { font-size:19px; font-weight:800; }
+  #login .lgsub { color:var(--muted); font-size:12.5px; line-height:1.5; }
+  #login input { background:#0e1120; border:1px solid #2a3350; border-radius:10px; color:var(--ink); padding:11px 13px; font-size:15px; outline:none; }
+  #login input:focus { border-color:#ff5db1; }
+  #login .lgmsg { font-size:12.5px; min-height:16px; color:#ffb4c4; }
+  #login .lgmsg.ok { color:#a3e635; }
+  #login .lgbtns { display:flex; gap:8px; }
+  #login .lgprimary { flex:1; background:linear-gradient(90deg,#7c5cff,#6a4bff); color:#fff; border:0; border-radius:10px; padding:11px; font-size:15px; font-weight:700; cursor:pointer; }
+  #login .lgghost { flex:1; background:#232a44; color:var(--ink); border:0; border-radius:10px; padding:11px; font-size:15px; font-weight:700; cursor:pointer; }
+  #login .lgclose { background:none; border:0; color:var(--muted); font-size:13px; cursor:pointer; margin-top:2px; }
+  #login .lgswitch { font-size:13px; color:var(--muted); margin-top:2px; }
+  #login .lgswitch b { color:#7c5cff; cursor:pointer; font-weight:700; }
+  #login .lgswitch b:hover { text-decoration:underline; }
+  #login.mode-in #lgName { display:none; }   /* 로그인 모드에선 이름 칸 숨김 */
+  #start .authrow { display:flex; gap:8px; }
+  #start .authrow button { flex:1; }
   #chatHead { padding:9px 13px; font-size:12px; font-weight:700; letter-spacing:.6px;
               color:var(--muted); border-bottom:1px solid #232a44; display:flex;
               align-items:center; gap:7px; }
@@ -98,7 +262,7 @@
   #chatLog .chat-row { word-break:break-word; }
   #chatLog .chat-name { font-weight:700; margin-right:5px; }
   #chatLog .chat-msg { color:var(--ink); }
-  #chatLog:empty::before { content:"아직 메시지가 없어요 · Enter 로 입력"; color:var(--muted);
+  #chatLog:empty::before { content:attr(data-empty); color:var(--muted);
                            font-size:12px; opacity:.65; }
   #chatPanel #chat { border:0; border-top:1px solid #232a44; border-radius:0; width:100%;
                      background:#0e1120; color:var(--ink); padding:10px 13px; font-size:13px; outline:none; }
@@ -119,29 +283,63 @@
                  font-weight:700; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,.4); }
   #devLaserBtn:hover { background:#7a2626; }
   #devLaserBtn.hidden { display:none; }
+  #devLoseBtn { position:fixed; left:14px; top:158px; z-index:40; background:#3a3a3a; color:#eee;
+                border-radius:8px; padding:8px 12px; font-size:13px; cursor:pointer; }
+  #devLoseBtn:hover { background:#4d4d4d; }
+  #devLoseBtn.hidden { display:none; }
+  #devWinBtn { position:fixed; left:14px; top:202px; z-index:40; background:#1d4e2e; color:#d7ffe4;
+               border-radius:8px; padding:8px 12px; font-size:13px; cursor:pointer; }
+  #devWinBtn:hover { background:#276b3f; }
+  #devWinBtn.hidden { display:none; }
 </style>
 </head>
 <body>
   <div id="start">
+    <!-- 우측 상단 언어 전환 (메인 화면) -->
+    <div id="langSwitch">
+      <button id="langBtn" type="button" aria-haspopup="true">🌐 <span id="langCur">한국어</span> <span class="caret">▾</span></button>
+      <div id="langMenu" class="hidden">
+        <button type="button" data-lang="ko">한국어</button>
+        <button type="button" data-lang="en">English</button>
+        <button type="button" data-lang="ja">日本語</button>
+      </div>
+    </div>
     <h1 class="logo">GALS <span>PANIC</span></h1>
     <div class="tag">Online Co-op</div>
     <div class="card">
-      <div class="rules">
-        <b>방향키</b>로 이동 · 안전지대에서 빈 공간으로 들어가 선을 긋고, 다시 안전지대에 닿으면 안쪽이 열립니다.<br>
-        빨간 <b>적</b>이 선에 닿으면 목숨을 잃어요 · 함께 <b>90%</b>를 열면 클리어!<br>
-        <b>Shift</b> 질주 · <b>Enter</b> 채팅
+      <div class="rules" data-i18n-html="instr_html"></div>
+      <div class="controls" aria-hidden="true">
+        <div class="ctrl">
+          <div class="keys arrows">
+            <span class="key">↑</span><span class="key">←</span><span class="key">↓</span><span class="key">→</span>
+          </div>
+          <div class="clabel" data-i18n="key_move"></div>
+        </div>
+        <div class="ctrl">
+          <div class="keys"><span class="key wide">Shift</span></div>
+          <div class="clabel" data-i18n="key_sprint"></div>
+        </div>
+        <div class="ctrl">
+          <div class="keys"><span class="key wide">Enter</span></div>
+          <div class="clabel" data-i18n="key_chat"></div>
+        </div>
       </div>
-      <div id="onlineCount" class="online">🟢 접속자 <b id="onlineNum">--</b>명</div>
-      <input id="nameInput" maxlength="12" placeholder="플레이어 이름 (선택)" autocomplete="off" />
+      <div id="onlineCount" class="online">🟢 <span data-i18n="online_label"></span> <b id="onlineNum">--</b><span data-i18n="online_unit"></span></div>
+      <input id="nameInput" maxlength="12" data-i18n-ph="ph_name" autocomplete="off" />
       <label id="devStage" class="dev-stage" hidden>
-        <span>🛠 스테이지 (dev)</span>
+        <span data-i18n="dev_stage"></span>
         <select id="stageSelect"></select>
       </label>
-      <button id="startBtn" class="go">게임 시작</button>
-      <button id="createBtn" class="go2">방 만들기 (친구끼리)</button>
+      <button id="startBtn" class="go" data-i18n="btn_start"></button>
+      <button id="createBtn" class="go2" data-i18n="btn_create"></button>
       <div class="joinrow">
-        <input id="codeInput" maxlength="16" placeholder="방 코드로 참가" autocomplete="off" />
-        <button id="joinBtn">참가</button>
+        <input id="codeInput" maxlength="16" data-i18n-ph="ph_code" autocomplete="off" />
+        <button id="joinBtn" data-i18n="btn_join"></button>
+      </div>
+      <button id="galleryBtn" class="ghost"><span data-i18n="btn_gallery"></span> <span id="galleryCount" class="gcount"></span></button>
+      <div class="authrow">
+        <button id="loginBtn" class="ghost"></button>
+        <button id="signupBtn" class="ghost" data-i18n="btn_signup"></button>
       </div>
       <div id="startErr" class="err"></div>
     </div>
@@ -150,39 +348,293 @@
   <!-- 대기실(로비): 접속 후 게임 시작 전까지. 방 코드 공유 + 인원 + 카운트다운 -->
   <div id="lobby" class="hidden">
     <div class="lcard">
-      <div class="ltitle">대기실</div>
-      <div id="lobbyCode" class="lcode">방 코드 <b id="lobbyCodeVal">----</b> <button id="copyCodeBtn">복사</button></div>
+      <div class="ltitle" data-i18n="lobby_title"></div>
+      <div id="lobbyCode" class="lcode"><span data-i18n="lobby_code_label"></span> <b id="lobbyCodeVal">----</b> <button id="copyCodeBtn" data-i18n="btn_copy"></button></div>
       <div id="lobbyPlayers" class="lplayers"></div>
-      <div id="lobbyStatus" class="lstatus">플레이어를 기다리는 중…</div>
-      <button id="startNowBtn" class="go">지금 시작</button>
-      <div id="lobbyHint" class="lhint">4명이 모이면 10초 뒤 자동 시작 · 코드를 친구에게 공유하세요</div>
+      <div id="lobbyStatus" class="lstatus" data-i18n="lobby_waiting"></div>
+      <button id="startNowBtn" class="go" data-i18n="btn_startnow"></button>
+      <div id="lobbyHint" class="lhint" data-i18n="lobby_hint"></div>
     </div>
   </div>
 
   <h1>GALS <span>PANIC</span> — Online Co-op</h1>
-  <div id="status">서버 연결 중…</div>
+  <div id="status" data-i18n="status_connecting"></div>
   <div id="hud"></div>
+  <!-- 좌측 포획 랭킹: 포획 점수(⭐) 순으로 정렬 -->
+  <div id="rank" class="hidden">
+    <div class="rhead" data-i18n="rank_head"></div>
+    <div id="rankList" class="rlist"></div>
+  </div>
   <canvas id="c" width="512" height="768"></canvas>
   <div id="help">
-    <b>방향키</b>로 이동 — 안전지대에서 빈 공간으로 들어가면 선이 그려지고, 다시 안전지대에 닿으면 안쪽이 점유됩니다.
-    빨간 적이 당신의 선에 닿으면 목숨을 잃어요. 다 함께 <b>90%</b>를 열면 클리어!
-    <div style="margin-top:6px"><button id="restart" style="display:none">다음/재시작 (Enter)</button></div>
+    <span data-i18n-html="instr_html"></span>
+    <div style="margin-top:6px"><button id="restart" style="display:none" data-i18n="btn_restart"></button></div>
   </div>
 
   <!-- 우측 채팅창: 대화 로그 + 입력. Enter 로 입력창 포커스, 다시 Enter 로 전송 (Esc 취소). -->
   <aside id="chatPanel" class="hidden">
-    <div id="chatHead">채팅</div>
+    <div id="chatResize" data-i18n-title="chat_resize_title"></div>
+    <div id="chatHead" data-i18n="chat_head"></div>
     <div id="chatLog" aria-live="polite"></div>
-    <input id="chat" maxlength="60" placeholder="Enter 로 채팅…" autocomplete="off" />
+    <input id="chat" maxlength="60" data-i18n-ph="ph_chat" autocomplete="off" />
   </aside>
 
-  <!-- dev 전용: 클릭하면 10초 카운트다운 후 보스 출현 -->
-  <button id="devBossBtn" class="hidden" title="dev: 10초 뒤 보스 출현">🕳 보스 소환</button>
-  <!-- dev 전용: 레이저 보스를 바로 소환(곧 레이저 발사) -->
-  <button id="devLaserBtn" class="hidden" title="dev: 레이저 보스 즉시 소환 (곧 레이저 발사)">⚡ 레이저 보스</button>
+  <!-- 게임 오버: 화면 전체를 덮는 3D 카운트다운 오버레이 (three.js) -->
+  <div id="gameover" class="hidden">
+    <canvas id="fx3d"></canvas>
+    <div id="goNum" class="go-num-fallback">10</div>
+    <div class="go-hint" data-i18n-html="go_hint_html"></div>
+  </div>
 
+  <!-- 도감(컬렉션): 수집한 그림을 모아 보는 모달. 각자 브라우저(localStorage)에 저장. -->
+  <div id="gallery" class="hidden">
+    <div class="gwrap">
+      <div class="ghead">
+        <div class="gtitle"><span data-i18n="btn_gallery"></span> <span id="galleryProgress" class="gprog"></span></div>
+        <button id="galleryClose" class="gclose" data-i18n="btn_close"></button>
+      </div>
+      <div id="galleryGrid" class="ggrid"></div>
+    </div>
+  </div>
+  <!-- 도감에서 그림 클릭 시 크게 보는 라이트박스 -->
+  <div id="galleryView" class="hidden">
+    <button id="gvClose" class="gvclose" data-i18n-title="title_close">✕</button>
+    <img id="gvImg" alt="">
+    <div class="gvbar"><span id="gvCap" class="gvcap"></span><button id="gvSave" class="gvsave" data-i18n="btn_save"></button></div>
+  </div>
+
+  <!-- 로그인 / 회원가입 모달 (모드 전환) -->
+  <div id="login" class="hidden mode-in">
+    <div class="lgwrap">
+      <div class="lgtitle" id="lgTitle"></div>
+      <div class="lgsub" id="lgSub"></div>
+      <input id="lgName" type="text" maxlength="12" data-i18n-ph="ph_lgname" autocomplete="nickname" />
+      <input id="lgEmail" type="email" data-i18n-ph="ph_email" autocomplete="username" />
+      <input id="lgPass" type="password" data-i18n-ph="ph_pass" autocomplete="current-password" />
+      <div id="lgMsg" class="lgmsg"></div>
+      <button id="lgSubmit" class="lgprimary"></button>
+      <div class="lgswitch" id="lgSwitch"></div>
+      <button id="lgClose" class="lgclose" data-i18n="lg_close"></button>
+    </div>
+  </div>
+
+  <!-- dev 전용 버튼들 -->
+  <button id="devBossBtn" class="hidden" data-i18n="dev_boss"></button>
+  <button id="devLaserBtn" class="hidden" data-i18n="dev_laser"></button>
+  <button id="devLoseBtn" class="hidden" data-i18n="dev_lose"></button>
+  <button id="devWinBtn" class="hidden" data-i18n="dev_win"></button>
+
+  <!-- 모바일 터치 컨트롤: 4방향 D-패드 + 질주 (터치 기기·게임 중에만 표시) -->
+  <div id="touch" class="hidden" aria-hidden="true">
+    <div id="dpad">
+      <button class="tbtn tup"    data-dir="ArrowUp"    aria-label="up">▲</button>
+      <button class="tbtn tleft"  data-dir="ArrowLeft"  aria-label="left">◀</button>
+      <button class="tbtn tright" data-dir="ArrowRight" aria-label="right">▶</button>
+      <button class="tbtn tdown"  data-dir="ArrowDown"  aria-label="down">▼</button>
+    </div>
+    <button id="sprintBtn" class="tbtn tsprint" data-i18n="key_sprint"></button>
+  </div>
+
+<!-- three.js 애드온이 bare 'three' 를 import 하므로, 로컬 vendored 빌드로 매핑한다. -->
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 <script type="module">
 import { Client } from "https://esm.sh/colyseus.js@0.15.0";
+import { showCountdown3D, hideCountdown3D, renderCountdown3D } from "./countdown3d.js";
+import { initAudio, sfxCapture, sfxClear, sfxGameover, sfxItem } from "./sfx.js";
+import { onAuth, signIn, signUp, signOut, getToken, dbGetCollection } from "./supabase.js";
+
+// ── 다국어(i18n): 한국어/English/日本語 ──────────────────────────────────────
+// t(key, ...args) 로 현재 언어 문자열을 얻는다. {0}{1} 은 args 로 치환. data-i18n* 속성은
+// applyI18n() 이 정적 요소에 적용하고, 동적 UI(HUD·로비·팝업)는 렌더/이벤트에서 t() 로 만든다.
+const LANG_LABEL = { ko: "한국어", en: "English", ja: "日本語" };
+const I18N = {
+  ko: {
+    instr_html: "<b>방향키</b>로 이동 · 안전지대에서 빈 공간으로 들어가 선을 긋고, 다시 안전지대에 닿으면 안쪽이 열립니다.<br>빨간 <b>적</b>이 선에 닿으면 목숨을 잃어요 · 함께 <b>90%</b>를 열면 클리어!",
+    key_move: "이동", key_sprint: "질주", key_chat: "채팅",
+    online_label: "접속자", online_unit: "명",
+    ph_name: "플레이어 이름 (선택)", dev_stage: "🛠 스테이지 (dev)",
+    btn_start: "게임 시작", btn_create: "방 만들기 (친구끼리)", ph_code: "방 코드로 참가", btn_join: "참가",
+    btn_gallery: "📖 도감", btn_login: "🔑 로그인", btn_signup: "📝 회원가입", logout: "로그아웃",
+    lobby_title: "대기실", lobby_code_label: "방 코드", btn_copy: "복사", copied: "복사됨!",
+    lobby_waiting: "플레이어를 기다리는 중…", btn_startnow: "지금 시작",
+    lobby_hint: "4명이 모이면 10초 뒤 자동 시작 · 코드를 친구에게 공유하세요",
+    status_connecting: "서버 연결 중…", connected_play: "접속됨 · 방향키로 플레이하세요",
+    rank_head: "🏆 포획 랭킹", btn_restart: "다음/재시작 (Enter)",
+    chat_resize_title: "드래그로 채팅창 너비 조절", chat_head: "채팅", ph_chat: "Enter 로 채팅…",
+    chat_empty: "아직 메시지가 없어요 · Enter 로 입력",
+    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ 재시작",
+    btn_close: "✕ 닫기", title_close: "닫기", btn_save: "🖼 저장", collected: "수집",
+    need_login_paren: "(로그인 필요)", login_word: "로그인",
+    gallery_needlogin_html: "🔑 로그인하면 수집한 그림을 볼 수 있어요.<br><button id=\"glLogin\">로그인</button>",
+    lg_title_in: "🔑 로그인", lg_title_up: "📝 회원가입",
+    ph_lgname: "플레이어 이름 (게임에서 표시)", ph_email: "이메일", ph_pass: "비밀번호 (6자 이상)",
+    lg_sub_in: "로그인하면 도감이 클라우드에 저장돼 어느 기기에서나 이어집니다.",
+    lg_sub_up: "이름·이메일·비밀번호로 <b>바로 가입</b>됩니다 (가입 즉시 로그인).",
+    lg_submit_in: "로그인", lg_submit_up: "회원가입",
+    lg_switch_to_up: "계정이 없으신가요? <b data-mode=\"up\">회원가입</b>",
+    lg_switch_to_in: "이미 계정이 있으신가요? <b data-mode=\"in\">로그인</b>",
+    lg_close: "닫기",
+    err_need_email_pass: "이메일과 비밀번호를 입력하세요.", err_need_name: "플레이어 이름을 입력하세요.",
+    processing: "처리 중…", confirm_sent: "확인 메일을 보냈습니다. 링크 클릭 후 로그인하세요.",
+    auth_invalid: "이메일 또는 비밀번호가 올바르지 않습니다.",
+    auth_registered: "이미 가입된 이메일입니다. 로그인해 주세요.",
+    auth_not_confirmed: "이메일 확인이 필요합니다. 메일함을 확인하세요.",
+    auth_pass_short: "비밀번호는 6자 이상이어야 합니다.",
+    auth_email_format: "이메일 형식이 올바르지 않습니다.",
+    auth_weak: "비밀번호가 너무 약합니다. 더 복잡하게 만들어 주세요.",
+    auth_rate: "요청이 너무 많습니다. 잠시 후 다시 시도하세요.", auth_retry: "잠시 후 다시 시도하세요.",
+    auth_signup_disabled: "현재 회원가입이 비활성화되어 있습니다.",
+    auth_network: "네트워크 오류입니다. 연결을 확인하세요.",
+    auth_error_prefix: "오류: ", auth_unknown: "알 수 없는 오류",
+    err_need_code: "방 코드를 입력하세요", connecting2: "접속 중…",
+    err_room_notfound: "그 코드의 방을 찾을 수 없어요", err_conn_fail: "서버 연결 실패 — 잠시 후 다시 시도하세요",
+    starting_in: "{0}초 후 시작!", waiting_players: "플레이어 대기 중 ({0} / 4)",
+    hud_progress: "진행 · Lv {0}", hud_goal: "목표 90%", me_suffix: " (나)", stam_title: "질주 스태미나",
+    capture_multi: "포획 x{0}! +{1}", capture_one: "포획! +{1}",
+    item_missile: "미사일!", item_freeze: "프리즈!", item_life: "목숨 +1!", item_generic: "아이템!",
+    boss_incoming: "보스 출현", restart_here: "Enter ▶ 이 방에서 재시작", stage_n: "스테이지 {0}",
+    level_clear: "레벨 {0} 클리어!", next_stage: "Enter ▶ 다음 스테이지", next_stage_touch: "탭하여 다음 스테이지 ▶",
+    dev_boss: "🕳 보스 소환", dev_laser: "⚡ 레이저 보스", dev_lose: "💀 게임오버", dev_win: "🏆 스테이지 완료",
+    collected_fmt: "{0} / {1} 수집",
+  },
+  en: {
+    instr_html: "<b>Arrow keys</b> to move · from a safe zone, draw a line through open space and touch the safe zone again to claim the inside.<br>If a red <b>enemy</b> hits your line you lose a life · open <b>90%</b> together to clear!",
+    key_move: "Move", key_sprint: "Sprint", key_chat: "Chat",
+    online_label: "Online", online_unit: "",
+    ph_name: "Player name (optional)", dev_stage: "🛠 Stage (dev)",
+    btn_start: "Start Game", btn_create: "Create Room (friends)", ph_code: "Join by room code", btn_join: "Join",
+    btn_gallery: "📖 Collection", btn_login: "🔑 Log in", btn_signup: "📝 Sign up", logout: "Log out",
+    lobby_title: "Lobby", lobby_code_label: "Room code", btn_copy: "Copy", copied: "Copied!",
+    lobby_waiting: "Waiting for players…", btn_startnow: "Start Now",
+    lobby_hint: "Auto-starts 10s after 4 players · share the code with friends",
+    status_connecting: "Connecting to server…", connected_play: "Connected · use arrow keys to play",
+    rank_head: "🏆 Capture Ranking", btn_restart: "Next / Restart (Enter)",
+    chat_resize_title: "Drag to resize chat", chat_head: "Chat", ph_chat: "Enter to chat…",
+    chat_empty: "No messages yet · Enter to type",
+    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ Restart",
+    btn_close: "✕ Close", title_close: "Close", btn_save: "🖼 Save", collected: "collected",
+    need_login_paren: "(login required)", login_word: "Log in",
+    gallery_needlogin_html: "🔑 Log in to see the pictures you've collected.<br><button id=\"glLogin\">Log in</button>",
+    lg_title_in: "🔑 Log in", lg_title_up: "📝 Sign up",
+    ph_lgname: "Player name (shown in game)", ph_email: "Email", ph_pass: "Password (6+ chars)",
+    lg_sub_in: "Log in to save your collection to the cloud and continue on any device.",
+    lg_sub_up: "Sign up instantly with name, email, and password (<b>logged in right away</b>).",
+    lg_submit_in: "Log in", lg_submit_up: "Sign up",
+    lg_switch_to_up: "No account? <b data-mode=\"up\">Sign up</b>",
+    lg_switch_to_in: "Already have an account? <b data-mode=\"in\">Log in</b>",
+    lg_close: "Close",
+    err_need_email_pass: "Enter your email and password.", err_need_name: "Enter a player name.",
+    processing: "Processing…", confirm_sent: "Confirmation email sent. Click the link, then log in.",
+    auth_invalid: "Incorrect email or password.",
+    auth_registered: "This email is already registered. Please log in.",
+    auth_not_confirmed: "Email confirmation required. Check your inbox.",
+    auth_pass_short: "Password must be at least 6 characters.",
+    auth_email_format: "Invalid email format.",
+    auth_weak: "Password too weak. Please make it more complex.",
+    auth_rate: "Too many requests. Try again shortly.", auth_retry: "Please try again shortly.",
+    auth_signup_disabled: "Sign-ups are currently disabled.",
+    auth_network: "Network error. Check your connection.",
+    auth_error_prefix: "Error: ", auth_unknown: "Unknown error",
+    err_need_code: "Enter a room code", connecting2: "Connecting…",
+    err_room_notfound: "No room with that code", err_conn_fail: "Connection failed — try again shortly",
+    starting_in: "Starting in {0}s!", waiting_players: "Waiting for players ({0} / 4)",
+    hud_progress: "Progress · Lv {0}", hud_goal: "Goal 90%", me_suffix: " (you)", stam_title: "Sprint stamina",
+    capture_multi: "Capture x{0}! +{1}", capture_one: "Capture! +{1}",
+    item_missile: "Missile!", item_freeze: "Freeze!", item_life: "Life +1!", item_generic: "Item!",
+    boss_incoming: "BOSS INCOMING", restart_here: "Enter ▶ Restart in this room", stage_n: "Stage {0}",
+    level_clear: "LEVEL {0} CLEAR!", next_stage: "Enter ▶ Next stage", next_stage_touch: "Tap for next stage ▶",
+    dev_boss: "🕳 Summon Boss", dev_laser: "⚡ Laser Boss", dev_lose: "💀 Game Over", dev_win: "🏆 Stage Clear",
+    collected_fmt: "{0} / {1} collected",
+  },
+  ja: {
+    instr_html: "<b>矢印キー</b>で移動 · 安全地帯から空きスペースに入って線を引き、再び安全地帯に触れると内側が開きます。<br>赤い<b>敵</b>が線に触れると命を失います · みんなで<b>90%</b>開けるとクリア！",
+    key_move: "移動", key_sprint: "ダッシュ", key_chat: "チャット",
+    online_label: "接続中", online_unit: "人",
+    ph_name: "プレイヤー名（任意）", dev_stage: "🛠 ステージ (dev)",
+    btn_start: "ゲーム開始", btn_create: "部屋を作る（友達と）", ph_code: "部屋コードで参加", btn_join: "参加",
+    btn_gallery: "📖 図鑑", btn_login: "🔑 ログイン", btn_signup: "📝 新規登録", logout: "ログアウト",
+    lobby_title: "待機室", lobby_code_label: "部屋コード", btn_copy: "コピー", copied: "コピーしました！",
+    lobby_waiting: "プレイヤーを待っています…", btn_startnow: "今すぐ開始",
+    lobby_hint: "4人集まると10秒後に自動開始 · コードを友達に共有しましょう",
+    status_connecting: "サーバーに接続中…", connected_play: "接続完了 · 矢印キーでプレイ",
+    rank_head: "🏆 捕獲ランキング", btn_restart: "次へ / リスタート (Enter)",
+    chat_resize_title: "ドラッグで幅を調整", chat_head: "チャット", ph_chat: "Enterでチャット…",
+    chat_empty: "まだメッセージがありません · Enterで入力",
+    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ リスタート",
+    btn_close: "✕ 閉じる", title_close: "閉じる", btn_save: "🖼 保存", collected: "収集",
+    need_login_paren: "（ログインが必要）", login_word: "ログイン",
+    gallery_needlogin_html: "🔑 ログインすると集めた絵を見られます。<br><button id=\"glLogin\">ログイン</button>",
+    lg_title_in: "🔑 ログイン", lg_title_up: "📝 新規登録",
+    ph_lgname: "プレイヤー名（ゲームで表示）", ph_email: "メール", ph_pass: "パスワード（6文字以上）",
+    lg_sub_in: "ログインすると図鑑がクラウドに保存され、どの端末でも続けられます。",
+    lg_sub_up: "名前・メール・パスワードで<b>すぐ登録</b>できます（登録後すぐログイン）。",
+    lg_submit_in: "ログイン", lg_submit_up: "新規登録",
+    lg_switch_to_up: "アカウントがありませんか？ <b data-mode=\"up\">新規登録</b>",
+    lg_switch_to_in: "すでにアカウントをお持ちですか？ <b data-mode=\"in\">ログイン</b>",
+    lg_close: "閉じる",
+    err_need_email_pass: "メールとパスワードを入力してください。", err_need_name: "プレイヤー名を入力してください。",
+    processing: "処理中…", confirm_sent: "確認メールを送信しました。リンクをクリックしてログインしてください。",
+    auth_invalid: "メールまたはパスワードが正しくありません。",
+    auth_registered: "すでに登録済みのメールです。ログインしてください。",
+    auth_not_confirmed: "メール確認が必要です。受信箱を確認してください。",
+    auth_pass_short: "パスワードは6文字以上必要です。",
+    auth_email_format: "メールの形式が正しくありません。",
+    auth_weak: "パスワードが弱すぎます。もっと複雑にしてください。",
+    auth_rate: "リクエストが多すぎます。しばらくして再試行してください。", auth_retry: "しばらくして再試行してください。",
+    auth_signup_disabled: "現在、新規登録は無効です。",
+    auth_network: "ネットワークエラーです。接続を確認してください。",
+    auth_error_prefix: "エラー: ", auth_unknown: "不明なエラー",
+    err_need_code: "部屋コードを入力してください", connecting2: "接続中…",
+    err_room_notfound: "そのコードの部屋が見つかりません", err_conn_fail: "接続失敗 — しばらくして再試行してください",
+    starting_in: "{0}秒後に開始！", waiting_players: "プレイヤー待機中 ({0} / 4)",
+    hud_progress: "進行 · Lv {0}", hud_goal: "目標 90%", me_suffix: "（あなた）", stam_title: "ダッシュスタミナ",
+    capture_multi: "捕獲 x{0}! +{1}", capture_one: "捕獲！ +{1}",
+    item_missile: "ミサイル！", item_freeze: "フリーズ！", item_life: "ライフ +1！", item_generic: "アイテム！",
+    boss_incoming: "ボス出現", restart_here: "Enter ▶ この部屋でリスタート", stage_n: "ステージ {0}",
+    level_clear: "レベル {0} クリア！", next_stage: "Enter ▶ 次のステージ", next_stage_touch: "タップで次のステージ ▶",
+    dev_boss: "🕳 ボス召喚", dev_laser: "⚡ レーザーボス", dev_lose: "💀 ゲームオーバー", dev_win: "🏆 ステージクリア",
+    collected_fmt: "{0} / {1} 収集",
+  },
+};
+let LANG = "ko";
+try { const s = localStorage.getItem("galspanic:lang"); if (s && I18N[s]) LANG = s; } catch {}
+if (!localStorage_getLangSet() && /^ja/i.test(navigator.language || "")) LANG = "ja";
+else if (!localStorage_getLangSet() && /^en/i.test(navigator.language || "")) LANG = "en";
+function localStorage_getLangSet() { try { return !!localStorage.getItem("galspanic:lang"); } catch { return false; } }
+function t(key, ...args) {
+  let s = (I18N[LANG] && I18N[LANG][key]) ?? (I18N.ko[key]) ?? key;
+  return s.replace(/\{(\d+)\}/g, (_, i) => (args[i] != null ? args[i] : ""));
+}
+// 정적 요소(data-i18n*)에 현재 언어를 적용하고, JS 로 만드는 동적 UI 는 다시 그리게 한다.
+function applyI18n() {
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-html]").forEach((el) => { el.innerHTML = t(el.dataset.i18nHtml); });
+  document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+  try { document.documentElement.lang = LANG; } catch {}
+  if (chatLog) chatLog.dataset.empty = t("chat_empty");
+  const cur = document.getElementById("langCur"); if (cur) cur.textContent = LANG_LABEL[LANG];
+  document.querySelectorAll("#langMenu button").forEach((b) => b.classList.toggle("on", b.dataset.lang === LANG));
+  // 동적으로 텍스트를 세팅하는 UI 갱신 (함수 선언은 호이스팅되어 여기서 호출 가능)
+  try { setAuthMode(authMode); } catch {}                       // 로그인/회원가입 팝업 재현지화
+  try { updateLoginUI(currentUser); } catch {}                  // 로그인/로그아웃 버튼
+  try { updateGalleryCount(); } catch {}                        // 도감 카운트/로그인 필요 문구
+  try {                                                          // dev 스테이지 선택 항목
+    const ss = document.getElementById("stageSelect");
+    if (ss) [...ss.options].forEach((o) => { o.textContent = t("stage_n", o.value); });
+  } catch {}
+  // 갤러리가 열려 있으면 다시 그린다(진행 텍스트·로그인 안내)
+  try { if (galleryEl && !galleryEl.classList.contains("hidden")) openGallery(); } catch {}
+}
+let currentUser = null;   // 마지막 로그인 사용자(언어 전환 시 버튼 재현지화용)
+function setLang(l) {
+  if (!I18N[l]) return;
+  LANG = l;
+  try { localStorage.setItem("galspanic:lang", l); } catch {}
+  applyI18n();
+}
 
 // 서버 주소를 "이 페이지를 연 origin" 기준으로 자동 결정.
 // - 게임 서버(2567)가 이 페이지를 직접 서빙하는 경우(권장): 같은 origin으로 접속.
@@ -212,6 +664,8 @@ const devStage = document.getElementById("devStage");     // dev 전용 스테�
 const stageSelect = document.getElementById("stageSelect");
 const devBossBtn = document.getElementById("devBossBtn");  // dev 전용 보스 소환 버튼
 const devLaserBtn = document.getElementById("devLaserBtn"); // dev 전용 레이저 보스 버튼
+const devLoseBtn = document.getElementById("devLoseBtn");   // dev 전용 게임오버 미리보기 버튼
+const devWinBtn = document.getElementById("devWinBtn");     // dev 전용 스테이지 완료 미리보기 버튼
 const onlineNum = document.getElementById("onlineNum");
 const createBtn = document.getElementById("createBtn");
 const codeInput = document.getElementById("codeInput");
@@ -224,6 +678,8 @@ const lobbyStatus = document.getElementById("lobbyStatus");
 const startNowBtn = document.getElementById("startNowBtn");
 
 let room = null, state = null, GW = 64, GH = 64;
+let lostSince = 0;                 // 게임 오버가 시작된 시각(ms). 0 이면 오버 아님.
+const LOST_TIMEOUT_MS = 10000;    // 오버 후 이 시간 안에 Enter 면 재시작, 지나면 첫 화면으로.
 const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
 let imgVersion = 0;   // bumps on every (re)load so the cached grid layer rebuilds
 img.onload = () => { imgReady = true; imgVersion++; };
@@ -237,11 +693,15 @@ const preImg = new Image(); preImg.crossOrigin = "anonymous";
 async function connect(name, level, mode = "quick", code = "") {
   const client = new Client(WS_URL);
   // level 은 dev 서버에서만 서버가 신뢰한다 (프로덕션에선 무시되고 레벨 1로 시작).
-  const opts = level ? { name, level } : { name };
+  // token: 로그인했으면 Supabase access token 을 서버로 전달 → 서버가 검증해 클리어 시 도감 기록.
+  const token = await getToken();
+  const opts = { name };
+  if (level) opts.level = level;
+  if (token) opts.token = token;
   if (mode === "create") room = await client.create("game", { ...opts, private: true });   // 비공개 방
-  else if (mode === "join") room = await client.joinById(code, { name });                   // 코드로 특정 방
+  else if (mode === "join") room = await client.joinById(code, { ...opts });                 // 코드로 특정 방
   else room = await client.joinOrCreate("game", opts);                                       // 빠른 참가(순차 입장)
-  statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
+  statusEl.textContent = t("connected_play");
   // Keep this handler TRIVIAL: just latch the latest state. The heavy per-update work
   // (scanning the 4096-cell trail array, capturing enemy snapshots) is done once per
   // render frame instead — so a burst of queued patches can't pile up scans and stall
@@ -254,8 +714,17 @@ async function connect(name, level, mode = "quick", code = "") {
   room.onMessage("trap", (ev) => {
     flashes.push({
       x: ev.x, y: ev.y, color: playerColor(ev.owner), life: 1.2, ttl: 1.2,
-      text: ev.count > 1 ? `포획 x${ev.count}! +${ev.bonus}` : `포획! +${ev.bonus}`,
+      text: ev.count > 1 ? t("capture_multi", ev.count, ev.bonus) : t("capture_one", ev.count, ev.bonus),
     });
+    sfxCapture(ev.count);   // 포획 효과음
+  });
+  // 아이템 획득: 점유한 칸의 아이템을 먹으면 서버가 종류/위치를 알려준다 → 이름 팝업 + 효과음
+  room.onMessage("item", (ev) => {
+    flashes.push({
+      x: ev.x, y: ev.y, color: ITEM_COLOR[ev.kind] || "#fff", life: 1.4, ttl: 1.4,
+      text: `${ITEM_ICON[ev.kind] || "★"} ${I18N[LANG]["item_" + ev.kind] ? t("item_" + ev.kind) : t("item_generic")}`,
+    });
+    sfxItem();    // 파워업 획득음
   });
   // 블랙홀 예고: 그 자리에 블랙홀을 띄워 회피를 유도(예고가 끝나면 서버가 맵을 지우고 보스 등장)
   room.onMessage("warp", (ev) => {
@@ -270,7 +739,183 @@ async function connect(name, level, mode = "quick", code = "") {
 }
 
 // ---- 초기 화면: "게임 시작"을 눌러야 접속·합류한다 ----
-try { nameInput.value = localStorage.getItem("galspanic:name") || ""; } catch {}
+// 이름은 계정 기준(로그인) 또는 Guest(비로그인) — 직접 편집 불가. onAuth 가 값을 채운다.
+nameInput.value = "Guest"; nameInput.disabled = true;
+
+// ── 도감(컬렉션): 클리어한 그림을 각자 브라우저(localStorage)에 모아 개인 갤러리로 본다 ──
+let imageCount = 0;                 // 전체 그림 수 (서버 /config 로 채움)
+let lastWonImageId = null;          // 이번 클리어에서 이미 도감에 표시했는지 추적
+const galleryEl = document.getElementById("gallery");
+// 도감은 계정 전용(로그인 필요). remoteCache = 로그인 시 도감 Set, null = 로그아웃(도감 없음).
+// 실제 unlock 기록은 서버가 하며(서버 권위), 여기 캐시는 즉시 표시용이다.
+let remoteCache = null;
+function getCollection() { return remoteCache ? new Set(remoteCache) : new Set(); }
+function addToCollection(imageId) {
+  if (!imageId || !remoteCache) return;   // 로그인 상태에서만 수집(서버가 durable 기록)
+  if (remoteCache.has(imageId)) return;
+  remoteCache.add(imageId);               // 즉시 표시용 optimistic 업데이트
+  updateGalleryCount();
+}
+function updateGalleryCount() {
+  const el = document.getElementById("galleryCount");
+  if (!el) return;
+  el.textContent = remoteCache ? `(${remoteCache.size}/${imageCount || "?"})` : t("need_login_paren");
+}
+const artId = (i) => "art" + String(i).padStart(2, "0");   // 서버 명명과 일치 (art01.. art100)
+function openGallery() {
+  const grid = document.getElementById("galleryGrid");
+  galleryEl.classList.remove("hidden");
+  if (!remoteCache) {   // 로그인 필요 — 도감은 계정 전용
+    document.getElementById("galleryProgress").textContent = "";
+    grid.innerHTML = `<div class="gneedlogin">${t("gallery_needlogin_html")}</div>`;
+    document.getElementById("glLogin").onclick = () => { closeGallery(); openLogin(); };
+    return;
+  }
+  const owned = getCollection();
+  const total = imageCount || owned.size || 1;
+  grid.innerHTML = "";
+  for (let i = 1; i <= total; i++) {
+    const id = artId(i);
+    const cell = document.createElement("div");
+    if (owned.has(id)) {
+      cell.className = "gcell";
+      cell.dataset.id = id; cell.dataset.num = i;   // 클릭 시 크게 보기
+      cell.innerHTML = `<img loading="lazy" src="${HTTP_URL}/images/${id}_blur.jpg" alt=""><span class="gnum">${i}</span>`;
+    } else {
+      cell.className = "gcell locked";
+      cell.innerHTML = `<span class="gnum">${i}</span>`;
+    }
+    grid.appendChild(cell);
+  }
+  document.getElementById("galleryProgress").textContent = t("collected_fmt", owned.size, total);
+  updateGalleryCount();
+  galleryEl.classList.remove("hidden");
+}
+function closeGallery() { galleryEl.classList.add("hidden"); }
+document.getElementById("galleryBtn").addEventListener("click", openGallery);
+document.getElementById("galleryClose").addEventListener("click", closeGallery);
+galleryEl.addEventListener("click", (e) => { if (e.target === galleryEl) closeGallery(); });
+
+// 그림 다운로드 (도감·클리어 화면·라이트박스에서 공통 사용)
+async function downloadImage(id) {
+  if (!id) return;
+  try {
+    const blob = await fetch(`${HTTP_URL}/images/${id}_blur.jpg`).then((r) => r.blob());
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = `galspanic_${id}.jpg`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch (err) { console.warn("이미지 저장 실패:", err); }
+}
+// 도감에서 그림 클릭 → 크게 보기(라이트박스)
+const galleryViewEl = document.getElementById("galleryView");
+function openGalleryView(id, num) {
+  document.getElementById("gvImg").src = `${HTTP_URL}/images/${id}_blur.jpg`;
+  document.getElementById("gvCap").textContent = `#${num}`;
+  galleryViewEl.dataset.id = id;
+  galleryViewEl.classList.remove("hidden");
+}
+function closeGalleryView() { galleryViewEl.classList.add("hidden"); }
+document.getElementById("galleryGrid").addEventListener("click", (e) => {
+  const cell = e.target.closest(".gcell");
+  if (cell && cell.dataset.id) openGalleryView(cell.dataset.id, cell.dataset.num);
+});
+document.getElementById("gvClose").addEventListener("click", closeGalleryView);
+document.getElementById("gvSave").addEventListener("click", () => downloadImage(galleryViewEl.dataset.id));
+galleryViewEl.addEventListener("click", (e) => { if (e.target === galleryViewEl) closeGalleryView(); });
+// ESC: 라이트박스 먼저, 그다음 도감
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!galleryViewEl.classList.contains("hidden")) { closeGalleryView(); e.stopPropagation(); }
+  else if (!galleryEl.classList.contains("hidden")) { closeGallery(); e.stopPropagation(); }
+}, true);
+
+// ── 로그인/회원가입 + 도감 클라우드 동기화 ──
+let accountName = null;   // 로그인 시 계정 플레이어 이름. null = 비로그인(게임에서 Guest).
+let authMode = "in";      // "in"=로그인, "up"=회원가입 (같은 팝업이 모드 전환)
+const loginEl = document.getElementById("login");
+const lgMsg = document.getElementById("lgMsg");
+function setAuthMode(mode) {
+  authMode = mode;
+  const login = mode === "in";
+  loginEl.classList.toggle("mode-in", login);
+  loginEl.classList.toggle("mode-up", !login);
+  document.getElementById("lgTitle").textContent = t(login ? "lg_title_in" : "lg_title_up");
+  document.getElementById("lgSub").innerHTML = t(login ? "lg_sub_in" : "lg_sub_up");
+  document.getElementById("lgSubmit").textContent = t(login ? "lg_submit_in" : "lg_submit_up");
+  document.getElementById("lgSwitch").innerHTML = t(login ? "lg_switch_to_up" : "lg_switch_to_in");
+  lgMsg.textContent = ""; lgMsg.className = "lgmsg";
+}
+function openLogin(mode = "in") {
+  setAuthMode(mode);
+  loginEl.classList.remove("hidden");
+  document.getElementById(mode === "up" ? "lgName" : "lgEmail").focus();
+}
+function closeLogin() { loginEl.classList.add("hidden"); }
+function updateLoginUI(user) {
+  currentUser = user || null;
+  const login = document.getElementById("loginBtn");
+  const signup = document.getElementById("signupBtn");
+  if (user) { login.textContent = t("logout"); login.dataset.in = "1"; signup.style.display = "none"; }
+  else { login.textContent = t("btn_login"); login.dataset.in = ""; signup.style.display = ""; }
+}
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  if (document.getElementById("loginBtn").dataset.in) await signOut();   // 로그아웃 (onAuth 가 처리)
+  else openLogin("in");
+});
+document.getElementById("signupBtn").addEventListener("click", () => openLogin("up"));
+document.getElementById("lgClose").addEventListener("click", closeLogin);
+document.getElementById("lgSwitch").addEventListener("click", (e) => {
+  const b = e.target.closest("b[data-mode]"); if (b) setAuthMode(b.dataset.mode);
+});
+loginEl.addEventListener("click", (e) => { if (e.target === loginEl) closeLogin(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !loginEl.classList.contains("hidden")) { closeLogin(); e.stopPropagation(); } }, true);
+// Supabase 인증 에러 메시지를 한글로 (매핑 안 된 건 원문 표시)
+function krAuthError(msg) {
+  const m = (msg || "").toLowerCase();
+  if (m.includes("invalid login credentials")) return t("auth_invalid");
+  if (m.includes("already registered") || m.includes("already been registered") || m.includes("user already")) return t("auth_registered");
+  if (m.includes("email not confirmed")) return t("auth_not_confirmed");
+  if (m.includes("should be at least") || (m.includes("password") && m.includes("6 char"))) return t("auth_pass_short");
+  if (m.includes("unable to validate email") || m.includes("invalid email") || m.includes("invalid format")) return t("auth_email_format");
+  if (m.includes("weak password")) return t("auth_weak");
+  if (m.includes("rate limit") || m.includes("too many")) return t("auth_rate");
+  if (m.includes("for security purposes")) return t("auth_retry");
+  if (m.includes("signups not allowed") || (m.includes("signup") && m.includes("disabled"))) return t("auth_signup_disabled");
+  if (m.includes("failed to fetch") || m.includes("networkerror") || m.includes("network")) return t("auth_network");
+  return t("auth_error_prefix") + (msg || t("auth_unknown"));
+}
+async function doAuth(kind) {
+  const email = document.getElementById("lgEmail").value.trim();
+  const pass = document.getElementById("lgPass").value;
+  const name = document.getElementById("lgName").value.trim();
+  if (!email || !pass) { lgMsg.className = "lgmsg"; lgMsg.textContent = t("err_need_email_pass"); return; }
+  if (kind === "up" && !name) { lgMsg.className = "lgmsg"; lgMsg.textContent = t("err_need_name"); return; }
+  lgMsg.className = "lgmsg"; lgMsg.textContent = t("processing");
+  const { data, error } = kind === "up" ? await signUp(email, pass, name) : await signIn(email, pass);
+  if (error) { lgMsg.className = "lgmsg"; lgMsg.textContent = krAuthError(error.message); return; }
+  if (kind === "up" && !(data && data.session)) {   // 이메일 확인이 켜져 있으면 세션이 바로 안 생김
+    lgMsg.className = "lgmsg ok"; lgMsg.textContent = t("confirm_sent");
+    return;
+  }
+  closeLogin();   // onAuth 가 도감 로드/병합 처리
+}
+document.getElementById("lgSubmit").addEventListener("click", () => doAuth(authMode));
+["lgName", "lgEmail", "lgPass"].forEach((id) =>
+  document.getElementById(id).addEventListener("keydown", (e) => { if (e.key === "Enter") doAuth(authMode); }));
+
+// 로그인 상태 변화 → 도감 소스 전환 + 게임 이름 반영 (로그인=계정이름, 비로그인=Guest)
+onAuth(async (user) => {
+  remoteCache = user ? new Set(await dbGetCollection()) : null;
+  accountName = user ? (((user.user_metadata && user.user_metadata.name) || "").trim() || (user.email || "").split("@")[0] || "Player") : null;
+  nameInput.value = accountName || "Guest";   // 표시용(비편집) — 실제 이름은 accountName/Guest
+  nameInput.disabled = true;
+  updateLoginUI(user);
+  updateGalleryCount();
+  if (!galleryEl.classList.contains("hidden")) openGallery();
+});
+
+updateGalleryCount();
 
 // dev 서버면 시작 화면에 스테이지 선택을 노출한다. 서버 /config 로 판별하며,
 // 프로덕션(dev=false)에선 선택 UI가 나타나지 않는다.
@@ -278,12 +923,13 @@ let devMode = false;
 (async () => {
   try {
     const cfg = await fetch(`${HTTP_URL}/config`).then((r) => r.json());
+    imageCount = cfg?.imageCount || 0; updateGalleryCount();
     if (!cfg?.dev) return;
     devMode = true;
     const MAX_STAGE = 12;   // 선택 가능한 최대 스테이지 (포탑은 4스테이지+ 등장)
     for (let i = 1; i <= MAX_STAGE; i++) {
       const o = document.createElement("option");
-      o.value = String(i); o.textContent = `스테이지 ${i}`;
+      o.value = String(i); o.textContent = t("stage_n", i);
       stageSelect.appendChild(o);
     }
     let saved = 1;
@@ -299,17 +945,17 @@ let devMode = false;
 let gameShown = false;   // 게임 화면(캔버스)이 이미 드러났는지
 async function enterGame(mode) {
   if (startBtn.disabled) return;
-  const name = (nameInput.value || "").trim().slice(0, 12) || "Guest";
-  try { localStorage.setItem("galspanic:name", name === "Guest" ? "" : name); } catch {}
+  initAudio();   // 사용자 클릭 제스처로 오디오 활성화 (브라우저 정책)
+  const name = accountName ? accountName.slice(0, 12) : "Guest";   // 로그인=계정 이름, 비로그인=Guest
   let level;
   if (devMode) {
     level = parseInt(stageSelect.value, 10) || 1;
     try { localStorage.setItem("galspanic:stage", String(level)); } catch {}
   }
   const code = (codeInput.value || "").trim();
-  if (mode === "join" && !code) { startErr.textContent = "방 코드를 입력하세요"; return; }
+  if (mode === "join" && !code) { startErr.textContent = t("err_need_code"); return; }
   [startBtn, createBtn, joinBtn].forEach(b => b.disabled = true);
-  startErr.textContent = "접속 중…";
+  startErr.textContent = t("connecting2");
   try {
     await connect(name, level, mode, code);
     startScreen.classList.add("hidden");
@@ -317,7 +963,7 @@ async function enterGame(mode) {
     lobbyCodeVal.textContent = room.roomId;           // 이 방의 코드(공유용)
   } catch (e) {
     console.error(e);
-    startErr.textContent = mode === "join" ? "그 코드의 방을 찾을 수 없어요" : "서버 연결 실패 — 잠시 후 다시 시도하세요";
+    startErr.textContent = mode === "join" ? t("err_room_notfound") : t("err_conn_fail");
     [startBtn, createBtn, joinBtn].forEach(b => b.disabled = false);
   }
 }
@@ -327,7 +973,7 @@ joinBtn.addEventListener("click", () => enterGame("join"));
 codeInput.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) enterGame("join"); });
 startNowBtn.addEventListener("click", () => room?.send("startNow"));
 copyCodeBtn.addEventListener("click", () => {
-  try { navigator.clipboard?.writeText(room?.roomId || ""); copyCodeBtn.textContent = "복사됨!"; setTimeout(() => copyCodeBtn.textContent = "복사", 1200); } catch {}
+  try { navigator.clipboard?.writeText(room?.roomId || ""); copyCodeBtn.textContent = t("copied"); setTimeout(() => copyCodeBtn.textContent = t("btn_copy"), 1200); } catch {}
 });
 
 // 대기실 화면 갱신 + phase 가 playing 이 되면 게임 화면을 드러낸다. render 루프에서 매 프레임 호출.
@@ -348,17 +994,64 @@ function updateOverlays() {
       });
     }
     lobbyStatus.textContent = state.startIn >= 0
-      ? `${Math.ceil(state.startIn)}초 후 시작!`
-      : `플레이어 대기 중 (${players.length} / 4)`;
+      ? t("starting_in", Math.ceil(state.startIn))
+      : t("waiting_players", players.length);
   } else {
     // 게임 시작됨(또는 그 이후) → 대기실 닫고 게임/채팅/dev 버튼 노출
     if (!lobby.classList.contains("hidden")) lobby.classList.add("hidden");
     if (!gameShown) {
       gameShown = true;
-      chatPanel.classList.remove("hidden");
-      if (devMode) { devBossBtn.classList.remove("hidden"); devLaserBtn.classList.remove("hidden"); }
+      if (!IS_TOUCH) chatPanel.classList.remove("hidden");           // 모바일에선 채팅 로그 숨김
+      if (IS_TOUCH && touchEl) touchEl.classList.remove("hidden");   // 모바일 터치 컨트롤 노출
+      if (devMode) { devBossBtn.classList.remove("hidden"); devLaserBtn.classList.remove("hidden"); devLoseBtn.classList.remove("hidden"); devWinBtn.classList.remove("hidden"); }
+    }
+    // 게임 오버: 화면 전체 3D 카운트다운(10초). 그 안에 Enter 면 이 방에서 재시작(window keydown),
+    // 시간이 지나면 방을 떠나 첫(타이틀) 화면으로 되돌린다.
+    if (state.phase === "lost") {
+      if (lostSince === 0) {
+        lostSince = performance.now();
+        sfxGameover();                                         // 게임오버 효과음
+        const ok = showCountdown3D();                          // three.js 시작(실패 시 false)
+        gameoverEl.classList.remove("hidden");
+        goNumEl.style.display = ok ? "none" : "";              // WebGL 없으면 2D 숫자 폴백
+      }
+      const remain = Math.max(0, Math.ceil((LOST_TIMEOUT_MS - (performance.now() - lostSince)) / 1000));
+      goNumEl.textContent = remain;   // 2D 폴백 숫자 (WebGL 미지원 시)
+      if (performance.now() - lostSince >= LOST_TIMEOUT_MS) { returnToTitle(); return; }
+    } else if (lostSince !== 0) {
+      lostSince = 0;
+      gameoverEl.classList.add("hidden");
+      hideCountdown3D();
+    }
+    // 클리어: 복원한 그림을 도감에 자동 추가(다운로드는 도감에서). 사운드도 한 번 재생.
+    if (state.phase === "won") {
+      if (state.imageId && lastWonImageId !== state.imageId) { lastWonImageId = state.imageId; addToCollection(state.imageId); sfxClear(); }
+    } else {
+      lastWonImageId = null;
     }
   }
+}
+const gameoverEl = document.getElementById("gameover");
+const goNumEl = document.getElementById("goNum");
+
+// 게임 오버 후(또는 나가기) 첫 화면으로 복귀: 방을 떠나고 상태를 초기화한 뒤 타이틀을 다시 띄운다.
+function returnToTitle() {
+  try { room?.leave(); } catch {}
+  room = null; state = null; gameShown = false; lostSince = 0; lastLobbyKey = "";
+  bubbles.clear(); pmove.clear(); prevMarker.clear(); flashes.length = 0; warps.length = 0;
+  prevCells = null; lastClaimed = -1; gridBuilt = false; gridDirty = true; gridScan = 0;   // force a full grid repaint on the next game
+  lobby.classList.add("hidden");
+  chatPanel.classList.add("hidden");
+  document.getElementById("rank").classList.add("hidden");
+  document.getElementById("gameover").classList.add("hidden"); hideCountdown3D();
+  lastWonImageId = null;
+  devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden"); devLoseBtn.classList.add("hidden"); devWinBtn.classList.add("hidden");
+  document.getElementById("touch")?.classList.add("hidden"); pressOrder.length = 0; boostHeld = false;   // 터치 컨트롤 숨김 + 눌림 초기화
+  document.querySelectorAll(".tbtn.on").forEach((b) => b.classList.remove("on"));
+  startScreen.classList.remove("hidden");
+  [startBtn, createBtn, joinBtn].forEach((b) => (b.disabled = false));
+  startErr.textContent = "";
+  statusEl.textContent = "";
 }
 
 // 메인화면 접속자 수 표시 (몇 초마다 /stats 폴링). 로비/게임 중엔 갱신 불필요.
@@ -372,6 +1065,8 @@ pollOnline(); setInterval(pollOnline, 4000);
 devBossBtn.addEventListener("click", () => { room?.send("devBoss"); devBossBtn.blur(); });
 // dev 레이저 보스: 즉시 소환 → 곧 레이저 발사 (반복 클릭 가능, 최대 3마리)
 devLaserBtn.addEventListener("click", () => { room?.send("devLaser"); devLaserBtn.blur(); });
+devLoseBtn.addEventListener("click", () => { room?.send("devLose"); devLoseBtn.blur(); });
+devWinBtn.addEventListener("click", () => { room?.send("devWin"); devWinBtn.blur(); });
 // 이름 칸에서 Enter 로도 시작 (IME 조합 중 Enter 는 무시 — 부분 입력 방지)
 nameInput.addEventListener("keydown", (e) => {
   e.stopPropagation();
@@ -397,9 +1092,12 @@ function syncInput() {
     lastSentDir = d; lastSentBoost = boostHeld;
   }
 }
-window.addEventListener("keydown", (e) => {
+function typingInField() {
   const ae = document.activeElement;
-  if (ae === chatInput || ae === nameInput) return;   // typing in a text field: let it handle keys
+  return !!(ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.tagName === "SELECT" || ae.isContentEditable));
+}
+window.addEventListener("keydown", (e) => {
+  if (typingInField()) return;   // 입력창/셀렉트에 타이핑 중이면 게임 입력으로 가로채지 않음
   if (CODE_DIR[e.code] != null || e.code === "Enter") e.preventDefault();
   if (e.repeat) return;                       // ignore OS key auto-repeat
   if (e.code === "Enter") {
@@ -412,8 +1110,7 @@ window.addEventListener("keydown", (e) => {
   syncInput();
 });
 window.addEventListener("keyup", (e) => {
-  const ae = document.activeElement;
-  if (ae === chatInput || ae === nameInput) return;
+  if (typingInField()) return;
   if (e.code === "ShiftLeft" || e.code === "ShiftRight") { boostHeld = false; syncInput(); return; }
   const i = pressOrder.indexOf(e.code); if (i >= 0) pressOrder.splice(i, 1);
   syncInput();
@@ -436,6 +1133,69 @@ function releaseAllKeys(){ pressOrder.length = 0; boostHeld = false; syncInput()
 window.addEventListener("blur", releaseAllKeys);
 document.addEventListener("visibilitychange", () => { if (document.hidden) releaseAllKeys(); });
 restartBtn.onclick = () => room?.send("restart");
+
+// ── 모바일 터치 컨트롤: D-패드 + 질주 버튼. 기존 pressOrder/boostHeld/syncInput 을 그대로 재사용
+// 하므로 키보드와 동일하게 동작한다(방향은 "마지막으로 누른 것" 우선).
+// 실기기에서 버튼이 눌린 채 고정되는 것을 막기 위해: (1) setPointerCapture 로 손가락이 살짝
+// 벗어나도 pointerup 이 반드시 그 버튼에서 발생하게 하고, (2) lostpointercapture 와 (3) window
+// 전역 pointerup/cancel 안전망으로 놓친 해제를 잡아 항상 멈추게 한다. ──
+const IS_TOUCH = matchMedia("(pointer: coarse)").matches || "ontouchstart" in window || navigator.maxTouchPoints > 0;
+if (IS_TOUCH) document.body.classList.add("touch");
+const touchEl = document.getElementById("touch");
+const DIR_CODES = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+const touchHeld = new Map();   // pointerId -> code ("__sprint__" 은 질주)
+const sprintBtn = document.getElementById("sprintBtn");
+function pressCode(code, on) {
+  const i = pressOrder.indexOf(code);
+  if (on) { if (i < 0) pressOrder.push(code); }
+  else if (i >= 0) pressOrder.splice(i, 1);
+  const btn = touchEl?.querySelector(`[data-dir="${code}"]`);
+  if (btn) btn.classList.toggle("on", on);
+  syncInput();
+}
+function releaseTouchPointer(pid) {
+  const code = touchHeld.get(pid);
+  if (code === undefined) return;   // 이 포인터는 터치 버튼이 아니었음 → 무시
+  touchHeld.delete(pid);
+  if (code === "__sprint__") { boostHeld = false; sprintBtn?.classList.remove("on"); syncInput(); }
+  else pressCode(code, false);
+}
+function releaseAllTouch() {
+  touchHeld.clear();
+  for (const c of DIR_CODES) { const i = pressOrder.indexOf(c); if (i >= 0) pressOrder.splice(i, 1); }
+  boostHeld = false;
+  touchEl?.querySelectorAll(".tbtn.on").forEach((b) => b.classList.remove("on"));
+  syncInput();
+}
+touchEl?.querySelectorAll("[data-dir]").forEach((b) => {
+  const code = b.dataset.dir;
+  b.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    try { b.setPointerCapture(e.pointerId); } catch {}
+    touchHeld.set(e.pointerId, code);
+    pressCode(code, true);
+  });
+  const rel = (e) => { e.preventDefault(); releaseTouchPointer(e.pointerId); };
+  b.addEventListener("pointerup", rel);
+  b.addEventListener("pointercancel", rel);
+  b.addEventListener("lostpointercapture", rel);
+});
+sprintBtn?.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  try { sprintBtn.setPointerCapture(e.pointerId); } catch {}
+  touchHeld.set(e.pointerId, "__sprint__");
+  sprintBtn.classList.add("on"); boostHeld = true; syncInput();
+});
+["pointerup", "pointercancel", "lostpointercapture"].forEach((ev) =>
+  sprintBtn?.addEventListener(ev, (e) => { e.preventDefault(); releaseTouchPointer(e.pointerId); }));
+// 전역 안전망: 버튼이 놓친 해제를 잡는다(시스템 제스처로 터치가 가로채진 경우 등).
+window.addEventListener("pointerup", (e) => releaseTouchPointer(e.pointerId));
+window.addEventListener("pointercancel", (e) => releaseTouchPointer(e.pointerId));
+window.addEventListener("blur", releaseAllTouch);
+// 모바일: 클리어/게임오버 화면에서 캔버스를 탭하면 다음 스테이지/재시작 (키보드 Enter 대체).
+if (IS_TOUCH) canvas.addEventListener("pointerdown", () => {
+  if (state && (state.phase === "won" || state.phase === "lost")) room?.send("restart");
+});
 
 // ---- render ----
 function playerColor(owner) {
@@ -470,22 +1230,25 @@ function appendChat(owner, text) {
 // gap 만큼 띄우고, 거기서 창 오른쪽 끝(여백 제외)까지 폭을 꽉 채운다. 상단/높이는 이미지에
 // 맞춘다. 오른쪽 여유 폭이 CHAT_MIN_W 보다 좁으면(모바일 등) 캔버스 아래 스택으로 전환한다.
 // render 루프에서 매 프레임 호출되므로, 배치가 실제로 바뀐 경우에만 DOM 을 갱신한다.
-const CHAT_GAP = 12, CHAT_MARGIN = 14, CHAT_MIN_W = 240;
+const CHAT_GAP = 12, CHAT_MARGIN = 14, CHAT_MIN_W = 240, CHAT_MAX_W = 560, CHAT_DEFAULT_W = 340;
 let lastChatKey = "";
+let userChatW = null;   // 드래그로 정한 채팅창 너비(px). null 이면 기본값 사용.
+try { const v = parseInt(localStorage.getItem("galspanic:chatW") || "", 10); if (v > 0) userChatW = v; } catch {}
 function syncChatBox() {
   if (!chatPanel || chatPanel.classList.contains("hidden")) return;
   const c = canvas.getBoundingClientRect();
-  const left = Math.round(c.right + CHAT_GAP);
-  const width = Math.round(window.innerWidth - left - CHAT_MARGIN);
+  const avail = Math.round(window.innerWidth - c.right - CHAT_GAP - CHAT_MARGIN);   // 캔버스 오른쪽 여유 폭
   const top = Math.round(c.top), height = Math.round(c.height);
-  const docked = width >= CHAT_MIN_W;
-  const key = docked ? `d:${left},${width},${top},${height}` : "s";
+  const docked = avail >= CHAT_MIN_W;
+  // 화면을 꽉 채우지 않고 고정 기본폭(또는 사용자가 드래그로 정한 폭)을 쓴다. 우측에 고정.
+  const width = docked ? Math.max(CHAT_MIN_W, Math.min(userChatW || CHAT_DEFAULT_W, CHAT_MAX_W, avail)) : 0;
+  const key = docked ? `d:${width},${top},${height}` : "s";
   if (key === lastChatKey) return;
   lastChatKey = key;
   if (docked) {
     chatPanel.classList.remove("chat-stacked");
-    chatPanel.style.left = left + "px";
-    chatPanel.style.right = "auto";
+    chatPanel.style.right = CHAT_MARGIN + "px";
+    chatPanel.style.left = "auto";
     chatPanel.style.width = width + "px";
     chatPanel.style.maxWidth = "none";
     chatPanel.style.top = top + "px";
@@ -497,13 +1260,92 @@ function syncChatBox() {
     chatPanel.style.cssText = "";
   }
 }
+// 왼쪽 가장자리 핸들을 좌우로 드래그해 채팅창 너비를 조절(우측 고정이라 왼쪽 끌기 = 너비 변경). localStorage 에 저장.
+const chatResize = document.getElementById("chatResize");
+let chatDragging = false;
+chatResize.addEventListener("pointerdown", (e) => {
+  chatDragging = true; chatPanel.classList.add("resizing");
+  try { chatResize.setPointerCapture(e.pointerId); } catch {}
+  e.preventDefault();
+});
+window.addEventListener("pointermove", (e) => {
+  if (!chatDragging) return;
+  const rightEdge = window.innerWidth - CHAT_MARGIN;
+  userChatW = Math.max(CHAT_MIN_W, Math.min(CHAT_MAX_W, Math.round(rightEdge - e.clientX)));
+  try { localStorage.setItem("galspanic:chatW", String(userChatW)); } catch {}
+  lastChatKey = "";   // 강제로 다시 적용
+  syncChatBox();
+});
+window.addEventListener("pointerup", () => {
+  if (!chatDragging) return;
+  chatDragging = false; chatPanel.classList.remove("resizing");
+});
 
 // monster archetype colors (kind -> color); shape comes from the synced e.shape
 const KIND_COLOR = {
   star:"#ff3b5c", saw:"#f59e0b", blob:"#a855f7", ghost:"#e0e7ff", gunner:"#ef4444", dart:"#22d3ee",
+  // 특수 몬스터
+  splitter:"#a3e635", bomber:"#f97316", weaver:"#8b5cf6", sniper:"#dc2626",
+  shielder:"#38bdf8", blinker:"#e879f9", phantom:"#cbd5e1", patrol:"#22c55e",
   // 보스: 종류별로 뚜렷이 다른 색
   boss_ring:"#ef4444", boss_spiral:"#a855f7", boss_spread:"#fb923c", boss_cross:"#ec4899",
 };
+// 새 몬스터 모양은 기존 그리기 케이스를 재사용(색으로 구분 + 상태 오버레이)
+const SHAPE_ALIAS = {
+  splitter:"blob", bomber:"saw", weaver:"ghost", sniper:"turret",
+  shielder:"star", blinker:"ghost", phantom:"ghost", patrol:"triangle",
+};
+// 맵 아이템(파워업) 아이콘(팝업 이모지)·색·이름
+const ITEM_ICON = { missile:"🚀", freeze:"❄", life:"❤" };
+const ITEM_COLOR = { missile:"#f97316", freeze:"#67e8f9", life:"#ff5db1" };
+const ITEM_NAME = { missile:"미사일!", freeze:"프리즈!", life:"목숨 +1!" };
+// 맵 위 아이템을 종류별 벡터 아이콘으로 그린다. (x,y)=중심, s=아이콘 반지름(캔버스 단위).
+// 벡터라 카메라 줌/팬에 항상 선명하게 정렬된다.
+function drawItemIcon(kind, x, y, s) {
+  const col = ITEM_COLOR[kind] || "#fff";
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  if (kind === "missile") {
+    ctx.fillStyle = col; ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.lineWidth = Math.max(0.5, s * 0.14);
+    ctx.beginPath();                                   // 몸통 (위가 뾰족한 로켓)
+    ctx.moveTo(0, -s);
+    ctx.quadraticCurveTo(s * 0.5, -s * 0.3, s * 0.4, s * 0.35);
+    ctx.lineTo(-s * 0.4, s * 0.35);
+    ctx.quadraticCurveTo(-s * 0.5, -s * 0.3, 0, -s);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath();                                   // 핀
+    ctx.moveTo(-s * 0.4, s * 0.08); ctx.lineTo(-s * 0.82, s * 0.6); ctx.lineTo(-s * 0.28, s * 0.42);
+    ctx.moveTo(s * 0.4, s * 0.08); ctx.lineTo(s * 0.82, s * 0.6); ctx.lineTo(s * 0.28, s * 0.42);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.95)";          // 창문
+    ctx.beginPath(); ctx.arc(0, -s * 0.18, s * 0.2, 0, 7); ctx.fill();
+  } else if (kind === "freeze") {
+    ctx.strokeStyle = col; ctx.lineWidth = Math.max(0.5, s * 0.14);
+    for (let k = 0; k < 6; k++) {                      // 눈송이: 6갈래 + 곁가지
+      ctx.save(); ctx.rotate(k * Math.PI / 3);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -s); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 0.62); ctx.lineTo(-s * 0.3, -s * 0.84);
+      ctx.moveTo(0, -s * 0.62); ctx.lineTo(s * 0.3, -s * 0.84);
+      ctx.moveTo(0, -s * 0.34); ctx.lineTo(-s * 0.22, -s * 0.5);
+      ctx.moveTo(0, -s * 0.34); ctx.lineTo(s * 0.22, -s * 0.5);
+      ctx.stroke(); ctx.restore();
+    }
+  } else if (kind === "life") {
+    ctx.fillStyle = col; ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = Math.max(0.5, s * 0.14);
+    ctx.beginPath();                                   // 하트
+    ctx.moveTo(0, s * 0.82);
+    ctx.bezierCurveTo(-s * 1.12, -s * 0.12, -s * 0.5, -s, 0, -s * 0.34);
+    ctx.bezierCurveTo(s * 0.5, -s, s * 1.12, -s * 0.12, 0, s * 0.82);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, s * 0.7, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
 const flashes = [];   // capture popups {x,y,text,color,life,ttl}, fed by the "trap" broadcast
 
 // ── 보스 연출 상태 ──────────────────────────────────────────────────────────
@@ -540,32 +1382,40 @@ function enemyEyes(R) {
 // draw one enemy at screen px (px,py); shape/kind/r/aim come from the synced schema
 function drawEnemy(px, py, e, R, spin) {
   const color = KIND_COLOR[e.kind] || "#ff3b5c";
+  const shape = SHAPE_ALIAS[e.shape] || e.shape;   // 특수 몬스터는 기존 모양 재사용
   ctx.save();
   ctx.translate(px, py);
+  if (e.st) ctx.globalAlpha = 0.22;   // phantom 은신: 반투명 (여전히 위험)
   ctx.fillStyle = color;   // shadowBlur removed — it's a canvas perf killer (per-enemy gaussian blur)
-  if (e.shape === "triangle") {
+  if (shape === "triangle") {
     ctx.save(); ctx.rotate((e.aim||0) + Math.PI/2);
     ctx.beginPath(); ctx.moveTo(0,-R*1.1); ctx.lineTo(R*0.85,R*0.8); ctx.lineTo(-R*0.85,R*0.8); ctx.closePath(); ctx.fill();
     ctx.restore(); ctx.shadowBlur = 0; enemyEyes(R*0.85);
-  } else if (e.shape === "saw") {
+  } else if (shape === "saw") {
     ctx.save(); ctx.rotate(spin); spikePath(11, R, 0.72); ctx.fill(); ctx.restore();
     ctx.shadowBlur = 0; ctx.fillStyle = "#1a1206"; ctx.beginPath(); ctx.arc(0,0,R*0.4,0,7); ctx.fill(); enemyEyes(R);
-  } else if (e.shape === "blob") {
+  } else if (shape === "blob") {
     ctx.beginPath();
     for (let a=0;a<=Math.PI*2+0.01;a+=0.4){ const rr=R*(1+0.14*Math.sin(a*3+spin)); const x=Math.cos(a)*rr,y=Math.sin(a)*rr*0.9; a===0?ctx.moveTo(x,y):ctx.lineTo(x,y);} ctx.closePath(); ctx.fill();
     ctx.shadowBlur = 0; enemyEyes(R);
-  } else if (e.shape === "ghost") {
-    ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(0,-R*0.1,R,Math.PI,0);
+  } else if (shape === "ghost") {
+    ctx.globalAlpha *= 0.9; ctx.beginPath(); ctx.arc(0,-R*0.1,R,Math.PI,0);
     const feet=4, w=R*2/feet; for(let f=0;f<feet;f++){const x0=R-f*w; ctx.lineTo(x0,R*0.7); ctx.quadraticCurveTo(x0-w/2,R,x0-w,R*0.7);} ctx.closePath(); ctx.fill();
-    ctx.globalAlpha = 1; ctx.shadowBlur = 0; enemyEyes(R);
-  } else if (e.shape === "turret") {
+    ctx.globalAlpha = e.st ? 0.22 : 1; ctx.shadowBlur = 0; enemyEyes(R);
+  } else if (shape === "turret") {
     ctx.save(); ctx.rotate(e.aim||0); ctx.fillStyle="#7f1d1d"; ctx.fillRect(0,-R*0.26,R*1.7,R*0.52); ctx.restore();
     ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0,0,R,0,7); ctx.fill(); ctx.shadowBlur = 0;
     ctx.fillStyle = "#3f0d0d"; ctx.beginPath(); ctx.arc(0,0,R*0.55,0,7); ctx.fill(); enemyEyes(R);
-  } else if (e.shape && e.shape.indexOf("boss_") === 0) {
+  } else if (shape && shape.indexOf("boss_") === 0) {
     drawBoss(e, R, spin, color);
   } else {
     ctx.save(); ctx.rotate(spin); spikePath(4, R, 0.55); ctx.fill(); ctx.restore(); ctx.shadowBlur = 0; enemyEyes(R);
+  }
+  // shielder 무적: 밝은 보호막 링
+  if (e.sh) {
+    ctx.globalAlpha = 0.55 + 0.35 * Math.sin(spin * 3);
+    ctx.strokeStyle = "#7dd3fc"; ctx.lineWidth = Math.max(1.5, R * 0.2);
+    ctx.beginPath(); ctx.arc(0, 0, R * 1.4, 0, 7); ctx.stroke();
   }
   ctx.restore();
 }
@@ -731,7 +1581,7 @@ function drawBossWarning(remain, now) {
   ctx.globalAlpha = 0.16 + 0.12 * blink;
   ctx.fillStyle = "#e8ebf7";
   ctx.font = "700 20px system-ui, sans-serif";
-  ctx.fillText("보스 출현", W / 2, H * 0.4 + 162);
+  ctx.fillText(t("boss_incoming"), W / 2, H * 0.4 + 162);
   ctx.restore();
 }
 
@@ -782,6 +1632,61 @@ function syncWeb() {   // 거미줄 셀 목록 (trail 과 같은 방식: 스키�
   for (let i = 0; i < n; i++) if (w[i]) list.push(i);
   webList = list;
 }
+// 거미줄 셀을 연결 요소(클러스터)로 묶는다. 각 클러스터에 오브 웹 하나를 그린다. (cw,ch=셀 픽셀크기)
+function clusterWeb(cw, ch) {
+  const set = new Set(webList), seen = new Set(), clusters = [];
+  for (const start of webList) {
+    if (seen.has(start)) continue;
+    const cells = [], stack = [start]; seen.add(start);
+    let sx = 0, sy = 0, minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9, minIdx = start;
+    while (stack.length) {
+      const i = stack.pop(); cells.push(i);
+      const x = i % GW, y = (i / GW) | 0;
+      sx += x; sy += y;
+      if (x < minx) minx = x; if (x > maxx) maxx = x;
+      if (y < miny) miny = y; if (y > maxy) maxy = y;
+      if (i < minIdx) minIdx = i;
+      if (x > 0        && set.has(i - 1)  && !seen.has(i - 1))  { seen.add(i - 1);  stack.push(i - 1); }
+      if (x < GW - 1   && set.has(i + 1)  && !seen.has(i + 1))  { seen.add(i + 1);  stack.push(i + 1); }
+      if (set.has(i - GW) && !seen.has(i - GW)) { seen.add(i - GW); stack.push(i - GW); }
+      if (set.has(i + GW) && !seen.has(i + GW)) { seen.add(i + GW); stack.push(i + GW); }
+    }
+    const nC = cells.length;
+    clusters.push({
+      cells,
+      cx: (sx / nC + 0.5) * cw, cy: (sy / nC + 0.5) * ch,
+      r: (Math.max(maxx - minx, maxy - miny) / 2 + 1.2) * Math.max(cw, ch),
+      seed: minIdx,   // 회전 시드(셀이 늘어도 안정적)
+    });
+  }
+  return clusters;
+}
+// 오브 웹: 중심에서 뻗는 방사실 + 인접 실을 안쪽으로 처지게 잇는 동심 나선. (cw=셀 픽셀폭, 선 두께용)
+function drawOrbWeb(x, y, R, seed, cw) {
+  const spokes = 11, rings = 5, rot = (seed * 2.399963) % (Math.PI * 2);   // 황금각으로 흩뿌림
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(228,236,255,0.55)"; ctx.lineWidth = Math.max(0.5, cw * 0.13);
+  ctx.beginPath();                                   // 방사실
+  for (let s = 0; s < spokes; s++) {
+    const a = rot + s / spokes * Math.PI * 2;
+    ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * R, y + Math.sin(a) * R);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(224,232,255,0.42)"; ctx.lineWidth = Math.max(0.4, cw * 0.1);
+  for (let ring = 1; ring <= rings; ring++) {        // 동심 나선(살짝 처진 곡선)
+    const rr = R * (ring / (rings + 0.5));
+    ctx.beginPath();
+    for (let s = 0; s < spokes; s++) {
+      const a0 = rot + s / spokes * Math.PI * 2, a1 = rot + (s + 1) / spokes * Math.PI * 2, am = (a0 + a1) / 2;
+      const x0 = x + Math.cos(a0) * rr, y0 = y + Math.sin(a0) * rr;
+      const x1 = x + Math.cos(a1) * rr, y1 = y + Math.sin(a1) * rr;
+      const xm = x + Math.cos(am) * rr * 0.82, ym = y + Math.sin(am) * rr * 0.82;   // 안쪽으로 처짐
+      if (s === 0) ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(xm, ym, x1, y1);
+    }
+    ctx.stroke();
+  }
+}
 function captureSnapshot() {
   if (!state) return;
   const ex = [];
@@ -800,8 +1705,10 @@ function enemyBracket(renderT) {
   return { a: a.ex, b: b.ex, alpha };
 }
 // interpolated position for enemy index i (fallback to live x,y; snap on reindex/respawn)
+// 두 스냅샷의 적 수가 다르면(누가 포획/스폰돼 배열 인덱스가 밀림) 인덱스가 서로 다른 적을 가리키므로
+// 보간하지 않고 현재 위치를 쓴다. (안 그러면 앞 인덱스의 적이 사라질 때 뒤 적/보스가 튀며 깜빡인다.)
 function enemyPos(br, i, live) {
-  if (!br || br.a.length <= i*2+1 || br.b.length <= i*2+1) return live;
+  if (!br || br.a.length !== br.b.length || br.a.length <= i*2+1 || br.b.length <= i*2+1) return live;
   const ax = br.a[i*2], ay = br.a[i*2+1], bx = br.b[i*2], by = br.b[i*2+1];
   if (Math.abs(bx - ax) + Math.abs(by - ay) > 6) return { x: bx, y: by };
   return { x: ax + (bx - ax) * br.alpha, y: ay + (by - ay) * br.alpha };
@@ -813,27 +1720,34 @@ function enemyPos(br, i, live) {
 // newest (head) trail cell — the moving marker stands in for the line's tip, and each
 // cell solidifies into the line as the marker passes it (like the arcade line growing).
 const STEP_MS = 48;                  // fallback for state.moveMs (matches server MOVE_MS)
-const pmove = new Map();             // id -> { px, py, cx, cy, t0 }
+const pmove = new Map();             // id -> { x, y, tPrev } — displayed pos + last frame time
 const prevMarker = new Map();        // id -> { x, y } last frame's render pos (for boost streaks)
+// Constant-velocity chaser: the marker glides toward the LATEST server cell at the nominal
+// server speed (one cell per moveMs), never pausing. Because state broadcasts (PATCH_MS≈33ms)
+// are slower than the sim's cell steps (MOVE_MS≈24ms), each patch advances the target by 1–2
+// cells irregularly; an "arrive-then-pause" glide would stutter and 2-cell jumps would snap.
+// Moving at a steady speed instead absorbs that irregularity: the marker simply keeps tracking
+// the head, catching up a touch faster when it falls more than a cell behind, and settling
+// exactly on the cell at rest.
 function playerRenderPos(id, sx, sy, now) {
   let m = pmove.get(id);
-  if (!m) { m = { px: sx, py: sy, cx: sx, cy: sy, t0: now - 1e4 }; pmove.set(id, m); return { x: sx, y: sy }; }
-  const glide = (state.moveMs || STEP_MS);   // glide one full step → constant-velocity, no pause
-  if (sx !== m.cx || sy !== m.cy) {           // server advanced to a new cell
-    if (Math.abs(sx - m.cx) + Math.abs(sy - m.cy) > 1) {   // teleport / respawn → snap
-      m.px = sx; m.py = sy;
-    } else {
-      // Continue from the CURRENT displayed position (not the old target cell) so motion
-      // is seamless even when the previous glide hadn't finished — the marker keeps
-      // tracking the latest cell smoothly, with no mid-step jump or "arrive-then-pause".
-      const u = Math.min(1, (now - m.t0) / glide);
-      m.px = m.px + (m.cx - m.px) * u;
-      m.py = m.py + (m.cy - m.py) * u;
-    }
-    m.cx = sx; m.cy = sy; m.t0 = now;
-  }
-  const u = Math.min(1, (now - m.t0) / glide);
-  return { x: m.px + (m.cx - m.px) * u, y: m.py + (m.cy - m.py) * u };
+  if (!m) { m = { x: sx, y: sy, tPrev: now }; pmove.set(id, m); return { x: sx, y: sy }; }
+  const dt = Math.max(0, Math.min(64, now - m.tPrev));   // clamp long frame gaps (tab wake)
+  m.tPrev = now;
+  const dx = sx - m.x, dy = sy - m.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist === 0) return { x: m.x, y: m.y };
+  if (dist > 6) { m.x = sx; m.y = sy; return { x: sx, y: sy }; }   // teleport / respawn → snap
+  // Move at the steady nominal speed (one cell per moveMs) — this matches the target's average
+  // advance, so velocity stays near-constant and the ride is smooth. Only when the marker falls
+  // well over a cell behind (a boost run or a network hiccup) does it speed up, and only gently
+  // and with a hard cap, so catching up never looks like a jump.
+  let speed = 1 / (state.moveMs || STEP_MS);
+  if (dist > 1.6) speed *= Math.min(2.2, dist / 1.6);
+  const step = speed * dt;
+  if (step >= dist) { m.x = sx; m.y = sy; }               // arrived — settle exactly on the cell
+  else { m.x += dx / dist * step; m.y += dy / dist * step; }
+  return { x: m.x, y: m.y };
 }
 
 
@@ -844,22 +1758,55 @@ function playerRenderPos(id, sx, sy, now) {
 const gridCanvas = document.createElement("canvas");
 const gctx = gridCanvas.getContext("2d");
 let gridBuilt = false, lastClaimed = -1, lastLevel = -1, lastImgVer = -1, lastGW = 0, lastGH = 0;
-function rebuildGrid() {
+let prevCells = null;   // last-drawn cell states, so a claim only redraws the cells that changed
+let gridDirty = true, gridScan = 0;
+// 큰 영역을 한 번에 점유하면 새로 밝아진 셀 수천 개를 셀당 drawImage 로 그리는데, 이걸 한 프레임에
+// 몰아 그리면 그 프레임만 수십~100ms 로 늘어져 "끊김"이 생긴다. 그래서 프레임당 예산(GRID_PAINT_BUDGET)
+// 만큼만 칠하고 나머지는 다음 프레임으로 이어 칠한다 → 큰 점유가 몇 프레임에 걸쳐 부드럽게 채워진다.
+const GRID_PAINT_BUDGET = 2200;
+// 전체 다시 칠하기 예약(레벨/이미지/리사이즈): prevCells 를 비워 paintGridStep 이 캔버스를 어둡게
+// 지우고 점유 셀만 다시 그리게 한다.
+function markGridFull() { prevCells = null; gridScan = 0; gridDirty = true; }
+// 변경된 셀을 프레임당 예산만큼만 칠한다. 남으면 gridDirty 를 유지해 다음 프레임에 이어서 칠한다.
+function paintGridStep() {
   const W = canvas.width, H = canvas.height, cw = W / GW, ch = H / GH;
-  if (gridCanvas.width !== W || gridCanvas.height !== H) { gridCanvas.width = W; gridCanvas.height = H; }
+  if (gridCanvas.width !== W || gridCanvas.height !== H) { gridCanvas.width = W; gridCanvas.height = H; prevCells = null; gridScan = 0; }
   // one-shot plain-array copy — see syncTrail(): indexing the ArraySchema per cell is ~500x slower
   const cells = [...state.cells];
-  for (let i = 0; i < cells.length; i++) {
+  const n = cells.length;
+  if (!prevCells || prevCells.length !== n) {
+    prevCells = new Uint8Array(n);                              // 0 = "어둡게 칠해진" 상태
+    gctx.fillStyle = "#080a14"; gctx.fillRect(0, 0, W, H);     // 빈 칸 기본색으로 전체 초기화
+    gridScan = 0;
+  }
+  const paint = (i) => {
     const cx = i % GW, cy = (i / GW) | 0;
+    // Snap each cell to INTEGER pixel bounds so adjacent cells share the exact same edge and
+    // tile with no gaps or overlap. (Fractional cw≈3.2 + a "+1" overlap left sub-pixel/stale
+    // dark seams between cells — the thin black lines.) A cell's right edge == next cell's left.
+    const x0 = Math.round(cx * cw), x1 = Math.round((cx + 1) * cw);
+    const y0 = Math.round(cy * ch), y1 = Math.round((cy + 1) * ch);
+    const dw2 = x1 - x0, dh2 = y1 - y0;
     if (cells[i] === 1) {
       if (imgReady) gctx.drawImage(img, cx*(img.width/GW), cy*(img.height/GH), img.width/GW, img.height/GH,
-                                   cx*cw, cy*ch, cw+1, ch+1);
-      else { gctx.fillStyle = "#2a3350"; gctx.fillRect(cx*cw, cy*ch, cw+1, ch+1); }
+                                   x0, y0, dw2, dh2);
+      else { gctx.fillStyle = "#2a3350"; gctx.fillRect(x0, y0, dw2, dh2); }
     } else {
-      gctx.fillStyle = "#080a14"; gctx.fillRect(cx*cw, cy*ch, cw+1, ch+1);
+      gctx.fillStyle = "#080a14"; gctx.fillRect(x0, y0, dw2, dh2);
     }
+    prevCells[i] = cells[i];
+  };
+  let budget = GRID_PAINT_BUDGET, i = gridScan, scanned = 0, remaining = false;
+  while (scanned < n) {
+    if (cells[i] !== prevCells[i]) {
+      if (budget <= 0) { remaining = true; break; }             // 이번 프레임 예산 소진 → 다음 프레임에 이어서
+      paint(i); budget--;
+    }
+    i++; if (i >= n) i = 0;
+    scanned++;
   }
-  gridBuilt = true;
+  gridScan = remaining ? i : 0;
+  gridBuilt = true; gridDirty = remaining;
 }
 
 function bubbleRect(x, y, w, h, r) {
@@ -939,21 +1886,22 @@ function render() {
     captureSnapshot();   // enemy snapshot for interpolation
     syncTrail();         // rebuild the active-trail list from the grid
     syncWeb();           // rebuild the web-cell list
-    // rebuild the cached grid layer only when it changed (claim / new level / image load / resize)
-    if (state.claimedInterior !== lastClaimed || state.level !== lastLevel ||
-        imgVersion !== lastImgVer || GW !== lastGW || GH !== lastGH) {
-      rebuildGrid();
-      lastClaimed = state.claimedInterior; lastLevel = state.level;
-      lastImgVer = imgVersion; lastGW = GW; lastGH = GH;
-    }
+    // 캐시된 그리드 레이어: 변경 시 예약(gridDirty)하고, 매 프레임 예산만큼 이어 칠한다(끊김 방지).
+    const full = state.level !== lastLevel || imgVersion !== lastImgVer || GW !== lastGW || GH !== lastGH;
+    if (full) markGridFull();
+    if (full || state.claimedInterior !== lastClaimed) gridDirty = true;
+    lastClaimed = state.claimedInterior; lastLevel = state.level;
+    lastImgVer = imgVersion; lastGW = GW; lastGH = GH;
+    if (gridDirty || !gridBuilt) paintGridStep();
     // ---- self-centered camera: ~VIEW cells across, follows my predicted marker ----
     let me = null;
     if (room) state.players.forEach((p) => { if (p.id === room.sessionId) me = p; });
     let camS = 1, camX = 0, camY = 0, myPos = null;
     if (me && !me.out) {
-      const VIEW = Math.min(GW, GH, 117);           // cells across the shorter side (higher = zoomed out)
-      camS = Math.min(GW, GH) / VIEW;               // zoom factor (~2.19x on the 256 grid — zoomed
-                                                    // back in 1.5x from VIEW=176 for a closer view)
+      // cells across the shorter side (higher = zoomed out). 모바일은 더 확대(작은 VIEW)해서
+      // 마커를 화면 중앙에 두고 맵이 스크롤되는 팔로우 카메라로 만든다.
+      const VIEW = Math.min(GW, GH, IS_TOUCH ? 90 : 117);
+      camS = Math.min(GW, GH) / VIEW;               // zoom factor
       // On low latency (localhost/LAN) prediction only adds snap-back jitter, so
       // render my own marker with the same smooth server interpolation as everyone
       // else. (Prediction is worth re-enabling only for a high-latency remote server,
@@ -974,14 +1922,20 @@ function render() {
     ctx.translate(-camX*camS + shX, -camY*camS + shY); ctx.scale(camS, camS);
 
     if (gridBuilt) ctx.drawImage(gridCanvas, 0, 0);   // one blit instead of GW*GH draws
-    // 거미줄(감속 필드) — 바닥에 반투명하게. 그 위에선 플레이어가 느려진다.
+    // 거미줄(감속 필드) — 그 위에선 플레이어가 느려진다. 연결된 셀 덩어리마다 오브 웹(방사실+
+    // 동심 나선)을 그리고 셀 영역으로 클립해, 실제 거미줄처럼 보이게 한다.
     if (webList.length) {
       ctx.save();
-      ctx.fillStyle = "rgba(210,220,255,0.26)";
+      ctx.fillStyle = "rgba(200,214,255,0.12)";        // 슬로우 구역 발자국(옅게)
       for (const i of webList) { const cx = i % GW, cy = (i / GW) | 0; ctx.fillRect(cx*cw, cy*ch, cw+1, ch+1); }
-      ctx.strokeStyle = "rgba(230,236,255,0.55)"; ctx.lineWidth = Math.max(0.6, cw*0.16);
-      for (const i of webList) { const cx = (i % GW)*cw, cy = ((i/GW)|0)*ch;   // X 무늬(끈적한 거미줄 느낌)
-        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx+cw, cy+ch); ctx.moveTo(cx+cw, cy); ctx.lineTo(cx, cy+ch); ctx.stroke(); }
+      for (const cl of clusterWeb(cw, ch)) {
+        ctx.save();
+        const clip = new Path2D();                     // 오브 웹을 실제 셀 모양으로 클립
+        for (const i of cl.cells) { const x = i % GW, y = (i / GW) | 0; clip.rect(x*cw, y*ch, cw + 1.2, ch + 1.2); }
+        ctx.clip(clip);
+        drawOrbWeb(cl.cx, cl.cy, cl.r * 1.15, cl.seed, cw);
+        ctx.restore();
+      }
       ctx.restore();
     }
     // trails — draw ONLY the active trail cells (built on each patch), so per-frame
@@ -1021,6 +1975,25 @@ function render() {
       }
       ctx.restore();
     });
+    // map items (파워업) — 바닥에 놓여 있고, 그 칸을 점유하면 획득.
+    // 어두운 토큰(발광 원) 위에 종류별 벡터 아이콘을 그린다.
+    (state.items || []).forEach((it) => {
+      const x = it.x*cw, y = it.y*ch, R = cw*1.9;
+      const pulse = 0.86 + 0.14*Math.sin(now/260 + x);
+      ctx.save();
+      // 소멸 직전(blink)엔 빠르게 깜빡인다.
+      if (it.blink) ctx.globalAlpha = 0.18 + 0.82 * (0.5 + 0.5*Math.sin(now/80));
+      ctx.save();
+      ctx.shadowColor = ITEM_COLOR[it.kind] || "#fff"; ctx.shadowBlur = cw*2.6;
+      ctx.fillStyle = "rgba(8,12,24,0.86)";
+      ctx.beginPath(); ctx.arc(x, y, R*pulse, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = Math.max(1, cw*0.4); ctx.strokeStyle = ITEM_COLOR[it.kind] || "#fff";
+      ctx.stroke();
+      ctx.restore();
+      drawItemIcon(it.kind, x, y, R*0.62);
+      ctx.restore();
+    });
     // enemies — snapshot-buffer interpolation (render ~SNAP_DELAY ms in the past)
     const spin = now / 120;
     const br = enemyBracket(now - SNAP_DELAY);
@@ -1045,6 +2018,16 @@ function render() {
       ctx.fillStyle = "#ffe066";
       ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
       ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x-R*0.25, y-R*0.25, R*0.4, 0, 7); ctx.fill();
+      ctx.restore();
+    });
+    // homing missiles (미사일 아이템) — 청록 총알, 흰 꼬리
+    (state.missiles || []).forEach((mm) => {
+      const x = mm.x*cw, y = mm.y*ch, R = cw*0.85;
+      ctx.save();
+      ctx.shadowColor = "#67e8f9"; ctx.shadowBlur = cw*3;
+      ctx.fillStyle = "#22d3ee"; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#e0fbff"; ctx.beginPath(); ctx.arc(x-R*0.28, y-R*0.28, R*0.4, 0, 7); ctx.fill();
       ctx.restore();
     });
     // players — every marker glides at constant velocity toward the latest server cell,
@@ -1090,6 +2073,14 @@ function render() {
       ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cxp, cyp, mr + 1, 0, 7); ctx.fill();
       ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(cxp, cyp, mr, 0, 7); ctx.fill();
       ctx.restore();
+      // 보호막(무적) 중이면 마커 둘레에 청록 링을 두른다.
+      if (p.inv) {
+        ctx.save();
+        ctx.globalAlpha = 0.5 + 0.28 * Math.sin(now / 110);
+        ctx.strokeStyle = "#67e8f9"; ctx.lineWidth = 2.4 / camS;
+        ctx.beginPath(); ctx.arc(cxp, cyp, mr + cw * 0.5 + 4 / camS, 0, 7); ctx.stroke();
+        ctx.restore();
+      }
     });
     // capture popups
     for (let i = flashes.length-1; i >= 0; i--) {
@@ -1104,6 +2095,18 @@ function render() {
       ctx.restore();
     }
     ctx.restore();          // end camera transform (HUD/overlay stay in screen space)
+
+    // 프리즈 아이템: 적이 얼어있는 동안 화면을 옅은 청록으로 물들이고 상단에 표시.
+    if (state.frozen) {
+      ctx.save();
+      ctx.fillStyle = "rgba(103,232,249,0.12)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = "#a5f3fc"; ctx.textAlign = "center";
+      ctx.font = "bold 16px system-ui, sans-serif";
+      ctx.fillText("❄ FREEZE", W / 2, 26);
+      ctx.restore();
+    }
 
     // ── 보스 블랙홀: 합성된 화면을 렌즈로 굴절시켜 왜곡한다 (스크린 공간) ──
     if (warps.length) {
@@ -1147,34 +2150,31 @@ function render() {
 
     drawHud();
     if (state.phase === "won") drawWinCelebration(now, dt);
-    else { wonCelebActive = false; if (state.phase === "lost") drawOverlay(); }
+    else {
+      wonCelebActive = false;
+      if (state.phase === "lost") {
+        const remain = lostSince ? Math.max(0, (LOST_TIMEOUT_MS - (now - lostSince)) / 1000) : 10;
+        renderCountdown3D(remain, now, dt);   // 3D 카운트다운(오버레이는 updateOverlays 가 표시)
+      }
+    }
   }
   requestAnimationFrame(render);
 }
 
-const WIN_COUNTDOWN_S = 5;   // matches the server's between-stage countdown
+// Loss overlay only — the win screen is drawn by drawWinCelebration (full-picture reveal).
 function drawOverlay() {
   const W = canvas.width, H = canvas.height;
-  const won = state.phase === "won";
-  ctx.fillStyle = "rgba(8,10,20,.82)";
-  ctx.fillRect(W/2-190, H/2-80, 380, won ? 176 : 140);
+  const remain = lostSince ? Math.max(0, Math.ceil((LOST_TIMEOUT_MS - (performance.now() - lostSince)) / 1000)) : 10;
+  ctx.fillStyle = "rgba(8,10,20,.86)";
+  ctx.fillRect(W/2-210, H/2-86, 420, 160);
   ctx.textAlign = "center";
-  ctx.fillStyle = won ? "#a3e635" : "#ff5db1";
+  ctx.fillStyle = "#ff5db1";
   ctx.font = "bold 34px system-ui";
-  ctx.fillText(won ? `LEVEL ${state.level} CLEAR!` : "GAME OVER", W/2, H/2-22);
-  if (won) {
-    const remain = Math.max(0, state.nextIn || 0);
-    const prog = Math.min(1, Math.max(0, 1 - remain / WIN_COUNTDOWN_S));   // bar fills over the countdown
-    const bw = 300, bh = 14, bx = W/2 - bw/2, by = H/2 + 6;
-    ctx.fillStyle = "#1b2138"; ctx.fillRect(bx, by, bw, bh);
-    ctx.fillStyle = "#a3e635"; ctx.fillRect(bx, by, bw * prog, bh);
-    ctx.strokeStyle = "#3a4670"; ctx.strokeRect(bx, by, bw, bh);
-    ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
-    ctx.fillText(`다음 스테이지까지 ${Math.ceil(remain)}초`, W/2, by + bh + 24);
-  } else {
-    ctx.fillStyle = "#c9d0f0"; ctx.font = "14px system-ui";
-    ctx.fillText("Enter 로 재시작", W/2, H/2 + 24);
-  }
+  ctx.fillText("GAME OVER", W/2, H/2-32);
+  ctx.fillStyle = "#c9d0f0"; ctx.font = "15px system-ui";
+  ctx.fillText(t("restart_here"), W/2, H/2 + 6);
+  ctx.fillStyle = "#8b93b2"; ctx.font = "13px system-ui";
+  ctx.fillText(`${remain}초 후 첫 화면으로 돌아갑니다`, W/2, H/2 + 34);
   ctx.textAlign = "left";
 }
 
@@ -1199,12 +2199,19 @@ function drawWinCelebration(now, dt) {
   // 불투명 배경으로 게임 화면을 완전히 덮는다
   ctx.fillStyle = "#07090f"; ctx.fillRect(0, 0, W, H);
 
-  // 아래쪽에 불투명 배너 자리를 남기고, 그 위 영역에 그림 "전체"를 비율 유지로 최대한 크게 보여준다
+  // 아래쪽에 불투명 배너 자리를 남기고, 그 위 영역에 그림을 "가로 폭 전체"로 크게 보여준다
+  // (가로는 잘리지 않음). 세로로 넘치면 위→아래로 천천히 스크롤(핑퐁)하며 그림 전체를 다 훑는다.
   const barH = 100, areaH = H - barH;
   if (imgReady && img.width && img.height) {
-    const scale = Math.min(W / img.width, areaH / img.height);   // contain — 왜곡 없이 전체 표시
-    const dw = img.width * scale, dh = img.height * scale;
-    ctx.drawImage(img, 0, 0, img.width, img.height, (W - dw) / 2, (areaH - dh) / 2, dw, dh);
+    const scale = W / img.width;                                 // 가로에 꽉 맞춤 → 그림 전체가 다 보임(가로 크롭 없음)
+    const dw = img.width * scale, dh = img.height * scale;       // dw === W
+    const overflowY = Math.max(0, dh - areaH);
+    const pan = overflowY > 0 ? (0.5 - 0.5 * Math.cos(now * Math.PI / 8000)) * overflowY : 0;  // 위→아래→위, 반주기 8초
+    const y = overflowY > 0 ? -pan : (areaH - dh) / 2;           // 안 넘치면 세로 가운데
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, W, areaH); ctx.clip();       // 그림 영역 밖(배너 쪽)으로 넘치지 않게
+    ctx.drawImage(img, (W - dw) / 2, y, dw, dh);
+    ctx.restore();
   } else {
     ctx.fillStyle = "#2a3350"; ctx.fillRect(0, 0, W, areaH);
   }
@@ -1235,15 +2242,13 @@ function drawWinCelebration(now, dt) {
   ctx.beginPath(); ctx.moveTo(0, barY + 1); ctx.lineTo(W, barY + 1); ctx.stroke();   // 상단 강조선
   ctx.textAlign = "center";
   ctx.fillStyle = "#a3e635"; ctx.font = "bold 32px system-ui";
-  ctx.fillText(`LEVEL ${state.level} CLEAR!`, W / 2, barY + 38);
-  const remain = Math.max(0, state.nextIn || 0);
-  const prog = Math.min(1, Math.max(0, 1 - remain / WIN_COUNTDOWN_S));
-  const bw = 340, bh = 12, bx = W / 2 - bw / 2, by = barY + 56;
-  ctx.fillStyle = "#1b2138"; ctx.fillRect(bx, by, bw, bh);
-  ctx.fillStyle = "#a3e635"; ctx.fillRect(bx, by, bw * prog, bh);
-  ctx.strokeStyle = "#3a4670"; ctx.lineWidth = 1; ctx.strokeRect(bx, by, bw, bh);
-  ctx.fillStyle = "#c9d0f0"; ctx.font = "13px system-ui";
-  ctx.fillText(`다음 스테이지까지 ${Math.ceil(remain)}초`, W / 2, by + bh + 16);
+  ctx.fillText(t("level_clear", state.level), W / 2, barY + 38);
+  // No auto-advance: let players admire the picture, then press Enter (or tap on mobile) to continue.
+  const pulse = 0.55 + 0.45 * Math.sin(now / 350);
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = "#c9d0f0"; ctx.font = "15px system-ui";
+  ctx.fillText(t(IS_TOUCH ? "next_stage_touch" : "next_stage"), W / 2, barY + 66);
+  ctx.globalAlpha = 1;
   ctx.textAlign = "left";
 }
 
@@ -1256,19 +2261,47 @@ function drawHud() {
     const me = room && p.id === room.sessionId;
     const pct = Math.round(p.claimed / total * 100);
     const traps = p.traps ? `🕸${p.traps}` : "";
-    const score = p.bonus | 0;   // 점수: 포획으로 획득(등급별) · Shift 질주로 소모
+    const score = p.bonus | 0;   // 포획 점수(등급별 누적) — 질주와 무관하게 보관
+    const stam = Math.max(0, Math.min(100, p.stamina || 0));   // 질주 스태미나 (자기 것만 바로 표시)
+    const stamBar = me ? `<div class="stam${stam < 25 ? " low" : ""}" title="${t("stam_title")}"><i style="width:${stam}%"></i></div>` : "";
     html += `<div class="chip ${p.out ? "dead" : ""} ${me ? "me" : ""}">
-      <div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}${me?" (나)":""}</div>
-      <div class="meta"><span style="color:#ffd54a">⭐${score}</span><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div></div>`;
+      <div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}${me?t("me_suffix"):""}</div>
+      <div class="meta"><span style="color:#ffd54a">⭐${score}</span><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div>${stamBar}</div>`;
   });
-  html += `<div class="chip"><div class="top">진행 · Lv ${state.level}</div>
-    <div class="meta"><span>${ratio}%</span><span>목표 90%</span></div></div>`;
+  html += `<div class="chip"><div class="top">${t("hud_progress", state.level)}</div>
+    <div class="meta"><span>${ratio}%</span><span>${t("hud_goal")}</span></div></div>`;
   hud.innerHTML = html;
+
+  // 좌측 포획 랭킹: 포획 점수(⭐) 내림차순, 동점이면 포획 수(🕸)로. 로비에선 숨김.
+  const rankEl = document.getElementById("rank");
+  const ranked = [...state.players.values()].sort((a, b) => (b.bonus - a.bonus) || (b.traps - a.traps));
+  document.getElementById("rankList").innerHTML = ranked.map((p, i) => {
+    const me = room && p.id === room.sessionId;
+    return `<div class="rrow ${me ? "me" : ""} ${p.out ? "dead" : ""}">
+      <span class="rpos">${i + 1}</span>
+      <span class="rdot" style="color:${p.color};background:${p.color}"></span>
+      <span class="rname">${p.name}${me ? t("me_suffix") : ""}</span>
+      <span class="rscore">⭐${p.bonus | 0}</span><span class="rtraps">🕸${p.traps | 0}</span></div>`;
+  }).join("");
+  rankEl.classList.toggle("hidden", state.phase === "lobby" || ranked.length === 0);
   restartBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
   // 클리어(승리) 화면에서는 채팅 입력창을 숨긴다
   chatInput.style.display = (state.phase === "won") ? "none" : "";
   if (state.phase === "won" && document.activeElement === chatInput) chatInput.blur();
 }
+// 우측 상단 언어 전환 버튼 (드롭다운)
+(() => {
+  const sw = document.getElementById("langSwitch");
+  const btn = document.getElementById("langBtn");
+  const menu = document.getElementById("langMenu");
+  if (!sw || !btn || !menu) return;
+  btn.addEventListener("click", (e) => { e.stopPropagation(); menu.classList.toggle("hidden"); });
+  menu.querySelectorAll("button").forEach((b) =>
+    b.addEventListener("click", () => { setLang(b.dataset.lang); menu.classList.add("hidden"); }));
+  document.addEventListener("click", (e) => { if (!sw.contains(e.target)) menu.classList.add("hidden"); });
+})();
+applyI18n();   // 초기 언어를 모든 UI에 적용
+
 render();
 </script>
 </body>

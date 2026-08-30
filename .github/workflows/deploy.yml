@@ -1,32 +1,34 @@
-name: Deploy to server
+name: Deploy to laptop server
+
+# 이 노트북(self-hosted 러너)에서 배포. 러너는 SYSTEM 예약작업 GalspanicDeploy 를
+# 트리거만 하고, 실제 pull/build/restart 는 그 작업이 깨끗한 SYSTEM 컨텍스트에서 수행한다
+# (러너 중첩 powershell 환경 quirk 우회). 전 과정은 C:\workspace\ci-deploy.log 에 기록된다.
+# main push 에서만 실행(포크 PR 실행 안 됨 = self-hosted 러너 안전).
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - name: Build
-        run: cd server && npm ci && npm run build
-      - name: Setup SSH key
+      - name: Trigger SYSTEM deploy task and wait
+        # 러너 기본 shell 은 ExecutionPolicy 지정 없이 dot-source 하는데, 이 머신은 정책이
+        # Restricted 라 step 스크립트가 실행조차 안 된다(즉시 exit 1). Bypass 로 실행한다.
+        shell: 'powershell -NoProfile -ExecutionPolicy Bypass -File "{0}"'
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-      - name: Rsync artifacts to VM
-        env: { H: "${{ secrets.DEPLOY_HOST }}", U: "${{ secrets.DEPLOY_USER }}" }
-        run: |
-          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
-          $SSH "$U@$H" "mkdir -p ~/galspanic/server ~/galspanic/client"
-          rsync -az --delete -e "$SSH" server/dist/ "$U@$H:~/galspanic/server/dist/"
-          rsync -az -e "$SSH" server/package.json server/package-lock.json "$U@$H:~/galspanic/server/"
-          rsync -az --delete -e "$SSH" server/public/ "$U@$H:~/galspanic/server/public/"
-          rsync -az --delete -e "$SSH" client/ "$U@$H:~/galspanic/client/"
-      - name: Install prod deps & restart on VM
-        env: { H: "${{ secrets.DEPLOY_HOST }}", U: "${{ secrets.DEPLOY_USER }}" }
-        run: ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$U@$H" "cd ~/galspanic/server && npm ci --omit=dev && sudo systemctl restart galspanic && echo deployed"
+          $ErrorActionPreference = 'Continue'
+          Remove-Item C:\workspace\ci-deploy.log -Force -ErrorAction SilentlyContinue
+          schtasks /run /tn GalspanicDeploy
+          $deadline = (Get-Date).AddSeconds(180)
+          $res = $null
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 3
+            $c = Get-Content C:\workspace\ci-deploy.log -Raw -ErrorAction SilentlyContinue
+            if ($c -and $c -match "DEPLOY RESULT: (OK|FAIL[^=]*)") { $res = $Matches[1].Trim(); break }
+          }
+          Write-Host "==================== ci-deploy.log ===================="
+          if (Test-Path C:\workspace\ci-deploy.log) { Get-Content C:\workspace\ci-deploy.log | Write-Host }
+          Write-Host "==================== RESULT: $res ===================="
+          if ($res -ne "OK") { exit 1 }

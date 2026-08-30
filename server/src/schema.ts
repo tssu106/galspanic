@@ -15,7 +15,8 @@ export class Player extends Schema {
   @type("number") lives: number = 3;
   @type("number") claimed: number = 0;  // interior cells this player has claimed
   @type("number") traps: number = 0;    // monsters captured
-  @type("number") bonus: number = 0;    // capture bonus points
+  @type("number") bonus: number = 0;    // capture score (accumulates; no longer spent on sprint)
+  @type("number") stamina: number = 100; // 0..100 sprint gauge (drains while boosting, recovers otherwise)
   @type("number") out: number = 0;      // 0/1 — eliminated this round
   @type("number") inv: number = 0;      // 0/1 — invincible (spawn/respawn grace) → client draws marker faint
 }
@@ -29,6 +30,8 @@ export class Enemy extends Schema {
   @type("number") r: number = 1;           // radius in cells (size = slower is bigger)
   @type("number") aim: number = 0;         // facing angle (gunner barrel / dart nose)
   @type("number") enr: number = 0;         // 0/1 — boss enraged (chase/rush/burst) → client red aura
+  @type("number") sh: number = 0;          // 1 — shielder invincible now (client draws a shield ring)
+  @type("number") st: number = 0;          // 1 — phantom hidden now (client draws it faint)
 }
 
 // A gunner's bullet (position only; it ignores walls and kills even on safe zone).
@@ -45,6 +48,19 @@ export class Beam extends Schema {
   @type("number") y2: number = 0;
   @type("number") w: number = 1;    // half-width in cells
   @type("number") on: number = 0;   // 0 telegraph, 1 firing
+}
+
+// 맵 위 아이템 (점유하며 획득). kind: shield|missile|freeze|life
+export class Item extends Schema {
+  @type("number") x: number = 0;
+  @type("number") y: number = 0;
+  @type("string") kind: string = "shield";
+  @type("number") blink: number = 0;   // 1 = 소멸 직전(클라가 깜빡임)
+}
+// 미사일 아이템으로 발사된 유도 미사일 (렌더용 위치만)
+export class Missile extends Schema {
+  @type("number") x: number = 0;
+  @type("number") y: number = 0;
 }
 
 export class GameState extends Schema {
@@ -88,8 +104,13 @@ export class GameState extends Schema {
   // re-seeded per round from seed ^ level) for client-side prediction / lockstep.
   @type("number") seed: number = 0;
 
+  // 프리즈 아이템: 적이 얼어있는 동안 1.
+  @type("number") frozen: number = 0;
+
   @type({ map: Player }) players = new MapSchema<Player>();
   @type([Enemy]) enemies = new ArraySchema<Enemy>();
   @type([Projectile]) projectiles = new ArraySchema<Projectile>();
   @type([Beam]) beams = new ArraySchema<Beam>();
+  @type([Item]) items = new ArraySchema<Item>();
+  @type([Missile]) missiles = new ArraySchema<Missile>();
 }

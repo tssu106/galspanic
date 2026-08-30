@@ -57,6 +57,20 @@
            align-items:center; justify-content:center; gap:16px; padding:24px; text-align:center;
            background:radial-gradient(1200px 800px at 50% -10%, #1a1f38, var(--bg)); }
   #start.hidden { display:none; }
+  /* 우측 상단 언어 전환 */
+  #langSwitch { position:absolute; top:14px; right:16px; z-index:20; }
+  #langBtn { background:rgba(22,26,43,.85); color:var(--ink); border:1px solid #2a3350; border-radius:10px;
+             padding:7px 11px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13px; }
+  #langBtn:hover { border-color:#3a4570; }
+  #langBtn .caret { opacity:.7; font-size:11px; }
+  #langMenu { position:absolute; top:calc(100% + 6px); right:0; background:#161a2b; border:1px solid #2a3350;
+              border-radius:10px; padding:5px; min-width:132px; box-shadow:0 8px 24px rgba(0,0,0,.45);
+              display:flex; flex-direction:column; gap:2px; }
+  #langMenu.hidden { display:none; }
+  #langMenu button { background:none; border:none; color:var(--ink); text-align:left; padding:8px 12px;
+                     border-radius:7px; cursor:pointer; font-size:13px; }
+  #langMenu button:hover { background:#222a45; }
+  #langMenu button.on { background:#2b3a66; font-weight:600; }
   #start .logo { margin:0; font-size:min(16vw,68px); font-weight:800; letter-spacing:3px;
                  text-shadow:0 6px 34px rgba(255,93,177,.4); }
   #start .logo span { color:#ff5db1; }
@@ -229,7 +243,7 @@
   #chatLog .chat-row { word-break:break-word; }
   #chatLog .chat-name { font-weight:700; margin-right:5px; }
   #chatLog .chat-msg { color:var(--ink); }
-  #chatLog:empty::before { content:"아직 메시지가 없어요 · Enter 로 입력"; color:var(--muted);
+  #chatLog:empty::before { content:attr(data-empty); color:var(--muted);
                            font-size:12px; opacity:.65; }
   #chatPanel #chat { border:0; border-top:1px solid #232a44; border-radius:0; width:100%;
                      background:#0e1120; color:var(--ink); padding:10px 13px; font-size:13px; outline:none; }
@@ -262,45 +276,51 @@
 </head>
 <body>
   <div id="start">
+    <!-- 우측 상단 언어 전환 (메인 화면) -->
+    <div id="langSwitch">
+      <button id="langBtn" type="button" aria-haspopup="true">🌐 <span id="langCur">한국어</span> <span class="caret">▾</span></button>
+      <div id="langMenu" class="hidden">
+        <button type="button" data-lang="ko">한국어</button>
+        <button type="button" data-lang="en">English</button>
+        <button type="button" data-lang="ja">日本語</button>
+      </div>
+    </div>
     <h1 class="logo">GALS <span>PANIC</span></h1>
     <div class="tag">Online Co-op</div>
     <div class="card">
-      <div class="rules">
-        <b>방향키</b>로 이동 · 안전지대에서 빈 공간으로 들어가 선을 긋고, 다시 안전지대에 닿으면 안쪽이 열립니다.<br>
-        빨간 <b>적</b>이 선에 닿으면 목숨을 잃어요 · 함께 <b>90%</b>를 열면 클리어!
-      </div>
+      <div class="rules" data-i18n-html="instr_html"></div>
       <div class="controls" aria-hidden="true">
         <div class="ctrl">
           <div class="keys arrows">
             <span class="key">↑</span><span class="key">←</span><span class="key">↓</span><span class="key">→</span>
           </div>
-          <div class="clabel">이동</div>
+          <div class="clabel" data-i18n="key_move"></div>
         </div>
         <div class="ctrl">
           <div class="keys"><span class="key wide">Shift</span></div>
-          <div class="clabel">질주</div>
+          <div class="clabel" data-i18n="key_sprint"></div>
         </div>
         <div class="ctrl">
           <div class="keys"><span class="key wide">Enter</span></div>
-          <div class="clabel">채팅</div>
+          <div class="clabel" data-i18n="key_chat"></div>
         </div>
       </div>
-      <div id="onlineCount" class="online">🟢 접속자 <b id="onlineNum">--</b>명</div>
-      <input id="nameInput" maxlength="12" placeholder="플레이어 이름 (선택)" autocomplete="off" />
+      <div id="onlineCount" class="online">🟢 <span data-i18n="online_label"></span> <b id="onlineNum">--</b><span data-i18n="online_unit"></span></div>
+      <input id="nameInput" maxlength="12" data-i18n-ph="ph_name" autocomplete="off" />
       <label id="devStage" class="dev-stage" hidden>
-        <span>🛠 스테이지 (dev)</span>
+        <span data-i18n="dev_stage"></span>
         <select id="stageSelect"></select>
       </label>
-      <button id="startBtn" class="go">게임 시작</button>
-      <button id="createBtn" class="go2">방 만들기 (친구끼리)</button>
+      <button id="startBtn" class="go" data-i18n="btn_start"></button>
+      <button id="createBtn" class="go2" data-i18n="btn_create"></button>
       <div class="joinrow">
-        <input id="codeInput" maxlength="16" placeholder="방 코드로 참가" autocomplete="off" />
-        <button id="joinBtn">참가</button>
+        <input id="codeInput" maxlength="16" data-i18n-ph="ph_code" autocomplete="off" />
+        <button id="joinBtn" data-i18n="btn_join"></button>
       </div>
-      <button id="galleryBtn" class="ghost">📖 도감 <span id="galleryCount" class="gcount"></span></button>
+      <button id="galleryBtn" class="ghost"><span data-i18n="btn_gallery"></span> <span id="galleryCount" class="gcount"></span></button>
       <div class="authrow">
-        <button id="loginBtn" class="ghost">🔑 로그인</button>
-        <button id="signupBtn" class="ghost">📝 회원가입</button>
+        <button id="loginBtn" class="ghost"></button>
+        <button id="signupBtn" class="ghost" data-i18n="btn_signup"></button>
       </div>
       <div id="startErr" class="err"></div>
     </div>
@@ -309,85 +329,81 @@
   <!-- 대기실(로비): 접속 후 게임 시작 전까지. 방 코드 공유 + 인원 + 카운트다운 -->
   <div id="lobby" class="hidden">
     <div class="lcard">
-      <div class="ltitle">대기실</div>
-      <div id="lobbyCode" class="lcode">방 코드 <b id="lobbyCodeVal">----</b> <button id="copyCodeBtn">복사</button></div>
+      <div class="ltitle" data-i18n="lobby_title"></div>
+      <div id="lobbyCode" class="lcode"><span data-i18n="lobby_code_label"></span> <b id="lobbyCodeVal">----</b> <button id="copyCodeBtn" data-i18n="btn_copy"></button></div>
       <div id="lobbyPlayers" class="lplayers"></div>
-      <div id="lobbyStatus" class="lstatus">플레이어를 기다리는 중…</div>
-      <button id="startNowBtn" class="go">지금 시작</button>
-      <div id="lobbyHint" class="lhint">4명이 모이면 10초 뒤 자동 시작 · 코드를 친구에게 공유하세요</div>
+      <div id="lobbyStatus" class="lstatus" data-i18n="lobby_waiting"></div>
+      <button id="startNowBtn" class="go" data-i18n="btn_startnow"></button>
+      <div id="lobbyHint" class="lhint" data-i18n="lobby_hint"></div>
     </div>
   </div>
 
   <h1>GALS <span>PANIC</span> — Online Co-op</h1>
-  <div id="status">서버 연결 중…</div>
+  <div id="status" data-i18n="status_connecting"></div>
   <div id="hud"></div>
   <!-- 좌측 포획 랭킹: 포획 점수(⭐) 순으로 정렬 -->
   <div id="rank" class="hidden">
-    <div class="rhead">🏆 포획 랭킹</div>
+    <div class="rhead" data-i18n="rank_head"></div>
     <div id="rankList" class="rlist"></div>
   </div>
   <canvas id="c" width="512" height="768"></canvas>
   <div id="help">
-    <b>방향키</b>로 이동 — 안전지대에서 빈 공간으로 들어가면 선이 그려지고, 다시 안전지대에 닿으면 안쪽이 점유됩니다.
-    빨간 적이 당신의 선에 닿으면 목숨을 잃어요. 다 함께 <b>90%</b>를 열면 클리어!
-    <div style="margin-top:6px"><button id="restart" style="display:none">다음/재시작 (Enter)</button></div>
+    <span data-i18n-html="instr_html"></span>
+    <div style="margin-top:6px"><button id="restart" style="display:none" data-i18n="btn_restart"></button></div>
   </div>
 
   <!-- 우측 채팅창: 대화 로그 + 입력. Enter 로 입력창 포커스, 다시 Enter 로 전송 (Esc 취소). -->
   <aside id="chatPanel" class="hidden">
-    <div id="chatResize" title="드래그로 채팅창 너비 조절"></div>
-    <div id="chatHead">채팅</div>
+    <div id="chatResize" data-i18n-title="chat_resize_title"></div>
+    <div id="chatHead" data-i18n="chat_head"></div>
     <div id="chatLog" aria-live="polite"></div>
-    <input id="chat" maxlength="60" placeholder="Enter 로 채팅…" autocomplete="off" />
+    <input id="chat" maxlength="60" data-i18n-ph="ph_chat" autocomplete="off" />
   </aside>
 
   <!-- 게임 오버: 화면 전체를 덮는 3D 카운트다운 오버레이 (three.js) -->
   <div id="gameover" class="hidden">
     <canvas id="fx3d"></canvas>
     <div id="goNum" class="go-num-fallback">10</div>
-    <div class="go-hint"><b>GAME OVER</b> · <b>Enter</b> ▶ 재시작</div>
+    <div class="go-hint" data-i18n-html="go_hint_html"></div>
   </div>
 
   <!-- 도감(컬렉션): 수집한 그림을 모아 보는 모달. 각자 브라우저(localStorage)에 저장. -->
   <div id="gallery" class="hidden">
     <div class="gwrap">
       <div class="ghead">
-        <div class="gtitle">📖 도감 <span id="galleryProgress" class="gprog"></span></div>
-        <button id="galleryClose" class="gclose">✕ 닫기</button>
+        <div class="gtitle"><span data-i18n="btn_gallery"></span> <span id="galleryProgress" class="gprog"></span></div>
+        <button id="galleryClose" class="gclose" data-i18n="btn_close"></button>
       </div>
       <div id="galleryGrid" class="ggrid"></div>
     </div>
   </div>
   <!-- 도감에서 그림 클릭 시 크게 보는 라이트박스 -->
   <div id="galleryView" class="hidden">
-    <button id="gvClose" class="gvclose" title="닫기">✕</button>
+    <button id="gvClose" class="gvclose" data-i18n-title="title_close">✕</button>
     <img id="gvImg" alt="">
-    <div class="gvbar"><span id="gvCap" class="gvcap"></span><button id="gvSave" class="gvsave">🖼 저장</button></div>
+    <div class="gvbar"><span id="gvCap" class="gvcap"></span><button id="gvSave" class="gvsave" data-i18n="btn_save"></button></div>
   </div>
 
   <!-- 로그인 / 회원가입 모달 (모드 전환) -->
   <div id="login" class="hidden mode-in">
     <div class="lgwrap">
-      <div class="lgtitle" id="lgTitle">🔑 로그인</div>
+      <div class="lgtitle" id="lgTitle"></div>
       <div class="lgsub" id="lgSub"></div>
-      <input id="lgName" type="text" maxlength="12" placeholder="플레이어 이름 (게임에서 표시)" autocomplete="nickname" />
-      <input id="lgEmail" type="email" placeholder="이메일" autocomplete="username" />
-      <input id="lgPass" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password" />
+      <input id="lgName" type="text" maxlength="12" data-i18n-ph="ph_lgname" autocomplete="nickname" />
+      <input id="lgEmail" type="email" data-i18n-ph="ph_email" autocomplete="username" />
+      <input id="lgPass" type="password" data-i18n-ph="ph_pass" autocomplete="current-password" />
       <div id="lgMsg" class="lgmsg"></div>
-      <button id="lgSubmit" class="lgprimary">로그인</button>
+      <button id="lgSubmit" class="lgprimary"></button>
       <div class="lgswitch" id="lgSwitch"></div>
-      <button id="lgClose" class="lgclose">닫기</button>
+      <button id="lgClose" class="lgclose" data-i18n="lg_close"></button>
     </div>
   </div>
 
-  <!-- dev 전용: 클릭하면 10초 카운트다운 후 보스 출현 -->
-  <button id="devBossBtn" class="hidden" title="dev: 10초 뒤 보스 출현">🕳 보스 소환</button>
-  <!-- dev 전용: 레이저 보스를 바로 소환(곧 레이저 발사) -->
-  <button id="devLaserBtn" class="hidden" title="dev: 레이저 보스 즉시 소환 (곧 레이저 발사)">⚡ 레이저 보스</button>
-  <!-- dev 전용: 즉시 게임오버(죽는 화면·3D 카운트다운 미리보기) -->
-  <button id="devLoseBtn" class="hidden" title="dev: 즉시 게임오버 — 죽는 화면 미리보기">💀 게임오버</button>
-  <!-- dev 전용: 즉시 스테이지 완료(클리어 화면·그림 리빌 미리보기) -->
-  <button id="devWinBtn" class="hidden" title="dev: 즉시 스테이지 완료 — 클리어 화면 미리보기">🏆 스테이지 완료</button>
+  <!-- dev 전용 버튼들 -->
+  <button id="devBossBtn" class="hidden" data-i18n="dev_boss"></button>
+  <button id="devLaserBtn" class="hidden" data-i18n="dev_laser"></button>
+  <button id="devLoseBtn" class="hidden" data-i18n="dev_lose"></button>
+  <button id="devWinBtn" class="hidden" data-i18n="dev_win"></button>
 
 <!-- three.js 애드온이 bare 'three' 를 import 하므로, 로컬 vendored 빌드로 매핑한다. -->
 <script type="importmap">
@@ -398,6 +414,194 @@ import { Client } from "https://esm.sh/colyseus.js@0.15.0";
 import { showCountdown3D, hideCountdown3D, renderCountdown3D } from "./countdown3d.js";
 import { initAudio, sfxCapture, sfxClear, sfxGameover, sfxItem } from "./sfx.js";
 import { onAuth, signIn, signUp, signOut, getToken, dbGetCollection } from "./supabase.js";
+
+// ── 다국어(i18n): 한국어/English/日本語 ──────────────────────────────────────
+// t(key, ...args) 로 현재 언어 문자열을 얻는다. {0}{1} 은 args 로 치환. data-i18n* 속성은
+// applyI18n() 이 정적 요소에 적용하고, 동적 UI(HUD·로비·팝업)는 렌더/이벤트에서 t() 로 만든다.
+const LANG_LABEL = { ko: "한국어", en: "English", ja: "日本語" };
+const I18N = {
+  ko: {
+    instr_html: "<b>방향키</b>로 이동 · 안전지대에서 빈 공간으로 들어가 선을 긋고, 다시 안전지대에 닿으면 안쪽이 열립니다.<br>빨간 <b>적</b>이 선에 닿으면 목숨을 잃어요 · 함께 <b>90%</b>를 열면 클리어!",
+    key_move: "이동", key_sprint: "질주", key_chat: "채팅",
+    online_label: "접속자", online_unit: "명",
+    ph_name: "플레이어 이름 (선택)", dev_stage: "🛠 스테이지 (dev)",
+    btn_start: "게임 시작", btn_create: "방 만들기 (친구끼리)", ph_code: "방 코드로 참가", btn_join: "참가",
+    btn_gallery: "📖 도감", btn_login: "🔑 로그인", btn_signup: "📝 회원가입", logout: "로그아웃",
+    lobby_title: "대기실", lobby_code_label: "방 코드", btn_copy: "복사", copied: "복사됨!",
+    lobby_waiting: "플레이어를 기다리는 중…", btn_startnow: "지금 시작",
+    lobby_hint: "4명이 모이면 10초 뒤 자동 시작 · 코드를 친구에게 공유하세요",
+    status_connecting: "서버 연결 중…", connected_play: "접속됨 · 방향키로 플레이하세요",
+    rank_head: "🏆 포획 랭킹", btn_restart: "다음/재시작 (Enter)",
+    chat_resize_title: "드래그로 채팅창 너비 조절", chat_head: "채팅", ph_chat: "Enter 로 채팅…",
+    chat_empty: "아직 메시지가 없어요 · Enter 로 입력",
+    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ 재시작",
+    btn_close: "✕ 닫기", title_close: "닫기", btn_save: "🖼 저장", collected: "수집",
+    need_login_paren: "(로그인 필요)", login_word: "로그인",
+    gallery_needlogin_html: "🔑 로그인하면 수집한 그림을 볼 수 있어요.<br><button id=\"glLogin\">로그인</button>",
+    lg_title_in: "🔑 로그인", lg_title_up: "📝 회원가입",
+    ph_lgname: "플레이어 이름 (게임에서 표시)", ph_email: "이메일", ph_pass: "비밀번호 (6자 이상)",
+    lg_sub_in: "로그인하면 도감이 클라우드에 저장돼 어느 기기에서나 이어집니다.",
+    lg_sub_up: "이름·이메일·비밀번호로 <b>바로 가입</b>됩니다 (가입 즉시 로그인).",
+    lg_submit_in: "로그인", lg_submit_up: "회원가입",
+    lg_switch_to_up: "계정이 없으신가요? <b data-mode=\"up\">회원가입</b>",
+    lg_switch_to_in: "이미 계정이 있으신가요? <b data-mode=\"in\">로그인</b>",
+    lg_close: "닫기",
+    err_need_email_pass: "이메일과 비밀번호를 입력하세요.", err_need_name: "플레이어 이름을 입력하세요.",
+    processing: "처리 중…", confirm_sent: "확인 메일을 보냈습니다. 링크 클릭 후 로그인하세요.",
+    auth_invalid: "이메일 또는 비밀번호가 올바르지 않습니다.",
+    auth_registered: "이미 가입된 이메일입니다. 로그인해 주세요.",
+    auth_not_confirmed: "이메일 확인이 필요합니다. 메일함을 확인하세요.",
+    auth_pass_short: "비밀번호는 6자 이상이어야 합니다.",
+    auth_email_format: "이메일 형식이 올바르지 않습니다.",
+    auth_weak: "비밀번호가 너무 약합니다. 더 복잡하게 만들어 주세요.",
+    auth_rate: "요청이 너무 많습니다. 잠시 후 다시 시도하세요.", auth_retry: "잠시 후 다시 시도하세요.",
+    auth_signup_disabled: "현재 회원가입이 비활성화되어 있습니다.",
+    auth_network: "네트워크 오류입니다. 연결을 확인하세요.",
+    auth_error_prefix: "오류: ", auth_unknown: "알 수 없는 오류",
+    err_need_code: "방 코드를 입력하세요", connecting2: "접속 중…",
+    err_room_notfound: "그 코드의 방을 찾을 수 없어요", err_conn_fail: "서버 연결 실패 — 잠시 후 다시 시도하세요",
+    starting_in: "{0}초 후 시작!", waiting_players: "플레이어 대기 중 ({0} / 4)",
+    hud_progress: "진행 · Lv {0}", hud_goal: "목표 90%", me_suffix: " (나)", stam_title: "질주 스태미나",
+    capture_multi: "포획 x{0}! +{1}", capture_one: "포획! +{1}",
+    item_missile: "미사일!", item_freeze: "프리즈!", item_life: "목숨 +1!", item_generic: "아이템!",
+    boss_incoming: "보스 출현", restart_here: "Enter ▶ 이 방에서 재시작", stage_n: "스테이지 {0}",
+    dev_boss: "🕳 보스 소환", dev_laser: "⚡ 레이저 보스", dev_lose: "💀 게임오버", dev_win: "🏆 스테이지 완료",
+    collected_fmt: "{0} / {1} 수집",
+  },
+  en: {
+    instr_html: "<b>Arrow keys</b> to move · from a safe zone, draw a line through open space and touch the safe zone again to claim the inside.<br>If a red <b>enemy</b> hits your line you lose a life · open <b>90%</b> together to clear!",
+    key_move: "Move", key_sprint: "Sprint", key_chat: "Chat",
+    online_label: "Online", online_unit: "",
+    ph_name: "Player name (optional)", dev_stage: "🛠 Stage (dev)",
+    btn_start: "Start Game", btn_create: "Create Room (friends)", ph_code: "Join by room code", btn_join: "Join",
+    btn_gallery: "📖 Collection", btn_login: "🔑 Log in", btn_signup: "📝 Sign up", logout: "Log out",
+    lobby_title: "Lobby", lobby_code_label: "Room code", btn_copy: "Copy", copied: "Copied!",
+    lobby_waiting: "Waiting for players…", btn_startnow: "Start Now",
+    lobby_hint: "Auto-starts 10s after 4 players · share the code with friends",
+    status_connecting: "Connecting to server…", connected_play: "Connected · use arrow keys to play",
+    rank_head: "🏆 Capture Ranking", btn_restart: "Next / Restart (Enter)",
+    chat_resize_title: "Drag to resize chat", chat_head: "Chat", ph_chat: "Enter to chat…",
+    chat_empty: "No messages yet · Enter to type",
+    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ Restart",
+    btn_close: "✕ Close", title_close: "Close", btn_save: "🖼 Save", collected: "collected",
+    need_login_paren: "(login required)", login_word: "Log in",
+    gallery_needlogin_html: "🔑 Log in to see the pictures you've collected.<br><button id=\"glLogin\">Log in</button>",
+    lg_title_in: "🔑 Log in", lg_title_up: "📝 Sign up",
+    ph_lgname: "Player name (shown in game)", ph_email: "Email", ph_pass: "Password (6+ chars)",
+    lg_sub_in: "Log in to save your collection to the cloud and continue on any device.",
+    lg_sub_up: "Sign up instantly with name, email, and password (<b>logged in right away</b>).",
+    lg_submit_in: "Log in", lg_submit_up: "Sign up",
+    lg_switch_to_up: "No account? <b data-mode=\"up\">Sign up</b>",
+    lg_switch_to_in: "Already have an account? <b data-mode=\"in\">Log in</b>",
+    lg_close: "Close",
+    err_need_email_pass: "Enter your email and password.", err_need_name: "Enter a player name.",
+    processing: "Processing…", confirm_sent: "Confirmation email sent. Click the link, then log in.",
+    auth_invalid: "Incorrect email or password.",
+    auth_registered: "This email is already registered. Please log in.",
+    auth_not_confirmed: "Email confirmation required. Check your inbox.",
+    auth_pass_short: "Password must be at least 6 characters.",
+    auth_email_format: "Invalid email format.",
+    auth_weak: "Password too weak. Please make it more complex.",
+    auth_rate: "Too many requests. Try again shortly.", auth_retry: "Please try again shortly.",
+    auth_signup_disabled: "Sign-ups are currently disabled.",
+    auth_network: "Network error. Check your connection.",
+    auth_error_prefix: "Error: ", auth_unknown: "Unknown error",
+    err_need_code: "Enter a room code", connecting2: "Connecting…",
+    err_room_notfound: "No room with that code", err_conn_fail: "Connection failed — try again shortly",
+    starting_in: "Starting in {0}s!", waiting_players: "Waiting for players ({0} / 4)",
+    hud_progress: "Progress · Lv {0}", hud_goal: "Goal 90%", me_suffix: " (you)", stam_title: "Sprint stamina",
+    capture_multi: "Capture x{0}! +{1}", capture_one: "Capture! +{1}",
+    item_missile: "Missile!", item_freeze: "Freeze!", item_life: "Life +1!", item_generic: "Item!",
+    boss_incoming: "BOSS INCOMING", restart_here: "Enter ▶ Restart in this room", stage_n: "Stage {0}",
+    dev_boss: "🕳 Summon Boss", dev_laser: "⚡ Laser Boss", dev_lose: "💀 Game Over", dev_win: "🏆 Stage Clear",
+    collected_fmt: "{0} / {1} collected",
+  },
+  ja: {
+    instr_html: "<b>矢印キー</b>で移動 · 安全地帯から空きスペースに入って線を引き、再び安全地帯に触れると内側が開きます。<br>赤い<b>敵</b>が線に触れると命を失います · みんなで<b>90%</b>開けるとクリア！",
+    key_move: "移動", key_sprint: "ダッシュ", key_chat: "チャット",
+    online_label: "接続中", online_unit: "人",
+    ph_name: "プレイヤー名（任意）", dev_stage: "🛠 ステージ (dev)",
+    btn_start: "ゲーム開始", btn_create: "部屋を作る（友達と）", ph_code: "部屋コードで参加", btn_join: "参加",
+    btn_gallery: "📖 図鑑", btn_login: "🔑 ログイン", btn_signup: "📝 新規登録", logout: "ログアウト",
+    lobby_title: "待機室", lobby_code_label: "部屋コード", btn_copy: "コピー", copied: "コピーしました！",
+    lobby_waiting: "プレイヤーを待っています…", btn_startnow: "今すぐ開始",
+    lobby_hint: "4人集まると10秒後に自動開始 · コードを友達に共有しましょう",
+    status_connecting: "サーバーに接続中…", connected_play: "接続完了 · 矢印キーでプレイ",
+    rank_head: "🏆 捕獲ランキング", btn_restart: "次へ / リスタート (Enter)",
+    chat_resize_title: "ドラッグで幅を調整", chat_head: "チャット", ph_chat: "Enterでチャット…",
+    chat_empty: "まだメッセージがありません · Enterで入力",
+    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ リスタート",
+    btn_close: "✕ 閉じる", title_close: "閉じる", btn_save: "🖼 保存", collected: "収集",
+    need_login_paren: "（ログインが必要）", login_word: "ログイン",
+    gallery_needlogin_html: "🔑 ログインすると集めた絵を見られます。<br><button id=\"glLogin\">ログイン</button>",
+    lg_title_in: "🔑 ログイン", lg_title_up: "📝 新規登録",
+    ph_lgname: "プレイヤー名（ゲームで表示）", ph_email: "メール", ph_pass: "パスワード（6文字以上）",
+    lg_sub_in: "ログインすると図鑑がクラウドに保存され、どの端末でも続けられます。",
+    lg_sub_up: "名前・メール・パスワードで<b>すぐ登録</b>できます（登録後すぐログイン）。",
+    lg_submit_in: "ログイン", lg_submit_up: "新規登録",
+    lg_switch_to_up: "アカウントがありませんか？ <b data-mode=\"up\">新規登録</b>",
+    lg_switch_to_in: "すでにアカウントをお持ちですか？ <b data-mode=\"in\">ログイン</b>",
+    lg_close: "閉じる",
+    err_need_email_pass: "メールとパスワードを入力してください。", err_need_name: "プレイヤー名を入力してください。",
+    processing: "処理中…", confirm_sent: "確認メールを送信しました。リンクをクリックしてログインしてください。",
+    auth_invalid: "メールまたはパスワードが正しくありません。",
+    auth_registered: "すでに登録済みのメールです。ログインしてください。",
+    auth_not_confirmed: "メール確認が必要です。受信箱を確認してください。",
+    auth_pass_short: "パスワードは6文字以上必要です。",
+    auth_email_format: "メールの形式が正しくありません。",
+    auth_weak: "パスワードが弱すぎます。もっと複雑にしてください。",
+    auth_rate: "リクエストが多すぎます。しばらくして再試行してください。", auth_retry: "しばらくして再試行してください。",
+    auth_signup_disabled: "現在、新規登録は無効です。",
+    auth_network: "ネットワークエラーです。接続を確認してください。",
+    auth_error_prefix: "エラー: ", auth_unknown: "不明なエラー",
+    err_need_code: "部屋コードを入力してください", connecting2: "接続中…",
+    err_room_notfound: "そのコードの部屋が見つかりません", err_conn_fail: "接続失敗 — しばらくして再試行してください",
+    starting_in: "{0}秒後に開始！", waiting_players: "プレイヤー待機中 ({0} / 4)",
+    hud_progress: "進行 · Lv {0}", hud_goal: "目標 90%", me_suffix: "（あなた）", stam_title: "ダッシュスタミナ",
+    capture_multi: "捕獲 x{0}! +{1}", capture_one: "捕獲！ +{1}",
+    item_missile: "ミサイル！", item_freeze: "フリーズ！", item_life: "ライフ +1！", item_generic: "アイテム！",
+    boss_incoming: "ボス出現", restart_here: "Enter ▶ この部屋でリスタート", stage_n: "ステージ {0}",
+    dev_boss: "🕳 ボス召喚", dev_laser: "⚡ レーザーボス", dev_lose: "💀 ゲームオーバー", dev_win: "🏆 ステージクリア",
+    collected_fmt: "{0} / {1} 収集",
+  },
+};
+let LANG = "ko";
+try { const s = localStorage.getItem("galspanic:lang"); if (s && I18N[s]) LANG = s; } catch {}
+if (!localStorage_getLangSet() && /^ja/i.test(navigator.language || "")) LANG = "ja";
+else if (!localStorage_getLangSet() && /^en/i.test(navigator.language || "")) LANG = "en";
+function localStorage_getLangSet() { try { return !!localStorage.getItem("galspanic:lang"); } catch { return false; } }
+function t(key, ...args) {
+  let s = (I18N[LANG] && I18N[LANG][key]) ?? (I18N.ko[key]) ?? key;
+  return s.replace(/\{(\d+)\}/g, (_, i) => (args[i] != null ? args[i] : ""));
+}
+// 정적 요소(data-i18n*)에 현재 언어를 적용하고, JS 로 만드는 동적 UI 는 다시 그리게 한다.
+function applyI18n() {
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-html]").forEach((el) => { el.innerHTML = t(el.dataset.i18nHtml); });
+  document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+  try { document.documentElement.lang = LANG; } catch {}
+  if (chatLog) chatLog.dataset.empty = t("chat_empty");
+  const cur = document.getElementById("langCur"); if (cur) cur.textContent = LANG_LABEL[LANG];
+  document.querySelectorAll("#langMenu button").forEach((b) => b.classList.toggle("on", b.dataset.lang === LANG));
+  // 동적으로 텍스트를 세팅하는 UI 갱신 (함수 선언은 호이스팅되어 여기서 호출 가능)
+  try { setAuthMode(authMode); } catch {}                       // 로그인/회원가입 팝업 재현지화
+  try { updateLoginUI(currentUser); } catch {}                  // 로그인/로그아웃 버튼
+  try { updateGalleryCount(); } catch {}                        // 도감 카운트/로그인 필요 문구
+  try {                                                          // dev 스테이지 선택 항목
+    const ss = document.getElementById("stageSelect");
+    if (ss) [...ss.options].forEach((o) => { o.textContent = t("stage_n", o.value); });
+  } catch {}
+  // 갤러리가 열려 있으면 다시 그린다(진행 텍스트·로그인 안내)
+  try { if (galleryEl && !galleryEl.classList.contains("hidden")) openGallery(); } catch {}
+}
+let currentUser = null;   // 마지막 로그인 사용자(언어 전환 시 버튼 재현지화용)
+function setLang(l) {
+  if (!I18N[l]) return;
+  LANG = l;
+  try { localStorage.setItem("galspanic:lang", l); } catch {}
+  applyI18n();
+}
 
 // 서버 주소를 "이 페이지를 연 origin" 기준으로 자동 결정.
 // - 게임 서버(2567)가 이 페이지를 직접 서빙하는 경우(권장): 같은 origin으로 접속.
@@ -464,7 +668,7 @@ async function connect(name, level, mode = "quick", code = "") {
   if (mode === "create") room = await client.create("game", { ...opts, private: true });   // 비공개 방
   else if (mode === "join") room = await client.joinById(code, { ...opts });                 // 코드로 특정 방
   else room = await client.joinOrCreate("game", opts);                                       // 빠른 참가(순차 입장)
-  statusEl.textContent = "접속됨 · 방향키로 플레이하세요";
+  statusEl.textContent = t("connected_play");
   // Keep this handler TRIVIAL: just latch the latest state. The heavy per-update work
   // (scanning the 4096-cell trail array, capturing enemy snapshots) is done once per
   // render frame instead — so a burst of queued patches can't pile up scans and stall
@@ -477,7 +681,7 @@ async function connect(name, level, mode = "quick", code = "") {
   room.onMessage("trap", (ev) => {
     flashes.push({
       x: ev.x, y: ev.y, color: playerColor(ev.owner), life: 1.2, ttl: 1.2,
-      text: ev.count > 1 ? `포획 x${ev.count}! +${ev.bonus}` : `포획! +${ev.bonus}`,
+      text: ev.count > 1 ? t("capture_multi", ev.count, ev.bonus) : t("capture_one", ev.count, ev.bonus),
     });
     sfxCapture(ev.count);   // 포획 효과음
   });
@@ -485,7 +689,7 @@ async function connect(name, level, mode = "quick", code = "") {
   room.onMessage("item", (ev) => {
     flashes.push({
       x: ev.x, y: ev.y, color: ITEM_COLOR[ev.kind] || "#fff", life: 1.4, ttl: 1.4,
-      text: `${ITEM_ICON[ev.kind] || "★"} ${ITEM_NAME[ev.kind] || "아이템!"}`,
+      text: `${ITEM_ICON[ev.kind] || "★"} ${I18N[LANG]["item_" + ev.kind] ? t("item_" + ev.kind) : t("item_generic")}`,
     });
     sfxItem();    // 파워업 획득음
   });
@@ -522,7 +726,7 @@ function addToCollection(imageId) {
 function updateGalleryCount() {
   const el = document.getElementById("galleryCount");
   if (!el) return;
-  el.textContent = remoteCache ? `(${remoteCache.size}/${imageCount || "?"})` : "(로그인 필요)";
+  el.textContent = remoteCache ? `(${remoteCache.size}/${imageCount || "?"})` : t("need_login_paren");
 }
 const artId = (i) => "art" + String(i).padStart(2, "0");   // 서버 명명과 일치 (art01.. art100)
 function openGallery() {
@@ -530,7 +734,7 @@ function openGallery() {
   galleryEl.classList.remove("hidden");
   if (!remoteCache) {   // 로그인 필요 — 도감은 계정 전용
     document.getElementById("galleryProgress").textContent = "";
-    grid.innerHTML = `<div class="gneedlogin">🔑 로그인하면 수집한 그림을 볼 수 있어요.<br><button id="glLogin">로그인</button></div>`;
+    grid.innerHTML = `<div class="gneedlogin">${t("gallery_needlogin_html")}</div>`;
     document.getElementById("glLogin").onclick = () => { closeGallery(); openLogin(); };
     return;
   }
@@ -550,7 +754,7 @@ function openGallery() {
     }
     grid.appendChild(cell);
   }
-  document.getElementById("galleryProgress").textContent = `${owned.size} / ${total} 수집`;
+  document.getElementById("galleryProgress").textContent = t("collected_fmt", owned.size, total);
   updateGalleryCount();
   galleryEl.classList.remove("hidden");
 }
@@ -603,14 +807,10 @@ function setAuthMode(mode) {
   const login = mode === "in";
   loginEl.classList.toggle("mode-in", login);
   loginEl.classList.toggle("mode-up", !login);
-  document.getElementById("lgTitle").textContent = login ? "🔑 로그인" : "📝 회원가입";
-  document.getElementById("lgSub").innerHTML = login
-    ? "로그인하면 도감이 클라우드에 저장돼 어느 기기에서나 이어집니다."
-    : "이름·이메일·비밀번호로 <b>바로 가입</b>됩니다 (가입 즉시 로그인).";
-  document.getElementById("lgSubmit").textContent = login ? "로그인" : "회원가입";
-  document.getElementById("lgSwitch").innerHTML = login
-    ? '계정이 없으신가요? <b data-mode="up">회원가입</b>'
-    : '이미 계정이 있으신가요? <b data-mode="in">로그인</b>';
+  document.getElementById("lgTitle").textContent = t(login ? "lg_title_in" : "lg_title_up");
+  document.getElementById("lgSub").innerHTML = t(login ? "lg_sub_in" : "lg_sub_up");
+  document.getElementById("lgSubmit").textContent = t(login ? "lg_submit_in" : "lg_submit_up");
+  document.getElementById("lgSwitch").innerHTML = t(login ? "lg_switch_to_up" : "lg_switch_to_in");
   lgMsg.textContent = ""; lgMsg.className = "lgmsg";
 }
 function openLogin(mode = "in") {
@@ -620,10 +820,11 @@ function openLogin(mode = "in") {
 }
 function closeLogin() { loginEl.classList.add("hidden"); }
 function updateLoginUI(user) {
+  currentUser = user || null;
   const login = document.getElementById("loginBtn");
   const signup = document.getElementById("signupBtn");
-  if (user) { login.textContent = "로그아웃"; login.dataset.in = "1"; signup.style.display = "none"; }
-  else { login.textContent = "🔑 로그인"; login.dataset.in = ""; signup.style.display = ""; }
+  if (user) { login.textContent = t("logout"); login.dataset.in = "1"; signup.style.display = "none"; }
+  else { login.textContent = t("btn_login"); login.dataset.in = ""; signup.style.display = ""; }
 }
 document.getElementById("loginBtn").addEventListener("click", async () => {
   if (document.getElementById("loginBtn").dataset.in) await signOut();   // 로그아웃 (onAuth 가 처리)
@@ -639,29 +840,29 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !loginEl
 // Supabase 인증 에러 메시지를 한글로 (매핑 안 된 건 원문 표시)
 function krAuthError(msg) {
   const m = (msg || "").toLowerCase();
-  if (m.includes("invalid login credentials")) return "이메일 또는 비밀번호가 올바르지 않습니다.";
-  if (m.includes("already registered") || m.includes("already been registered") || m.includes("user already")) return "이미 가입된 이메일입니다. 로그인해 주세요.";
-  if (m.includes("email not confirmed")) return "이메일 확인이 필요합니다. 메일함을 확인하세요.";
-  if (m.includes("should be at least") || (m.includes("password") && m.includes("6 char"))) return "비밀번호는 6자 이상이어야 합니다.";
-  if (m.includes("unable to validate email") || m.includes("invalid email") || m.includes("invalid format")) return "이메일 형식이 올바르지 않습니다.";
-  if (m.includes("weak password")) return "비밀번호가 너무 약합니다. 더 복잡하게 만들어 주세요.";
-  if (m.includes("rate limit") || m.includes("too many")) return "요청이 너무 많습니다. 잠시 후 다시 시도하세요.";
-  if (m.includes("for security purposes")) return "잠시 후 다시 시도하세요.";
-  if (m.includes("signups not allowed") || (m.includes("signup") && m.includes("disabled"))) return "현재 회원가입이 비활성화되어 있습니다.";
-  if (m.includes("failed to fetch") || m.includes("networkerror") || m.includes("network")) return "네트워크 오류입니다. 연결을 확인하세요.";
-  return "오류: " + (msg || "알 수 없는 오류");
+  if (m.includes("invalid login credentials")) return t("auth_invalid");
+  if (m.includes("already registered") || m.includes("already been registered") || m.includes("user already")) return t("auth_registered");
+  if (m.includes("email not confirmed")) return t("auth_not_confirmed");
+  if (m.includes("should be at least") || (m.includes("password") && m.includes("6 char"))) return t("auth_pass_short");
+  if (m.includes("unable to validate email") || m.includes("invalid email") || m.includes("invalid format")) return t("auth_email_format");
+  if (m.includes("weak password")) return t("auth_weak");
+  if (m.includes("rate limit") || m.includes("too many")) return t("auth_rate");
+  if (m.includes("for security purposes")) return t("auth_retry");
+  if (m.includes("signups not allowed") || (m.includes("signup") && m.includes("disabled"))) return t("auth_signup_disabled");
+  if (m.includes("failed to fetch") || m.includes("networkerror") || m.includes("network")) return t("auth_network");
+  return t("auth_error_prefix") + (msg || t("auth_unknown"));
 }
 async function doAuth(kind) {
   const email = document.getElementById("lgEmail").value.trim();
   const pass = document.getElementById("lgPass").value;
   const name = document.getElementById("lgName").value.trim();
-  if (!email || !pass) { lgMsg.className = "lgmsg"; lgMsg.textContent = "이메일과 비밀번호를 입력하세요."; return; }
-  if (kind === "up" && !name) { lgMsg.className = "lgmsg"; lgMsg.textContent = "플레이어 이름을 입력하세요."; return; }
-  lgMsg.className = "lgmsg"; lgMsg.textContent = "처리 중…";
+  if (!email || !pass) { lgMsg.className = "lgmsg"; lgMsg.textContent = t("err_need_email_pass"); return; }
+  if (kind === "up" && !name) { lgMsg.className = "lgmsg"; lgMsg.textContent = t("err_need_name"); return; }
+  lgMsg.className = "lgmsg"; lgMsg.textContent = t("processing");
   const { data, error } = kind === "up" ? await signUp(email, pass, name) : await signIn(email, pass);
   if (error) { lgMsg.className = "lgmsg"; lgMsg.textContent = krAuthError(error.message); return; }
   if (kind === "up" && !(data && data.session)) {   // 이메일 확인이 켜져 있으면 세션이 바로 안 생김
-    lgMsg.className = "lgmsg ok"; lgMsg.textContent = "확인 메일을 보냈습니다. 링크 클릭 후 로그인하세요.";
+    lgMsg.className = "lgmsg ok"; lgMsg.textContent = t("confirm_sent");
     return;
   }
   closeLogin();   // onAuth 가 도감 로드/병합 처리
@@ -695,7 +896,7 @@ let devMode = false;
     const MAX_STAGE = 12;   // 선택 가능한 최대 스테이지 (포탑은 4스테이지+ 등장)
     for (let i = 1; i <= MAX_STAGE; i++) {
       const o = document.createElement("option");
-      o.value = String(i); o.textContent = `스테이지 ${i}`;
+      o.value = String(i); o.textContent = t("stage_n", i);
       stageSelect.appendChild(o);
     }
     let saved = 1;
@@ -719,9 +920,9 @@ async function enterGame(mode) {
     try { localStorage.setItem("galspanic:stage", String(level)); } catch {}
   }
   const code = (codeInput.value || "").trim();
-  if (mode === "join" && !code) { startErr.textContent = "방 코드를 입력하세요"; return; }
+  if (mode === "join" && !code) { startErr.textContent = t("err_need_code"); return; }
   [startBtn, createBtn, joinBtn].forEach(b => b.disabled = true);
-  startErr.textContent = "접속 중…";
+  startErr.textContent = t("connecting2");
   try {
     await connect(name, level, mode, code);
     startScreen.classList.add("hidden");
@@ -729,7 +930,7 @@ async function enterGame(mode) {
     lobbyCodeVal.textContent = room.roomId;           // 이 방의 코드(공유용)
   } catch (e) {
     console.error(e);
-    startErr.textContent = mode === "join" ? "그 코드의 방을 찾을 수 없어요" : "서버 연결 실패 — 잠시 후 다시 시도하세요";
+    startErr.textContent = mode === "join" ? t("err_room_notfound") : t("err_conn_fail");
     [startBtn, createBtn, joinBtn].forEach(b => b.disabled = false);
   }
 }
@@ -739,7 +940,7 @@ joinBtn.addEventListener("click", () => enterGame("join"));
 codeInput.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) enterGame("join"); });
 startNowBtn.addEventListener("click", () => room?.send("startNow"));
 copyCodeBtn.addEventListener("click", () => {
-  try { navigator.clipboard?.writeText(room?.roomId || ""); copyCodeBtn.textContent = "복사됨!"; setTimeout(() => copyCodeBtn.textContent = "복사", 1200); } catch {}
+  try { navigator.clipboard?.writeText(room?.roomId || ""); copyCodeBtn.textContent = t("copied"); setTimeout(() => copyCodeBtn.textContent = t("btn_copy"), 1200); } catch {}
 });
 
 // 대기실 화면 갱신 + phase 가 playing 이 되면 게임 화면을 드러낸다. render 루프에서 매 프레임 호출.
@@ -760,8 +961,8 @@ function updateOverlays() {
       });
     }
     lobbyStatus.textContent = state.startIn >= 0
-      ? `${Math.ceil(state.startIn)}초 후 시작!`
-      : `플레이어 대기 중 (${players.length} / 4)`;
+      ? t("starting_in", Math.ceil(state.startIn))
+      : t("waiting_players", players.length);
   } else {
     // 게임 시작됨(또는 그 이후) → 대기실 닫고 게임/채팅/dev 버튼 노출
     if (!lobby.classList.contains("hidden")) lobby.classList.add("hidden");
@@ -1281,7 +1482,7 @@ function drawBossWarning(remain, now) {
   ctx.globalAlpha = 0.16 + 0.12 * blink;
   ctx.fillStyle = "#e8ebf7";
   ctx.font = "700 20px system-ui, sans-serif";
-  ctx.fillText("보스 출현", W / 2, H * 0.4 + 162);
+  ctx.fillText(t("boss_incoming"), W / 2, H * 0.4 + 162);
   ctx.restore();
 }
 
@@ -1871,7 +2072,7 @@ function drawOverlay() {
   ctx.font = "bold 34px system-ui";
   ctx.fillText("GAME OVER", W/2, H/2-32);
   ctx.fillStyle = "#c9d0f0"; ctx.font = "15px system-ui";
-  ctx.fillText("Enter ▶ 이 방에서 재시작", W/2, H/2 + 6);
+  ctx.fillText(t("restart_here"), W/2, H/2 + 6);
   ctx.fillStyle = "#8b93b2"; ctx.font = "13px system-ui";
   ctx.fillText(`${remain}초 후 첫 화면으로 돌아갑니다`, W/2, H/2 + 34);
   ctx.textAlign = "left";
@@ -1962,13 +2163,13 @@ function drawHud() {
     const traps = p.traps ? `🕸${p.traps}` : "";
     const score = p.bonus | 0;   // 포획 점수(등급별 누적) — 질주와 무관하게 보관
     const stam = Math.max(0, Math.min(100, p.stamina || 0));   // 질주 스태미나 (자기 것만 바로 표시)
-    const stamBar = me ? `<div class="stam${stam < 25 ? " low" : ""}" title="질주 스태미나"><i style="width:${stam}%"></i></div>` : "";
+    const stamBar = me ? `<div class="stam${stam < 25 ? " low" : ""}" title="${t("stam_title")}"><i style="width:${stam}%"></i></div>` : "";
     html += `<div class="chip ${p.out ? "dead" : ""} ${me ? "me" : ""}">
-      <div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}${me?" (나)":""}</div>
+      <div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}${me?t("me_suffix"):""}</div>
       <div class="meta"><span style="color:#ffd54a">⭐${score}</span><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div>${stamBar}</div>`;
   });
-  html += `<div class="chip"><div class="top">진행 · Lv ${state.level}</div>
-    <div class="meta"><span>${ratio}%</span><span>목표 90%</span></div></div>`;
+  html += `<div class="chip"><div class="top">${t("hud_progress", state.level)}</div>
+    <div class="meta"><span>${ratio}%</span><span>${t("hud_goal")}</span></div></div>`;
   hud.innerHTML = html;
 
   // 좌측 포획 랭킹: 포획 점수(⭐) 내림차순, 동점이면 포획 수(🕸)로. 로비에선 숨김.
@@ -1979,7 +2180,7 @@ function drawHud() {
     return `<div class="rrow ${me ? "me" : ""} ${p.out ? "dead" : ""}">
       <span class="rpos">${i + 1}</span>
       <span class="rdot" style="color:${p.color};background:${p.color}"></span>
-      <span class="rname">${p.name}${me ? " (나)" : ""}</span>
+      <span class="rname">${p.name}${me ? t("me_suffix") : ""}</span>
       <span class="rscore">⭐${p.bonus | 0}</span><span class="rtraps">🕸${p.traps | 0}</span></div>`;
   }).join("");
   rankEl.classList.toggle("hidden", state.phase === "lobby" || ranked.length === 0);
@@ -1988,6 +2189,19 @@ function drawHud() {
   chatInput.style.display = (state.phase === "won") ? "none" : "";
   if (state.phase === "won" && document.activeElement === chatInput) chatInput.blur();
 }
+// 우측 상단 언어 전환 버튼 (드롭다운)
+(() => {
+  const sw = document.getElementById("langSwitch");
+  const btn = document.getElementById("langBtn");
+  const menu = document.getElementById("langMenu");
+  if (!sw || !btn || !menu) return;
+  btn.addEventListener("click", (e) => { e.stopPropagation(); menu.classList.toggle("hidden"); });
+  menu.querySelectorAll("button").forEach((b) =>
+    b.addEventListener("click", () => { setLang(b.dataset.lang); menu.classList.add("hidden"); }));
+  document.addEventListener("click", (e) => { if (!sw.contains(e.target)) menu.classList.add("hidden"); });
+})();
+applyI18n();   // 초기 언어를 모든 UI에 적용
+
 render();
 </script>
 </body>

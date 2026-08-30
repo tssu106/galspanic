@@ -71,6 +71,25 @@
                      border-radius:7px; cursor:pointer; font-size:13px; }
   #langMenu button:hover { background:#222a45; }
   #langMenu button.on { background:#2b3a66; font-weight:600; }
+  /* 모바일 터치 컨트롤 (D-패드 + 질주) */
+  #touch { position:fixed; left:0; right:0; bottom:0; z-index:35; display:flex; justify-content:space-between;
+           align-items:flex-end; padding:18px 22px calc(18px + env(safe-area-inset-bottom, 0px));
+           pointer-events:none; }
+  #touch.hidden { display:none; }
+  #dpad { position:relative; width:168px; height:168px; pointer-events:auto; touch-action:none; }
+  .tbtn { position:absolute; width:56px; height:56px; border-radius:14px; border:1px solid #3a4570;
+          background:rgba(22,26,43,.72); color:#cfe; font-size:20px; display:flex; align-items:center;
+          justify-content:center; cursor:pointer; user-select:none; -webkit-user-select:none;
+          touch-action:none; -webkit-tap-highlight-color:transparent; }
+  .tbtn.on { background:#2b3a66; border-color:#6a4bff; color:#fff; }
+  #dpad .tup    { left:56px;  top:0; }
+  #dpad .tleft  { left:0;     top:56px; }
+  #dpad .tright { left:112px; top:56px; }
+  #dpad .tdown  { left:56px;  top:112px; }
+  .tsprint { position:relative; width:88px; height:88px; border-radius:50%; font-size:15px; font-weight:800;
+             background:rgba(124,92,255,.28); border-color:#7c5cff; color:#dcd6ff; pointer-events:auto; }
+  .tsprint.on { background:rgba(124,92,255,.6); color:#fff; }
+  body.touch #chatPanel { display:none !important; }   /* 모바일: 채팅 로그 숨김 */
   #start .logo { margin:0; font-size:min(16vw,68px); font-weight:800; letter-spacing:3px;
                  text-shadow:0 6px 34px rgba(255,93,177,.4); }
   #start .logo span { color:#ff5db1; }
@@ -405,6 +424,17 @@
   <button id="devLoseBtn" class="hidden" data-i18n="dev_lose"></button>
   <button id="devWinBtn" class="hidden" data-i18n="dev_win"></button>
 
+  <!-- 모바일 터치 컨트롤: 4방향 D-패드 + 질주 (터치 기기·게임 중에만 표시) -->
+  <div id="touch" class="hidden" aria-hidden="true">
+    <div id="dpad">
+      <button class="tbtn tup"    data-dir="ArrowUp"    aria-label="up">▲</button>
+      <button class="tbtn tleft"  data-dir="ArrowLeft"  aria-label="left">◀</button>
+      <button class="tbtn tright" data-dir="ArrowRight" aria-label="right">▶</button>
+      <button class="tbtn tdown"  data-dir="ArrowDown"  aria-label="down">▼</button>
+    </div>
+    <button id="sprintBtn" class="tbtn tsprint" data-i18n="key_sprint"></button>
+  </div>
+
 <!-- three.js 애드온이 bare 'three' 를 import 하므로, 로컬 vendored 빌드로 매핑한다. -->
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.min.js" } }
@@ -465,6 +495,7 @@ const I18N = {
     capture_multi: "포획 x{0}! +{1}", capture_one: "포획! +{1}",
     item_missile: "미사일!", item_freeze: "프리즈!", item_life: "목숨 +1!", item_generic: "아이템!",
     boss_incoming: "보스 출현", restart_here: "Enter ▶ 이 방에서 재시작", stage_n: "스테이지 {0}",
+    level_clear: "레벨 {0} 클리어!", next_stage: "Enter ▶ 다음 스테이지", next_stage_touch: "탭하여 다음 스테이지 ▶",
     dev_boss: "🕳 보스 소환", dev_laser: "⚡ 레이저 보스", dev_lose: "💀 게임오버", dev_win: "🏆 스테이지 완료",
     collected_fmt: "{0} / {1} 수집",
   },
@@ -513,6 +544,7 @@ const I18N = {
     capture_multi: "Capture x{0}! +{1}", capture_one: "Capture! +{1}",
     item_missile: "Missile!", item_freeze: "Freeze!", item_life: "Life +1!", item_generic: "Item!",
     boss_incoming: "BOSS INCOMING", restart_here: "Enter ▶ Restart in this room", stage_n: "Stage {0}",
+    level_clear: "LEVEL {0} CLEAR!", next_stage: "Enter ▶ Next stage", next_stage_touch: "Tap for next stage ▶",
     dev_boss: "🕳 Summon Boss", dev_laser: "⚡ Laser Boss", dev_lose: "💀 Game Over", dev_win: "🏆 Stage Clear",
     collected_fmt: "{0} / {1} collected",
   },
@@ -561,6 +593,7 @@ const I18N = {
     capture_multi: "捕獲 x{0}! +{1}", capture_one: "捕獲！ +{1}",
     item_missile: "ミサイル！", item_freeze: "フリーズ！", item_life: "ライフ +1！", item_generic: "アイテム！",
     boss_incoming: "ボス出現", restart_here: "Enter ▶ この部屋でリスタート", stage_n: "ステージ {0}",
+    level_clear: "レベル {0} クリア！", next_stage: "Enter ▶ 次のステージ", next_stage_touch: "タップで次のステージ ▶",
     dev_boss: "🕳 ボス召喚", dev_laser: "⚡ レーザーボス", dev_lose: "💀 ゲームオーバー", dev_win: "🏆 ステージクリア",
     collected_fmt: "{0} / {1} 収集",
   },
@@ -968,7 +1001,8 @@ function updateOverlays() {
     if (!lobby.classList.contains("hidden")) lobby.classList.add("hidden");
     if (!gameShown) {
       gameShown = true;
-      chatPanel.classList.remove("hidden");
+      if (!IS_TOUCH) chatPanel.classList.remove("hidden");           // 모바일에선 채팅 로그 숨김
+      if (IS_TOUCH && touchEl) touchEl.classList.remove("hidden");   // 모바일 터치 컨트롤 노출
       if (devMode) { devBossBtn.classList.remove("hidden"); devLaserBtn.classList.remove("hidden"); devLoseBtn.classList.remove("hidden"); devWinBtn.classList.remove("hidden"); }
     }
     // 게임 오버: 화면 전체 3D 카운트다운(10초). 그 안에 Enter 면 이 방에서 재시작(window keydown),
@@ -1012,6 +1046,8 @@ function returnToTitle() {
   document.getElementById("gameover").classList.add("hidden"); hideCountdown3D();
   lastWonImageId = null;
   devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden"); devLoseBtn.classList.add("hidden"); devWinBtn.classList.add("hidden");
+  document.getElementById("touch")?.classList.add("hidden"); pressOrder.length = 0; boostHeld = false;   // 터치 컨트롤 숨김 + 눌림 초기화
+  document.querySelectorAll(".tbtn.on").forEach((b) => b.classList.remove("on"));
   startScreen.classList.remove("hidden");
   [startBtn, createBtn, joinBtn].forEach((b) => (b.disabled = false));
   startErr.textContent = "";
@@ -1097,6 +1133,34 @@ function releaseAllKeys(){ pressOrder.length = 0; boostHeld = false; syncInput()
 window.addEventListener("blur", releaseAllKeys);
 document.addEventListener("visibilitychange", () => { if (document.hidden) releaseAllKeys(); });
 restartBtn.onclick = () => room?.send("restart");
+
+// ── 모바일 터치 컨트롤: D-패드 + 질주 버튼. 기존 pressOrder/boostHeld/syncInput 을 그대로 재사용
+// 하므로 키보드와 완전히 동일하게 동작한다(방향은 "마지막으로 누른 것" 우선). ──
+const IS_TOUCH = matchMedia("(pointer: coarse)").matches || "ontouchstart" in window || navigator.maxTouchPoints > 0;
+if (IS_TOUCH) document.body.classList.add("touch");
+const touchEl = document.getElementById("touch");
+function touchDir(code, on) {
+  const i = pressOrder.indexOf(code);
+  if (on) { if (i < 0) pressOrder.push(code); }
+  else if (i >= 0) pressOrder.splice(i, 1);
+  syncInput();
+}
+touchEl?.querySelectorAll("[data-dir]").forEach((b) => {
+  const code = b.dataset.dir;
+  b.addEventListener("pointerdown", (e) => { e.preventDefault(); b.classList.add("on"); touchDir(code, true); });
+  const rel = (e) => { e.preventDefault(); b.classList.remove("on"); touchDir(code, false); };
+  b.addEventListener("pointerup", rel);
+  b.addEventListener("pointercancel", rel);
+});
+const sprintBtn = document.getElementById("sprintBtn");
+sprintBtn?.addEventListener("pointerdown", (e) => { e.preventDefault(); sprintBtn.classList.add("on"); boostHeld = true; syncInput(); });
+["pointerup", "pointercancel"].forEach((ev) => sprintBtn?.addEventListener(ev, (e) => {
+  e.preventDefault(); sprintBtn.classList.remove("on"); boostHeld = false; syncInput();
+}));
+// 모바일: 클리어/게임오버 화면에서 캔버스를 탭하면 다음 스테이지/재시작 (키보드 Enter 대체).
+if (IS_TOUCH) canvas.addEventListener("pointerdown", () => {
+  if (state && (state.phase === "won" || state.phase === "lost")) room?.send("restart");
+});
 
 // ---- render ----
 function playerColor(owner) {
@@ -2142,12 +2206,12 @@ function drawWinCelebration(now, dt) {
   ctx.beginPath(); ctx.moveTo(0, barY + 1); ctx.lineTo(W, barY + 1); ctx.stroke();   // 상단 강조선
   ctx.textAlign = "center";
   ctx.fillStyle = "#a3e635"; ctx.font = "bold 32px system-ui";
-  ctx.fillText(`LEVEL ${state.level} CLEAR!`, W / 2, barY + 38);
-  // No auto-advance: let players admire the picture, then press Enter to continue.
+  ctx.fillText(t("level_clear", state.level), W / 2, barY + 38);
+  // No auto-advance: let players admire the picture, then press Enter (or tap on mobile) to continue.
   const pulse = 0.55 + 0.45 * Math.sin(now / 350);
   ctx.globalAlpha = pulse;
   ctx.fillStyle = "#c9d0f0"; ctx.font = "15px system-ui";
-  ctx.fillText("Enter ▶ 다음 스테이지", W / 2, barY + 66);
+  ctx.fillText(t(IS_TOUCH ? "next_stage_touch" : "next_stage"), W / 2, barY + 66);
   ctx.globalAlpha = 1;
   ctx.textAlign = "left";
 }

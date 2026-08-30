@@ -1900,7 +1900,7 @@ function render() {
     if (me && !me.out) {
       // cells across the shorter side (higher = zoomed out). 모바일은 더 확대(작은 VIEW)해서
       // 마커를 화면 중앙에 두고 맵이 스크롤되는 팔로우 카메라로 만든다.
-      const VIEW = Math.min(GW, GH, IS_TOUCH ? 68 : 117);
+      const VIEW = Math.min(GW, GH, IS_TOUCH ? 90 : 117);
       camS = Math.min(GW, GH) / VIEW;               // zoom factor
       // On low latency (localhost/LAN) prediction only adds snap-back jitter, so
       // render my own marker with the same smooth server interpolation as everyone

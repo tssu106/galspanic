@@ -23,6 +23,9 @@ export class Player extends Schema {
 
 // An enemy marker. Position + aim sync; archetype look (kind/shape/size) too.
 export class Enemy extends Schema {
+  @type("number") id: number = 0;          // stable per-spawn id — client interpolates by id, not
+                                           // array index, so removing a mid-array enemy (e.g. a
+                                           // missile kill) never disturbs the boss's smoothing.
   @type("number") x: number = 0;
   @type("number") y: number = 0;
   @type("string") kind: string = "star";  // archetype key -> client color/shape

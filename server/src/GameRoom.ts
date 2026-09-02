@@ -16,6 +16,7 @@ export class GameRoom extends Room<GameState> {
   sim!: GalSim;
   private startLevel = 1;   // 이 방이 시작한 레벨 (loss 후 재시작도 이 레벨로 되돌린다)
   private imageSeq: string[] = [];   // 스테이지별 배경 이미지 순서(랜덤 셔플, 한 바퀴 동안 비중복)
+  private enemySeq = 0;              // 적 스폰 id 카운터(라운드 넘어가도 재사용 안 함 → 전역 유일)
   private userIds = new Map<string, string>();   // sessionId → Supabase user id (토큰 검증됨). 도감 기록용.
 
   onCreate(options: { level?: number; private?: boolean } = {}) {
@@ -206,6 +207,8 @@ export class GameRoom extends Room<GameState> {
       this.state.enemies.pop();
     for (let i = 0; i < this.sim.enemies.length; i++) {
       const se = this.sim.enemies[i]!, es = this.state.enemies[i]!;
+      if (se.id == null) se.id = ++this.enemySeq;   // 최초 1회만 스탬프 → 배열이 재정렬돼도 id 유지
+      es.id = se.id;
       es.x = se.x; es.y = se.y; es.aim = se.aim;
       es.r = se.r;   // 돌진 시 커진 덩치 등 크기 변화를 매 틱 반영
       // 격노 상태: 0 평상시, 1 격노(추격/질주/난사), 2 devour(포식) — 클라 시각 구분용

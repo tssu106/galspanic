@@ -1705,9 +1705,9 @@ function drawOrbWeb(x, y, R, seed, cw) {
 }
 function captureSnapshot() {
   if (!state) return;
-  const ex = [];
-  state.enemies.forEach((e) => { ex.push(e.x, e.y); });
-  snaps.push({ t: performance.now(), ex });
+  const ex = [], ids = [];
+  state.enemies.forEach((e) => { ex.push(e.x, e.y); ids.push(e.id); });
+  snaps.push({ t: performance.now(), ex, ids, map: null });
   const cutoff = performance.now() - 1000;
   while (snaps.length > 3 && snaps[0].t < cutoff) snaps.shift();
 }
@@ -1718,14 +1718,22 @@ function enemyBracket(renderT) {
   const a = snaps[i], b = snaps[i + 1] || a;
   const span = b.t - a.t;
   const alpha = span > 0 ? Math.max(0, Math.min(1, (renderT - a.t) / span)) : 1;
-  return { a: a.ex, b: b.ex, alpha };
+  return { a, b, alpha };
 }
-// interpolated position for enemy index i (fallback to live x,y; snap on reindex/respawn)
-// 두 스냅샷의 적 수가 다르면(누가 포획/스폰돼 배열 인덱스가 밀림) 인덱스가 서로 다른 적을 가리키므로
-// 보간하지 않고 현재 위치를 쓴다. (안 그러면 앞 인덱스의 적이 사라질 때 뒤 적/보스가 튀며 깜빡인다.)
-function enemyPos(br, i, live) {
-  if (!br || br.a.length !== br.b.length || br.a.length <= i*2+1 || br.b.length <= i*2+1) return live;
-  const ax = br.a[i*2], ay = br.a[i*2+1], bx = br.b[i*2], by = br.b[i*2+1];
+// id -> element index within a snapshot (built once, cached on the snapshot object)
+function snapIndex(s) {
+  if (!s.map) { const m = new Map(); for (let k = 0; k < s.ids.length; k++) m.set(s.ids[k], k); s.map = m; }
+  return s.map;
+}
+// Interpolate one enemy by its STABLE id (not array index): find the same id in BOTH bracketing
+// snapshots and lerp between those positions. If the id isn't in both (just spawned / just
+// removed), draw it live. Index-independent, so a mid-array removal — e.g. a missile killing a
+// regular enemy in front of the boss — can no longer make the boss jitter/flicker.
+function enemyPos(br, e, live) {
+  if (!br) return live;
+  const ia = snapIndex(br.a).get(e.id), ib = snapIndex(br.b).get(e.id);
+  if (ia === undefined || ib === undefined) return live;
+  const ax = br.a.ex[ia*2], ay = br.a.ex[ia*2+1], bx = br.b.ex[ib*2], by = br.b.ex[ib*2+1];
   if (Math.abs(bx - ax) + Math.abs(by - ay) > 6) return { x: bx, y: by };
   return { x: ax + (bx - ax) * br.alpha, y: ay + (by - ay) * br.alpha };
 }
@@ -2013,8 +2021,8 @@ function render() {
     // enemies — snapshot-buffer interpolation (render ~SNAP_DELAY ms in the past)
     const spin = now / 120;
     const br = enemyBracket(now - SNAP_DELAY);
-    state.enemies.forEach((e, i) => {
-      const v = enemyPos(br, i, e);
+    state.enemies.forEach((e) => {
+      const v = enemyPos(br, e, e);
       let R = (e.r || 1) * cw;
       // 보스는 블랙홀 위에서 갓 튀어나올 때 작게 시작해 커진다.
       if (e.shape && e.shape.indexOf("boss_") === 0) {

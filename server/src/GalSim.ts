@@ -169,6 +169,7 @@ export interface SimPlayer {
 }
 
 export interface SimEnemy {
+  id?: number;   // 안정적 스폰 id(서버가 스탬프). 클라 보간은 배열 인덱스가 아닌 이 id로 매칭한다.
   x: number; y: number; vx: number; vy: number;
   kind: string; shape: string; behavior: Behavior; speed: number; r: number;
   spin: number; wanderT: number;

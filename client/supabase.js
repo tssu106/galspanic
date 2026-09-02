@@ -37,3 +37,19 @@ export async function dbGetCollection() {
   if (error) { console.warn("도감 로드 실패:", error.message); return []; }
   return (data || []).map((r) => r.image_id);
 }
+
+// ── 계정 최고기록(records): 본인 행만 읽기 (쓰기는 서버 권위) ──
+export async function dbGetRecord() {
+  const { data, error } = await supa.from("records").select("best_score,best_time_ms,best_stage").maybeSingle();
+  if (error) { console.warn("최고기록 로드 실패:", error.message); return null; }
+  return data || null;
+}
+
+// ── 데일리 랭킹(daily_scores): 공개 읽기(그날 전체) ──
+export async function dbDailyTop(day, limit = 50) {
+  const { data, error } = await supa
+    .from("daily_scores").select("user_id,name,score,stage,time_ms")
+    .eq("day", day).order("score", { ascending: false }).limit(limit);
+  if (error) { console.warn("랭킹 로드 실패:", error.message); return []; }
+  return data || [];
+}

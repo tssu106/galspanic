@@ -151,6 +151,11 @@
   #start .joinrow input { flex:1; font-size:14px; padding:10px 12px; }
   #start .joinrow button { background:#232a44; color:var(--ink); border-radius:10px; padding:0 16px; font-size:14px; font-weight:700; }
   #start .joinrow button:hover { background:#2d3656; }
+  #start .dailyrow { display:flex; gap:8px; }
+  #start .go-daily { flex:1; background:linear-gradient(90deg,#f9a825,#ff7043); color:#1b1200; font-size:15px;
+                     font-weight:800; padding:11px 16px; border-radius:12px; box-shadow:0 6px 20px rgba(249,168,37,.28); }
+  #start .go-daily:hover { filter:brightness(1.06); }
+  #start .dailyrow .ghost { flex:none; padding:0 14px; }
 
   /* 대기실(로비) */
   #lobby { position:fixed; inset:0; z-index:48; display:flex; align-items:center; justify-content:center;
@@ -217,6 +222,34 @@
   #scoreHud .sh-run b { color:#a3e635; font-size:17px; font-variant-numeric:tabular-nums; }
   #scoreHud .sh-best { font-size:12px; color:#8b93b5; font-variant-numeric:tabular-nums; }
   body.result #hud { display:none; }   /* 결과 화면에선 실시간 칩 대신 점수 패널을 보여준다 */
+  #shareBtn { background:#232a44; color:#e8ebf7; font-weight:700; }
+  #shareBtn:hover { background:#2d3656; }
+  /* 공유 결과 안내 토스트 */
+  #toast { position:fixed; left:50%; bottom:12%; transform:translateX(-50%); z-index:80;
+           background:rgba(10,13,24,.94); color:#e8ebf7; border:1px solid #2a3350; border-radius:12px;
+           padding:10px 18px; font-size:14px; font-weight:700; box-shadow:0 10px 30px rgba(0,0,0,.5);
+           opacity:0; pointer-events:none; transition:opacity .2s; }
+  #toast.show { opacity:1; }
+  /* ---- 데일리 챌린지 랭킹 모달 ---- */
+  #dailyBoard { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+                padding:20px; background:rgba(4,6,14,.72); backdrop-filter:blur(3px); }
+  #dailyBoard.hidden { display:none; }
+  #dailyBoard .dwrap { background:var(--panel); border:1px solid #232a44; border-radius:16px; width:min(460px,96vw);
+                       max-height:86vh; display:flex; flex-direction:column; box-shadow:0 24px 70px rgba(0,0,0,.6); }
+  #dailyBoard .dhead { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #232a44; }
+  #dailyBoard .dtitle { font-size:18px; font-weight:800; }
+  #dailyBoard .dday { color:#f9a825; font-size:13px; margin-left:8px; font-variant-numeric:tabular-nums; }
+  #dailyBoard .dclose { background:#232a44; color:#e8ebf7; border:0; border-radius:8px; padding:7px 12px; font-size:13px; cursor:pointer; }
+  #dailyBoard .dlist { overflow-y:auto; padding:8px 10px; }
+  #dailyBoard .drow { display:flex; align-items:center; gap:10px; padding:9px 12px; font-size:14px; border-bottom:1px solid rgba(35,42,68,.5); }
+  #dailyBoard .drow:last-child { border-bottom:0; }
+  #dailyBoard .drow.me { background:rgba(249,168,37,.12); border-radius:8px; }
+  #dailyBoard .dpos { width:26px; text-align:center; font-weight:800; color:var(--muted); font-variant-numeric:tabular-nums; }
+  #dailyBoard .drow:nth-child(1) .dpos { color:#ffd54a; }
+  #dailyBoard .dname { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #dailyBoard .dsc { color:#a3e635; font-weight:800; font-variant-numeric:tabular-nums; }
+  #dailyBoard .dst { color:var(--muted); font-size:12px; width:64px; text-align:right; }
+  #dailyBoard .dempty, #dailyBoard .dneedlogin { text-align:center; color:var(--muted); font-size:14px; padding:36px 12px; line-height:1.9; }
   /* ---- 도감(컬렉션) + 이미지 저장 ---- */
   #start .ghost { background:#141a2e; color:#c9d0f0; border:1px solid #2a3350; font-size:14px; font-weight:700;
                   padding:10px 14px; border-radius:12px; cursor:pointer; }
@@ -357,6 +390,10 @@
         <input id="codeInput" maxlength="16" data-i18n-ph="ph_code" autocomplete="off" />
         <button id="joinBtn" data-i18n="btn_join"></button>
       </div>
+      <div class="dailyrow">
+        <button id="dailyBtn" class="go-daily" data-i18n="btn_daily"></button>
+        <button id="rankBtn" class="ghost" data-i18n="btn_rank"></button>
+      </div>
       <button id="galleryBtn" class="ghost"><span data-i18n="btn_gallery"></span> <span id="galleryCount" class="gcount"></span></button>
       <div class="authrow">
         <button id="loginBtn" class="ghost"></button>
@@ -389,7 +426,10 @@
   <canvas id="c" width="512" height="768"></canvas>
   <div id="help">
     <span data-i18n-html="instr_html"></span>
-    <div style="margin-top:6px"><button id="restart" style="display:none" data-i18n="btn_restart"></button></div>
+    <div style="margin-top:6px">
+      <button id="restart" style="display:none" data-i18n="btn_restart"></button>
+      <button id="shareBtn" style="display:none" data-i18n="btn_share"></button>
+    </div>
   </div>
 
   <!-- 우측 채팅창: 대화 로그 + 입력. Enter 로 입력창 포커스, 다시 Enter 로 전송 (Esc 취소). -->
@@ -409,6 +449,17 @@
 
   <!-- 점수/최고기록 패널: 클리어·게임오버 화면에서만 표시 (updateOverlays 가 내용 채움) -->
   <div id="scoreHud" class="hidden"></div>
+
+  <!-- 데일리 챌린지 랭킹 모달: 그날 같은 보드의 점수 순위 -->
+  <div id="dailyBoard" class="hidden">
+    <div class="dwrap">
+      <div class="dhead">
+        <div class="dtitle"><span data-i18n="daily_rank_title"></span> <span id="dailyDay" class="dday"></span></div>
+        <button id="dailyClose" class="dclose" data-i18n="btn_close"></button>
+      </div>
+      <div id="dailyList" class="dlist"></div>
+    </div>
+  </div>
 
   <!-- 도감(컬렉션): 수집한 그림을 모아 보는 모달. 각자 브라우저(localStorage)에 저장. -->
   <div id="gallery" class="hidden">
@@ -463,7 +514,7 @@
 import { Client } from "https://esm.sh/colyseus.js@0.15.0";
 import { showCountdown3D, hideCountdown3D, renderCountdown3D } from "./countdown3d.js";
 import { initAudio, sfxCapture, sfxClear, sfxGameover, sfxItem } from "./sfx.js";
-import { onAuth, signIn, signUp, signOut, getToken, dbGetCollection } from "./supabase.js";
+import { onAuth, signIn, signUp, signOut, getToken, dbGetCollection, dbGetRecord, dbDailyTop } from "./supabase.js";
 
 // ── 다국어(i18n): 한국어/English/日本語 ──────────────────────────────────────
 // t(key, ...args) 로 현재 언어 문자열을 얻는다. {0}{1} 은 args 로 치환. data-i18n* 속성은
@@ -476,6 +527,8 @@ const I18N = {
     online_label: "접속자", online_unit: "명",
     ph_name: "플레이어 이름 (선택)", dev_stage: "🛠 스테이지 (dev)",
     btn_start: "게임 시작", btn_create: "방 만들기 (친구끼리)", ph_code: "방 코드로 참가", btn_join: "참가",
+    btn_daily: "🔥 오늘의 챌린지", btn_rank: "🏆 랭킹", daily_rank_title: "오늘의 랭킹",
+    daily_empty: "아직 기록이 없어요 · 첫 도전자가 되어보세요!", daily_needlogin: "로그인하면 랭킹에 등록돼요.",
     btn_gallery: "📖 도감", btn_login: "🔑 로그인", btn_signup: "📝 회원가입", logout: "로그아웃",
     lobby_title: "대기실", lobby_code_label: "방 코드", btn_copy: "복사", copied: "복사됨!",
     lobby_waiting: "플레이어를 기다리는 중…", btn_startnow: "지금 시작",
@@ -486,7 +539,10 @@ const I18N = {
     chat_resize_title: "드래그로 채팅창 너비 조절", chat_head: "채팅", ph_chat: "Enter 로 채팅…",
     chat_empty: "아직 메시지가 없어요 · Enter 로 입력",
     go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ 이어하기",
+    go_hint_daily: "<b>GAME OVER</b> · 랭킹에 기록됐어요",
     sh_clear: "스테이지 {0} 클리어!", sh_score: "점수", sh_best: "최고", sh_stage: "스테이지", sh_over: "게임 오버",
+    btn_share: "🔗 공유", share_saved: "이미지를 저장했어요", share_copied: "결과를 복사했어요",
+    share_normal: "GALS PANIC 스테이지 {0} · {1}점!", share_daily: "GALS PANIC 오늘의 챌린지 {1}점! (스테이지 {0})",
     btn_close: "✕ 닫기", title_close: "닫기", btn_save: "🖼 저장", collected: "수집",
     need_login_paren: "(로그인 필요)", login_word: "로그인",
     gallery_needlogin_html: "🔑 로그인하면 수집한 그림을 볼 수 있어요.<br><button id=\"glLogin\">로그인</button>",
@@ -527,6 +583,8 @@ const I18N = {
     online_label: "Online", online_unit: "",
     ph_name: "Player name (optional)", dev_stage: "🛠 Stage (dev)",
     btn_start: "Start Game", btn_create: "Create Room (friends)", ph_code: "Join by room code", btn_join: "Join",
+    btn_daily: "🔥 Daily Challenge", btn_rank: "🏆 Ranking", daily_rank_title: "Today's Ranking",
+    daily_empty: "No scores yet · be the first!", daily_needlogin: "Log in to appear on the ranking.",
     btn_gallery: "📖 Collection", btn_login: "🔑 Log in", btn_signup: "📝 Sign up", logout: "Log out",
     lobby_title: "Lobby", lobby_code_label: "Room code", btn_copy: "Copy", copied: "Copied!",
     lobby_waiting: "Waiting for players…", btn_startnow: "Start Now",
@@ -537,7 +595,10 @@ const I18N = {
     chat_resize_title: "Drag to resize chat", chat_head: "Chat", ph_chat: "Enter to chat…",
     chat_empty: "No messages yet · Enter to type",
     go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ Continue",
+    go_hint_daily: "<b>GAME OVER</b> · Saved to the ranking",
     sh_clear: "Stage {0} clear!", sh_score: "Score", sh_best: "Best", sh_stage: "Stage", sh_over: "Game Over",
+    btn_share: "🔗 Share", share_saved: "Image saved", share_copied: "Result copied",
+    share_normal: "GALS PANIC stage {0} · {1} pts!", share_daily: "GALS PANIC daily challenge · {1} pts! (stage {0})",
     btn_close: "✕ Close", title_close: "Close", btn_save: "🖼 Save", collected: "collected",
     need_login_paren: "(login required)", login_word: "Log in",
     gallery_needlogin_html: "🔑 Log in to see the pictures you've collected.<br><button id=\"glLogin\">Log in</button>",
@@ -578,6 +639,8 @@ const I18N = {
     online_label: "接続中", online_unit: "人",
     ph_name: "プレイヤー名（任意）", dev_stage: "🛠 ステージ (dev)",
     btn_start: "ゲーム開始", btn_create: "部屋を作る（友達と）", ph_code: "部屋コードで参加", btn_join: "参加",
+    btn_daily: "🔥 今日のチャレンジ", btn_rank: "🏆 ランキング", daily_rank_title: "今日のランキング",
+    daily_empty: "まだ記録がありません · 最初の挑戦者に！", daily_needlogin: "ログインするとランキングに登録されます。",
     btn_gallery: "📖 図鑑", btn_login: "🔑 ログイン", btn_signup: "📝 新規登録", logout: "ログアウト",
     lobby_title: "待機室", lobby_code_label: "部屋コード", btn_copy: "コピー", copied: "コピーしました！",
     lobby_waiting: "プレイヤーを待っています…", btn_startnow: "今すぐ開始",
@@ -588,7 +651,10 @@ const I18N = {
     chat_resize_title: "ドラッグで幅を調整", chat_head: "チャット", ph_chat: "Enterでチャット…",
     chat_empty: "まだメッセージがありません · Enterで入力",
     go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ つづける",
+    go_hint_daily: "<b>GAME OVER</b> · ランキングに記録",
     sh_clear: "ステージ{0}クリア！", sh_score: "スコア", sh_best: "ベスト", sh_stage: "ステージ", sh_over: "ゲームオーバー",
+    btn_share: "🔗 シェア", share_saved: "画像を保存しました", share_copied: "結果をコピーしました",
+    share_normal: "GALS PANIC ステージ{0} · {1}点！", share_daily: "GALS PANIC 今日のチャレンジ {1}点！(ステージ{0})",
     btn_close: "✕ 閉じる", title_close: "閉じる", btn_save: "🖼 保存", collected: "収集",
     need_login_paren: "（ログインが必要）", login_word: "ログイン",
     gallery_needlogin_html: "🔑 ログインすると集めた絵を見られます。<br><button id=\"glLogin\">ログイン</button>",
@@ -677,6 +743,7 @@ const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const restartBtn = document.getElementById("restart");
+const shareBtn = document.getElementById("shareBtn");
 const chatInput = document.getElementById("chat");
 const chatPanel = document.getElementById("chatPanel");
 const chatLog = document.getElementById("chatLog");
@@ -727,7 +794,8 @@ async function connect(name, level, mode = "quick", code = "") {
   const opts = { name };
   if (level) opts.level = level;
   if (token) opts.token = token;
-  if (mode === "create") room = await client.create("game", { ...opts, private: true });   // 비공개 방
+  if (mode === "daily") room = await client.create("game", { ...opts, daily: true });       // 데일리 챌린지(솔로·날짜 시드)
+  else if (mode === "create") room = await client.create("game", { ...opts, private: true });   // 비공개 방
   else if (mode === "join") room = await client.joinById(code, { ...opts });                 // 코드로 특정 방
   else room = await client.joinOrCreate("game", opts);                                       // 빠른 참가(순차 입장)
   statusEl.textContent = t("connected_play");
@@ -822,6 +890,111 @@ function openGallery() {
 }
 function closeGallery() { galleryEl.classList.add("hidden"); }
 document.getElementById("galleryBtn").addEventListener("click", openGallery);
+
+// ── 데일리 챌린지 랭킹 ──────────────────────────────────────────
+// 서버와 동일한 KST 날짜 키를 써야 같은 날의 같은 보드/랭킹을 본다.
+function dailyKeyKST(now = new Date()) {
+  return new Date(now.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+const dailyBoardEl = document.getElementById("dailyBoard");
+const dailyListEl = document.getElementById("dailyList");
+const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+const fmtRankTime = (ms) => (ms ? (ms / 1000).toFixed(1) + "s" : "—");
+async function openDailyBoard() {
+  const day = dailyKeyKST();
+  document.getElementById("dailyDay").textContent = day;
+  dailyListEl.innerHTML = `<div class="dempty">…</div>`;
+  dailyBoardEl.classList.remove("hidden");
+  let rows = [];
+  try { rows = await dbDailyTop(day, 50); } catch {}
+  if (!rows.length) {
+    const msg = t("daily_empty") + (currentUser ? "" : "<br>" + t("daily_needlogin"));
+    dailyListEl.innerHTML = `<div class="dempty">${msg}</div>`;
+    return;
+  }
+  const meId = currentUser && currentUser.id;
+  const list = rows.map((r, i) => {
+    const me = meId && r.user_id === meId ? " me" : "";
+    return `<div class="drow${me}"><span class="dpos">${i + 1}</span>`
+         + `<span class="dname">${esc(r.name || "??")}</span>`
+         + `<span class="dsc">${r.score | 0}</span>`
+         + `<span class="dst">${t("sh_stage")} ${r.stage | 0} · ${fmtRankTime(r.time_ms)}</span></div>`;
+  }).join("");
+  dailyListEl.innerHTML = list + (currentUser ? "" : `<div class="dneedlogin">${t("daily_needlogin")}</div>`);
+}
+document.getElementById("dailyBtn").addEventListener("click", () => enterGame("daily"));
+document.getElementById("rankBtn").addEventListener("click", openDailyBoard);
+document.getElementById("dailyClose").addEventListener("click", () => dailyBoardEl.classList.add("hidden"));
+
+// ── 결과 공유 ───────────────────────────────────────────────────
+// 클리어/게임오버 결과를 카드 이미지로 만들어 공유(Web Share)하거나, 미지원이면 저장/복사한다.
+let toastTimer = 0;
+function toast(msg) {
+  let el = document.getElementById("toast");
+  if (!el) { el = document.createElement("div"); el.id = "toast"; document.body.appendChild(el); }
+  el.textContent = msg; el.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+}
+function roundRect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+}
+function drawCover(g, im, dx, dy, dw, dh) {
+  const s = Math.max(dw / im.naturalWidth, dh / im.naturalHeight);
+  const sw = dw / s, sh = dh / s, sx = (im.naturalWidth - sw) / 2, sy = (im.naturalHeight - sh) / 2;
+  g.drawImage(im, sx, sy, sw, sh, dx, dy, dw, dh);
+}
+function shareText(stage, score, daily) {
+  return (daily ? t("share_daily") : t("share_normal")).replace("{0}", stage).replace("{1}", score);
+}
+function buildShareCard({ stage, score, ms, daily }) {
+  const W = 560, H = 760, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d");
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, "#1a1f38"); bg.addColorStop(1, "#0b0d16");
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  // 타이틀 GALS PANIC
+  g.font = "800 38px system-ui, sans-serif"; g.textAlign = "left";
+  const t1 = "GALS ", w1 = g.measureText(t1).width, w2 = g.measureText("PANIC").width, sx = (W - w1 - w2) / 2;
+  g.fillStyle = "#e8ebf7"; g.fillText(t1, sx, 66);
+  g.fillStyle = "#ff5db1"; g.fillText("PANIC", sx + w1, 66);
+  g.textAlign = "center";
+  // 클리어 그림(있으면)
+  const iw = 300, ih = 450, ix = (W - iw) / 2, iy = 92;
+  if (img && img.complete && img.naturalWidth) {
+    g.save(); roundRect(g, ix, iy, iw, ih, 16); g.clip(); drawCover(g, img, ix, iy, iw, ih); g.restore();
+  } else { g.fillStyle = "#141a2e"; roundRect(g, ix, iy, iw, ih, 16); g.fill(); }
+  g.strokeStyle = "rgba(150,160,210,.4)"; g.lineWidth = 2; roundRect(g, ix, iy, iw, ih, 16); g.stroke();
+  // 점수
+  g.fillStyle = "#a3e635"; g.font = "800 58px system-ui, sans-serif"; g.fillText(String(score), W / 2, 612);
+  g.fillStyle = "#8b93b5"; g.font = "600 18px system-ui, sans-serif"; g.fillText(t("sh_score"), W / 2, 638);
+  // 스테이지 · 시간
+  g.fillStyle = "#c9d0f0"; g.font = "700 22px system-ui, sans-serif";
+  g.fillText(`${t("sh_stage")} ${stage}  ·  ⏱ ${(Math.max(0, ms) / 1000).toFixed(1)}s`, W / 2, 682);
+  if (daily) { g.fillStyle = "#f9a825"; g.font = "800 18px system-ui, sans-serif"; g.fillText("🔥 " + t("daily_rank_title"), W / 2, 712); }
+  g.fillStyle = "#5b6488"; g.font = "600 14px system-ui, sans-serif"; g.fillText(location.host, W / 2, 742);
+  return c;
+}
+async function shareResult() {
+  if (!state) return;
+  const stage = state.level | 0, score = state.runScore | 0, ms = state.clearMs | 0, daily = state.daily ? 1 : 0;
+  const card = buildShareCard({ stage, score, ms, daily });
+  const name = `galspanic_${daily ? "daily_" : ""}${score}.png`;
+  const text = shareText(stage, score, daily);
+  const blob = await new Promise((res) => card.toBlob(res, "image/png"));
+  try {
+    if (blob && navigator.canShare) {
+      const file = new File([blob], name, { type: "image/png" });
+      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "GALS PANIC", text }); return; }
+    }
+  } catch { return; }   // 사용자가 공유 시트를 취소한 경우 — 조용히 종료
+  if (blob) {   // 폴백: 이미지 저장
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast(t("share_saved")); return;
+  }
+  try { await navigator.clipboard.writeText(text + " " + location.origin); toast(t("share_copied")); } catch {}   // 최후: 텍스트 복사
+}
+document.getElementById("shareBtn").addEventListener("click", shareResult);
 document.getElementById("galleryClose").addEventListener("click", closeGallery);
 galleryEl.addEventListener("click", (e) => { if (e.target === galleryEl) closeGallery(); });
 
@@ -1047,6 +1220,11 @@ function updateOverlays() {
         const ok = showCountdown3D();                          // three.js 시작(실패 시 false)
         gameoverEl.classList.remove("hidden");
         goNumEl.style.display = ok ? "none" : "";              // WebGL 없으면 2D 숫자 폴백
+        // 데일리는 이어하기가 없다 → 안내문을 바꾸고, 잠시 뒤 오늘의 랭킹을 자동으로 띄운다.
+        if (state.daily) {
+          document.querySelector("#gameover .go-hint").innerHTML = t("go_hint_daily");
+          setTimeout(openDailyBoard, 1600);
+        }
       }
       const remain = Math.max(0, Math.ceil((LOST_TIMEOUT_MS - (performance.now() - lostSince)) / 1000));
       goNumEl.textContent = remain;   // 2D 폴백 숫자 (WebGL 미지원 시)
@@ -2393,6 +2571,7 @@ function drawHud() {
   }).join("");
   rankEl.classList.toggle("hidden", state.phase === "lobby" || ranked.length === 0);
   restartBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
+  shareBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
   // 클리어(승리) 화면에서는 채팅 입력창을 숨긴다
   chatInput.style.display = (state.phase === "won") ? "none" : "";
   if (state.phase === "won" && document.activeElement === chatInput) chatInput.blur();

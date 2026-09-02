@@ -102,6 +102,9 @@ export class GameState extends Schema {
   // "lobby" | "playing" | "won" | "lost"
   @type("string") phase: string = "lobby";
 
+  // 데일리 챌린지 방이면 1 (클라가 UI·랭킹 제출을 다르게 처리). 0 = 일반 방.
+  @type("number") daily: number = 0;
+
   // Public id of the current image (client fetches a BLURRED version only).
   @type("string") imageId: string = "";
 

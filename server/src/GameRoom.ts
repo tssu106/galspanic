@@ -5,7 +5,8 @@ import type { SimEnemy } from "./GalSim";
 import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, QUICK_START_SECS,
          SCORE_LEVEL, SCORE_COVER, SCORE_TRAP, SCORE_SPEED_BASE, SCORE_SPEED_DROP,
          CONTINUE_LIVES, CONTINUE_SCORE_KEEP } from "./constants";
-import { verifyToken, recordUnlock, recordBest } from "./supa";
+import { verifyToken, recordUnlock, recordBest, submitDaily } from "./supa";
+import { dailyKey, dailySeed } from "./daily";
 
 const COLORS = ["#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
 
@@ -24,19 +25,28 @@ export class GameRoom extends Room<GameState> {
   private imageSeq: string[] = [];   // 스테이지별 배경 이미지 순서(랜덤 셔플, 한 바퀴 동안 비중복)
   private enemySeq = 0;              // 적 스폰 id 카운터(라운드 넘어가도 재사용 안 함 → 전역 유일)
   private userIds = new Map<string, string>();   // sessionId → Supabase user id (토큰 검증됨). 도감 기록용.
+  private isDaily = false;    // 데일리 챌린지 방(솔로, 날짜 시드, 이어하기 없음, 랭킹 제출)
+  private dailyDay = "";      // 이 데일리 방의 날짜 키(KST "YYYY-MM-DD")
 
-  onCreate(options: { level?: number; private?: boolean } = {}) {
-    // dev 에서만 방을 만든 클라이언트가 고른 스테이지로 시작. 그 외에는 레벨 1.
-    this.startLevel = DEV ? this.clampLevel(options.level) : 1;
-    // "방 만들기"로 만든 방은 비공개 → 빠른 참가(joinOrCreate) 매칭에서 제외, 코드로만 입장.
-    this.isPrivate = !!options.private;
-    if (options.private) this.setPrivate(true);
+  onCreate(options: { level?: number; private?: boolean; daily?: boolean } = {}) {
+    this.isDaily = !!options.daily;
+    // dev 에서만 방을 만든 클라이언트가 고른 스테이지로 시작. 데일리·프로덕션은 항상 레벨 1.
+    this.startLevel = (DEV && !this.isDaily) ? this.clampLevel(options.level) : 1;
+    // "방 만들기"·데일리 방은 비공개 → 빠른 참가(joinOrCreate) 매칭에서 제외.
+    this.isPrivate = this.isDaily || !!options.private;
+    if (this.isPrivate) this.setPrivate(true);
     this.setState(new GameState());
     // Broadcast state patches at PATCH_MS (~30Hz). Decoupled from the 42Hz sim so the
     // host serializes/sends deltas less often (big CPU/bandwidth win on tiny instances)
     // while physics stays accurate; client interpolation keeps motion smooth.
     this.setPatchRate(PATCH_MS);
     this.sim = new GalSim(this.startLevel);
+    if (this.isDaily) {
+      // 그날의 시드로 고정 → 모두 같은 보드. 클라에 데일리 모드도 알린다.
+      this.dailyDay = dailyKey();
+      this.sim.gameSeed = dailySeed(this.dailyDay);
+      this.state.daily = 1;
+    }
     this.state.seed = this.sim.gameSeed;   // deterministic seed clients can replay
     this.initGridSchema();
     // 게임을 바로 시작하지 않고 로비에서 대기한다. 4명이 되면 10초 카운트다운 후 시작(아래 tick),
@@ -66,7 +76,8 @@ export class GameRoom extends Room<GameState> {
       // can admire the picture as long as they like). On a loss, Enter restarts: prod from
       // level 1, dev from the room's chosen start level so testing stays put.
       if (this.state.phase === "won") this.startRound(this.sim.level + 1);   // 다음 스테이지로
-      else if (this.state.phase === "lost") this.continueRun();              // 이어하기(현재 스테이지 재도전)
+      // 이어하기(현재 스테이지 재도전). 데일리는 공정성을 위해 이어하기 없음(1회 시도).
+      else if (this.state.phase === "lost" && !this.isDaily) this.continueRun();
     });
 
     // dev 전용: 클라이언트의 "보스 소환" 버튼 → 10초 카운트다운 후 보스 등장 (4종 순환).
@@ -296,7 +307,10 @@ export class GameRoom extends Room<GameState> {
     if (this.sim.over) {
       this.state.phase = this.sim.over;   // "won" | "lost"
       if (this.sim.over === "won") this.onStageCleared();
-      else if (this.sim.over === "lost") this.recordBests({ score: this.runScore });   // 사망 시점의 런 점수(피크) 기록
+      else if (this.sim.over === "lost") {
+        this.recordBests({ score: this.runScore });   // 사망 시점의 런 점수(피크) 기록
+        this.submitDailyScores();                      // 데일리면 최종 점수 랭킹 제출
+      }
     }
   }
 
@@ -316,6 +330,16 @@ export class GameRoom extends Room<GameState> {
     this.grantUnlocks();     // 서버 권위: 실제 클리어했을 때만 도감 기록
     // 계정 최고기록: 이 스테이지 클리어 시간(최소)·도달 스테이지(최대)·런 점수(최대)
     this.recordBests({ timeMs: clearMs, stage: this.sim.level, score: this.runScore });
+    this.submitDailyScores();   // 데일리면 매 클리어마다 현재 점수(최고만 반영) 제출
+  }
+
+  // 데일리 챌린지 랭킹 제출: 방의 로그인 플레이어들의 현재 런 점수를 그날 보드로 제출(최고만 반영).
+  private submitDailyScores() {
+    if (!this.isDaily) return;
+    for (const [sid, uid] of this.userIds) {
+      const p = this.state.players.get(sid);
+      submitDaily(uid, p?.name || "", this.dailyDay, this.runScore, this.state.level, this.state.clearMs || null);
+    }
   }
 
   // 스테이지 클리어 점수 = 깊이 + 점유율 + 포획수 + (기존)포획보너스 + 속도 보너스.
@@ -387,9 +411,13 @@ export class GameRoom extends Room<GameState> {
       });
     }
 
+    // 데일리 챌린지: 솔로 즉시 시작(로비 대기 없음).
+    if (this.isDaily && this.state.phase === "lobby" && this.state.startIn < 0) {
+      this.state.startIn = 1;
+    }
     // 빠른 참가(공개) 방: 첫 입장부터 짧은 카운트다운으로 자동 시작 → 혼자여도 로비에서 멈추지 않는다.
     // 그 사이 다른 빠른참가 유저가 합류하면 같은 방에서 함께 시작(즉시 시작 + 협동 매칭 양립).
-    if (!this.isPrivate && this.state.phase === "lobby" && this.state.startIn < 0) {
+    else if (!this.isPrivate && this.state.phase === "lobby" && this.state.startIn < 0) {
       this.state.startIn = QUICK_START_SECS;
     }
     // 비공개 방: 로비가 꽉 차면(4명) 10초 카운트다운 후 자동 시작.

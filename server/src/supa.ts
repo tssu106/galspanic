@@ -69,3 +69,33 @@ export async function recordBest(
     console.warn("[supa] recordBest 실패:", (e as Error).message);
   }
 }
+
+// 데일리 챌린지 점수 제출: 같은 날 더 높은 점수만 반영(submit_daily 가 병합). 로그인 유저만.
+// 테이블/함수(SQL) 미준비거나 SERVICE 없으면 조용히 스킵.
+export async function submitDaily(
+  userId: string, name: string, day: string,
+  score: number, stage: number, timeMs: number | null,
+): Promise<void> {
+  const S = service();
+  if (!S || !userId || !day) return;
+  try {
+    await fetch(`${url()}/rest/v1/rpc/submit_daily`, {
+      method: "POST",
+      headers: {
+        apikey: S,
+        Authorization: `Bearer ${S}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_user: userId,
+        p_name: (name || "").slice(0, 12),
+        p_day: day,
+        p_score: score,
+        p_stage: stage,
+        p_time_ms: timeMs,
+      }),
+    });
+  } catch (e) {
+    console.warn("[supa] submitDaily 실패:", (e as Error).message);
+  }
+}

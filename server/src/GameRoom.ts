@@ -2,8 +2,10 @@ import { Room, Client } from "@colyseus/core";
 import { GameState, Player, Enemy, Projectile, Beam, Item, Missile } from "./schema";
 import { GalSim } from "./GalSim";
 import type { SimEnemy } from "./GalSim";
-import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, QUICK_START_SECS } from "./constants";
-import { verifyToken, recordUnlock } from "./supa";
+import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, QUICK_START_SECS,
+         SCORE_LEVEL, SCORE_COVER, SCORE_TRAP, SCORE_SPEED_BASE, SCORE_SPEED_DROP,
+         CONTINUE_LIVES, CONTINUE_SCORE_KEEP } from "./constants";
+import { verifyToken, recordUnlock, recordBest } from "./supa";
 
 const COLORS = ["#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
 
@@ -16,6 +18,9 @@ export class GameRoom extends Room<GameState> {
   sim!: GalSim;
   private startLevel = 1;   // 이 방이 시작한 레벨 (loss 후 재시작도 이 레벨로 되돌린다)
   private isPrivate = false; // "방 만들기"(친구끼리)로 만든 비공개 방 → 빠른참가 자동 시작 대상 아님
+  private runScore = 0;      // 이번 런 누적 점수(스테이지 합산, 이어하기 시 일부 차감)
+  private roundStartMs = 0;  // 현재 스테이지 시작 시각(클리어 시간 측정용)
+  private continues = 0;     // 이번 런에서 이어하기한 횟수
   private imageSeq: string[] = [];   // 스테이지별 배경 이미지 순서(랜덤 셔플, 한 바퀴 동안 비중복)
   private enemySeq = 0;              // 적 스폰 id 카운터(라운드 넘어가도 재사용 안 함 → 전역 유일)
   private userIds = new Map<string, string>();   // sessionId → Supabase user id (토큰 검증됨). 도감 기록용.
@@ -60,8 +65,8 @@ export class GameRoom extends Room<GameState> {
       // On the clear screen, Enter advances to the next stage (no auto-advance, so players
       // can admire the picture as long as they like). On a loss, Enter restarts: prod from
       // level 1, dev from the room's chosen start level so testing stays put.
-      if (this.state.phase === "won") this.startRound(this.sim.level + 1);
-      else if (this.state.phase === "lost") this.startRound(this.startLevel);
+      if (this.state.phase === "won") this.startRound(this.sim.level + 1);   // 다음 스테이지로
+      else if (this.state.phase === "lost") this.continueRun();              // 이어하기(현재 스테이지 재도전)
     });
 
     // dev 전용: 클라이언트의 "보스 소환" 버튼 → 10초 카운트다운 후 보스 등장 (4종 순환).
@@ -78,12 +83,7 @@ export class GameRoom extends Room<GameState> {
     });
     // dev 전용: "스테이지 완료" 버튼 → 즉시 won 으로 전환해 클리어 화면(그림 리빌)을 확인.
     this.onMessage("devWin", () => {
-      if (DEV && this.state.phase === "playing") {
-        this.state.phase = "won";
-        this.state.nextIn = 0;
-        this.state.nextImageId = this.imageAt(this.sim.level + 1);   // 다음 스테이지 그림 미리 로드
-        this.grantUnlocks();   // 테스트 클리어도 도감에 기록
-      }
+      if (DEV && this.state.phase === "playing") { this.state.phase = "won"; this.onStageCleared(); }
     });
 
     // Chat: relay a short message to everyone as a speech bubble over the sender.
@@ -143,6 +143,10 @@ export class GameRoom extends Room<GameState> {
     this.state.imageId = this.imageAt(level);   // 랜덤·비중복 배정
     this.state.phase = "playing";
     this.state.nextIn = 0;
+    this.roundStartMs = Date.now();             // 클리어 시간 측정 시작
+    this.state.stageScore = 0;
+    this.state.clearMs = 0;
+    this.state.runScore = this.runScore;        // 다음 스테이지/이어하기에서도 누적 점수 유지
 
     // reflect reset player stats
     this.sim.players.forEach((sp) => {
@@ -157,8 +161,18 @@ export class GameRoom extends Room<GameState> {
   // 로비 → 게임 시작: 라운드를 열고(플레이어 스폰·무적), 방을 잠가 진행 중 방엔 못 들어오게 한다.
   private beginGame() {
     this.state.startIn = -1;
+    this.runScore = 0; this.continues = 0;   // 새 런 시작 → 누적 점수·이어하기 초기화
     this.startRound(this.startLevel);   // phase 를 "playing" 으로 전환
     this.lock();                        // 이후 새 플레이어 입장 차단
+  }
+
+  // 이어하기: 전멸한 스테이지를 그대로 재도전한다. 목숨은 CONTINUE_LIVES, 런 점수는 일부 차감.
+  private continueRun() {
+    this.runScore = Math.round(this.runScore * CONTINUE_SCORE_KEEP);
+    this.continues++;
+    this.startRound(this.sim.level);    // 현재 스테이지 유지(진행 보존)
+    this.sim.players.forEach((sp) => { sp.lives = CONTINUE_LIVES; });
+    this.state.players.forEach((p) => { p.lives = CONTINUE_LIVES; });
   }
 
   private makeEnemySchema(e: SimEnemy): Enemy {
@@ -281,17 +295,43 @@ export class GameRoom extends Room<GameState> {
     this.state.bossIn = this.sim.bossIn;   // 보스 카운트다운 (≤10s면 클라가 WARNING 표시)
     if (this.sim.over) {
       this.state.phase = this.sim.over;   // "won" | "lost"
-      if (this.sim.over === "won") {
-        this.state.nextIn = 0;   // no countdown — wait for a player's Enter
-        // publish the next stage's image now so clients can preload it while admiring this one
-        this.state.nextImageId = this.imageAt(this.sim.level + 1);
-        this.grantUnlocks();   // 서버 권위: 실제 클리어했을 때만 도감 기록
-      }
+      if (this.sim.over === "won") this.onStageCleared();
+      else if (this.sim.over === "lost") this.recordBests({ score: this.runScore });   // 사망 시점의 런 점수(피크) 기록
     }
   }
 
   // 서버 권위 도감 기록: 방에 있는 로그인 플레이어 전원에게 현재 스테이지 그림을 unlock.
   // (클라이언트는 DB 쓰기 권한이 없어 위조 불가 — RLS 로 막힘)
+  // 스테이지 클리어 처리(실제 승리 + dev "스테이지 완료" 공통): 점수 계산·누적, 다음 그림 예고,
+  // 도감/최고기록 기록. phase="won" 전환은 호출부에서 한다.
+  private onStageCleared() {
+    const clearMs = Date.now() - this.roundStartMs;
+    const stageScore = this.computeStageScore(clearMs);
+    this.runScore += stageScore;
+    this.state.clearMs = clearMs;
+    this.state.stageScore = stageScore;
+    this.state.runScore = this.runScore;
+    this.state.nextIn = 0;   // no countdown — wait for a player's Enter
+    this.state.nextImageId = this.imageAt(this.sim.level + 1);   // 다음 스테이지 그림 미리 로드
+    this.grantUnlocks();     // 서버 권위: 실제 클리어했을 때만 도감 기록
+    // 계정 최고기록: 이 스테이지 클리어 시간(최소)·도달 스테이지(최대)·런 점수(최대)
+    this.recordBests({ timeMs: clearMs, stage: this.sim.level, score: this.runScore });
+  }
+
+  // 스테이지 클리어 점수 = 깊이 + 점유율 + 포획수 + (기존)포획보너스 + 속도 보너스.
+  private computeStageScore(clearMs: number): number {
+    let traps = 0, bonus = 0;
+    this.sim.players.forEach((p) => { traps += p.traps; bonus += p.bonus; });
+    const ratio = this.sim.claimedInterior / Math.max(1, this.sim.totalInterior);
+    const speed = Math.max(0, Math.round(SCORE_SPEED_BASE - (clearMs / 1000) * SCORE_SPEED_DROP));
+    return Math.round(this.sim.level * SCORE_LEVEL + ratio * SCORE_COVER + traps * SCORE_TRAP + bonus + speed);
+  }
+
+  // 로그인 플레이어들의 계정 최고기록 갱신(서버 권위). 값이 없거나 테이블(SQL) 미준비면 조용히 스킵.
+  private recordBests(rec: { timeMs?: number; stage?: number; score?: number }) {
+    for (const uid of this.userIds.values()) recordBest(uid, rec);
+  }
+
   private grantUnlocks() {
     const imageId = this.state.imageId;
     if (!imageId) return;

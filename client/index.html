@@ -204,6 +204,19 @@
   #gameover .go-num-fallback { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
                                font-size:min(24vh,190px); font-weight:900; color:#fff; display:none;
                                text-shadow:0 0 26px #ff5db1, 0 0 60px #ff2a7a; }
+  /* 점수 패널: 클리어/게임오버 화면에서 이번 판 점수·클리어 시간·최고기록 표시 */
+  #scoreHud { position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:45;
+              display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 18px;
+              background:rgba(10,13,24,.82); border:1px solid #2a3350; border-radius:14px;
+              box-shadow:0 10px 34px rgba(0,0,0,.5); backdrop-filter:blur(6px); pointer-events:none;
+              text-align:center; max-width:92vw; }
+  #scoreHud.hidden { display:none; }
+  #scoreHud .sh-main { font-size:16px; font-weight:800; color:#e8ebf7; }
+  #scoreHud .sh-main.sh-over { color:#ff6b8b; }
+  #scoreHud .sh-run { font-size:14px; color:#c9d0f0; }
+  #scoreHud .sh-run b { color:#a3e635; font-size:17px; font-variant-numeric:tabular-nums; }
+  #scoreHud .sh-best { font-size:12px; color:#8b93b5; font-variant-numeric:tabular-nums; }
+  body.result #hud { display:none; }   /* 결과 화면에선 실시간 칩 대신 점수 패널을 보여준다 */
   /* ---- 도감(컬렉션) + 이미지 저장 ---- */
   #start .ghost { background:#141a2e; color:#c9d0f0; border:1px solid #2a3350; font-size:14px; font-weight:700;
                   padding:10px 14px; border-radius:12px; cursor:pointer; }
@@ -394,6 +407,9 @@
     <div class="go-hint" data-i18n-html="go_hint_html"></div>
   </div>
 
+  <!-- 점수/최고기록 패널: 클리어·게임오버 화면에서만 표시 (updateOverlays 가 내용 채움) -->
+  <div id="scoreHud" class="hidden"></div>
+
   <!-- 도감(컬렉션): 수집한 그림을 모아 보는 모달. 각자 브라우저(localStorage)에 저장. -->
   <div id="gallery" class="hidden">
     <div class="gwrap">
@@ -469,7 +485,8 @@ const I18N = {
     rank_head: "🏆 포획 랭킹", btn_restart: "다음/재시작 (Enter)",
     chat_resize_title: "드래그로 채팅창 너비 조절", chat_head: "채팅", ph_chat: "Enter 로 채팅…",
     chat_empty: "아직 메시지가 없어요 · Enter 로 입력",
-    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ 재시작",
+    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ 이어하기",
+    sh_clear: "스테이지 {0} 클리어!", sh_score: "점수", sh_best: "최고", sh_stage: "스테이지", sh_over: "게임 오버",
     btn_close: "✕ 닫기", title_close: "닫기", btn_save: "🖼 저장", collected: "수집",
     need_login_paren: "(로그인 필요)", login_word: "로그인",
     gallery_needlogin_html: "🔑 로그인하면 수집한 그림을 볼 수 있어요.<br><button id=\"glLogin\">로그인</button>",
@@ -519,7 +536,8 @@ const I18N = {
     rank_head: "🏆 Capture Ranking", btn_restart: "Next / Restart (Enter)",
     chat_resize_title: "Drag to resize chat", chat_head: "Chat", ph_chat: "Enter to chat…",
     chat_empty: "No messages yet · Enter to type",
-    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ Restart",
+    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ Continue",
+    sh_clear: "Stage {0} clear!", sh_score: "Score", sh_best: "Best", sh_stage: "Stage", sh_over: "Game Over",
     btn_close: "✕ Close", title_close: "Close", btn_save: "🖼 Save", collected: "collected",
     need_login_paren: "(login required)", login_word: "Log in",
     gallery_needlogin_html: "🔑 Log in to see the pictures you've collected.<br><button id=\"glLogin\">Log in</button>",
@@ -569,7 +587,8 @@ const I18N = {
     rank_head: "🏆 捕獲ランキング", btn_restart: "次へ / リスタート (Enter)",
     chat_resize_title: "ドラッグで幅を調整", chat_head: "チャット", ph_chat: "Enterでチャット…",
     chat_empty: "まだメッセージがありません · Enterで入力",
-    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ リスタート",
+    go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ つづける",
+    sh_clear: "ステージ{0}クリア！", sh_score: "スコア", sh_best: "ベスト", sh_stage: "ステージ", sh_over: "ゲームオーバー",
     btn_close: "✕ 閉じる", title_close: "閉じる", btn_save: "🖼 保存", collected: "収集",
     need_login_paren: "（ログインが必要）", login_word: "ログイン",
     gallery_needlogin_html: "🔑 ログインすると集めた絵を見られます。<br><button id=\"glLogin\">ログイン</button>",
@@ -992,6 +1011,7 @@ function updateOverlays() {
   if (!state) return;
   if (state.phase === "lobby") {
     if (lobby.classList.contains("hidden")) lobby.classList.remove("hidden");
+    scoreHud.classList.add("hidden"); document.body.classList.remove("result"); lastScoreKey = "";
     const players = [...state.players.values()];
     const key = players.map(p => p.name).join(",") + "|" + (state.startIn|0);
     if (key !== lastLobbyKey) {
@@ -1042,10 +1062,65 @@ function updateOverlays() {
     } else {
       lastWonImageId = null;
     }
+    // 점수/최고기록 패널: 클리어·게임오버에서만 표시 (내용이 바뀔 때만 다시 그림). 로컬 최고기록도 갱신.
+    if (state.phase === "won" || state.phase === "lost") {
+      const skey = state.phase + "|" + (state.runScore|0) + "|" + (state.clearMs|0) + "|" + (state.level|0);
+      if (skey !== lastScoreKey) {
+        lastScoreKey = skey;
+        const b = loadBest();
+        b.score = Math.max(b.score, state.runScore|0);
+        if (state.phase === "won") {
+          b.stage = Math.max(b.stage, state.level|0);
+          if ((state.clearMs|0) > 0) b.timeMs = b.timeMs ? Math.min(b.timeMs, state.clearMs|0) : (state.clearMs|0);
+        }
+        saveBest(b);
+        scoreHud.innerHTML = renderScore(state, b);
+      }
+      scoreHud.classList.remove("hidden");
+      document.body.classList.add("result");
+    } else {
+      scoreHud.classList.add("hidden");
+      document.body.classList.remove("result");
+      lastScoreKey = "";
+    }
   }
 }
 const gameoverEl = document.getElementById("gameover");
 const goNumEl = document.getElementById("goNum");
+
+// ── 점수/최고기록 패널 ──────────────────────────────────────────
+// 최고기록은 브라우저(localStorage)에 저장한다(게스트 포함 즉시 동작). 로그인 시에는 서버가
+// 계정(Supabase)에도 최고기록을 기록하므로 기기 간에도 이어진다.
+const scoreHud = document.getElementById("scoreHud");
+let lastScoreKey = "";
+function loadBest() {
+  try {
+    return {
+      score: +(localStorage.getItem("galsBestScore") || 0) || 0,
+      timeMs: +(localStorage.getItem("galsBestTimeMs") || 0) || 0,
+      stage: +(localStorage.getItem("galsBestStage") || 0) || 0,
+    };
+  } catch { return { score: 0, timeMs: 0, stage: 0 }; }
+}
+function saveBest(b) {
+  try {
+    localStorage.setItem("galsBestScore", b.score);
+    localStorage.setItem("galsBestTimeMs", b.timeMs);
+    localStorage.setItem("galsBestStage", b.stage);
+  } catch {}
+}
+function fmtSec(ms) { return (Math.max(0, ms) / 1000).toFixed(1) + "s"; }
+function renderScore(s, b) {
+  const best = `${t("sh_best")} <b style="color:#ffd54a">${b.score}</b> · ⚡ ${b.timeMs ? fmtSec(b.timeMs) : "—"} · ${t("sh_stage")} ${b.stage || "—"}`;
+  if (s.phase === "won") {
+    return `<div class="sh-main">${t("sh_clear", s.level)} · ⏱ ${fmtSec(s.clearMs)} · +${s.stageScore}</div>`
+         + `<div class="sh-run">${t("sh_score")} <b>${s.runScore}</b></div>`
+         + `<div class="sh-best">${best}</div>`;
+  }
+  return `<div class="sh-main sh-over">${t("sh_over")}</div>`
+       + `<div class="sh-run">${t("sh_score")} <b>${s.runScore}</b></div>`
+       + `<div class="sh-best">${best}</div>`;
+}
 
 // 게임 오버 후(또는 나가기) 첫 화면으로 복귀: 방을 떠나고 상태를 초기화한 뒤 타이틀을 다시 띄운다.
 function returnToTitle() {
@@ -1061,6 +1136,7 @@ function returnToTitle() {
   devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden"); devLoseBtn.classList.add("hidden"); devWinBtn.classList.add("hidden");
   document.getElementById("touch")?.classList.add("hidden"); pressOrder.length = 0; resetTouch();   // 터치 컨트롤 숨김 + 상태 초기화
   document.body.classList.remove("ingame");   // 스크롤 잠금 해제 + (있다면) 제목 복원
+  scoreHud.classList.add("hidden"); document.body.classList.remove("result"); lastScoreKey = "";
 
   startScreen.classList.remove("hidden");
   [startBtn, createBtn, joinBtn].forEach((b) => (b.disabled = false));

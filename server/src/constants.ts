@@ -58,6 +58,18 @@ export const START_LIVES = 3;
 // (즉시 시작의 마찰 제거 + 협동 매칭 양립). 비공개(방 만들기) 방은 대상이 아니다.
 export const QUICK_START_SECS = 3;
 
+// ── 점수 & 이어하기 ─────────────────────────────────────────────
+// 스테이지 클리어 점수 = 깊이 + 커버리지 + 포획 + (기존)포획보너스 + 속도 보너스.
+// 런 점수는 스테이지를 넘어갈수록 이들의 누적(이어하기 시 일부 차감).
+export const SCORE_LEVEL = 100;       // 스테이지(깊이) 1당 기본 점수
+export const SCORE_COVER = 500;       // 점유율(0..1) 환산 계수
+export const SCORE_TRAP = 30;         // 몬스터 1마리 포획당
+export const SCORE_SPEED_BASE = 2000; // 속도 보너스 상한(빨리 깰수록 큼)
+export const SCORE_SPEED_DROP = 20;   // 초당 감소 (100초부터 속도 보너스 0)
+// 이어하기(전멸 후 현재 스테이지 재도전): 목숨·점수 일부만 유지.
+export const CONTINUE_LIVES = 2;        // 이어하기 시 목숨(정상 3에서 감소)
+export const CONTINUE_SCORE_KEEP = 0.8; // 이어하기 시 런 점수 20% 차감
+
 // Background artwork pool (100 images). GameRoom.imageAt shuffles this each cycle and
 // assigns one per stage, so every stage in a cycle gets a distinct, non-overlapping image
 // (and no repeat across the seam), reshuffling only after all 100 have been shown.

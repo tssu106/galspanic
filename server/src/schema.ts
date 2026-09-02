@@ -80,6 +80,12 @@ export class GameState extends Schema {
   @type("number") totalInterior: number = 0;
   @type("number") level: number = 1;
 
+  // 점수(코옵은 한 런을 공유): stageScore/clearMs 는 직전 클리어한 스테이지 결과,
+  // runScore 는 이번 런 누적 총점(스테이지 합산, 이어하기 시 일부 차감).
+  @type("number") stageScore: number = 0;
+  @type("number") runScore: number = 0;
+  @type("number") clearMs: number = 0;   // 직전 스테이지 클리어에 걸린 시간(ms)
+
   // Authoritative move cadence (ms/cell) — clients mirror it for local prediction.
   @type("number") moveMs: number = MOVE_MS;
 

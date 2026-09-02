@@ -464,6 +464,7 @@ const I18N = {
     lobby_title: "대기실", lobby_code_label: "방 코드", btn_copy: "복사", copied: "복사됨!",
     lobby_waiting: "플레이어를 기다리는 중…", btn_startnow: "지금 시작",
     lobby_hint: "4명이 모이면 10초 뒤 자동 시작 · 코드를 친구에게 공유하세요",
+    lobby_hint_quick: "혼자여도 곧 자동 시작돼요 · 다른 참가자가 오면 함께 플레이",
     status_connecting: "서버 연결 중…", connected_play: "접속됨 · 방향키로 플레이하세요",
     rank_head: "🏆 포획 랭킹", btn_restart: "다음/재시작 (Enter)",
     chat_resize_title: "드래그로 채팅창 너비 조절", chat_head: "채팅", ph_chat: "Enter 로 채팅…",
@@ -513,6 +514,7 @@ const I18N = {
     lobby_title: "Lobby", lobby_code_label: "Room code", btn_copy: "Copy", copied: "Copied!",
     lobby_waiting: "Waiting for players…", btn_startnow: "Start Now",
     lobby_hint: "Auto-starts 10s after 4 players · share the code with friends",
+    lobby_hint_quick: "Starts shortly even solo · anyone who joins plays with you",
     status_connecting: "Connecting to server…", connected_play: "Connected · use arrow keys to play",
     rank_head: "🏆 Capture Ranking", btn_restart: "Next / Restart (Enter)",
     chat_resize_title: "Drag to resize chat", chat_head: "Chat", ph_chat: "Enter to chat…",
@@ -562,6 +564,7 @@ const I18N = {
     lobby_title: "待機室", lobby_code_label: "部屋コード", btn_copy: "コピー", copied: "コピーしました！",
     lobby_waiting: "プレイヤーを待っています…", btn_startnow: "今すぐ開始",
     lobby_hint: "4人集まると10秒後に自動開始 · コードを友達に共有しましょう",
+    lobby_hint_quick: "一人でもすぐ自動開始 · 参加した人と一緒にプレイ",
     status_connecting: "サーバーに接続中…", connected_play: "接続完了 · 矢印キーでプレイ",
     rank_head: "🏆 捕獲ランキング", btn_restart: "次へ / リスタート (Enter)",
     chat_resize_title: "ドラッグで幅を調整", chat_head: "チャット", ph_chat: "Enterでチャット…",
@@ -679,9 +682,11 @@ const lobbyCodeVal = document.getElementById("lobbyCodeVal");
 const copyCodeBtn = document.getElementById("copyCodeBtn");
 const lobbyPlayers = document.getElementById("lobbyPlayers");
 const lobbyStatus = document.getElementById("lobbyStatus");
+const lobbyHint = document.getElementById("lobbyHint");
 const startNowBtn = document.getElementById("startNowBtn");
 
 let room = null, state = null, GW = 64, GH = 64;
+let joinMode = "quick";            // 현재 방 접속 방식(quick=빠른참가 / create·join=친구끼리) — 로비 안내문 분기용
 let lostSince = 0;                 // 게임 오버가 시작된 시각(ms). 0 이면 오버 아님.
 const LOST_TIMEOUT_MS = 10000;    // 오버 후 이 시간 안에 Enter 면 재시작, 지나면 첫 화면으로.
 const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
@@ -695,6 +700,7 @@ const preImg = new Image(); preImg.crossOrigin = "anonymous";
 // button), so a player never enters the running match until they choose to. Throws on
 // failure so the caller can keep the title screen up and let the player retry.
 async function connect(name, level, mode = "quick", code = "") {
+  joinMode = mode;                 // 로비 안내문(빠른참가=곧 자동시작 / 친구끼리=코드 공유)에 반영
   const client = new Client(WS_URL);
   // level 은 dev 서버에서만 서버가 신뢰한다 (프로덕션에선 무시되고 레벨 1로 시작).
   // token: 로그인했으면 Supabase access token 을 서버로 전달 → 서버가 검증해 클리어 시 도감 기록.
@@ -1000,6 +1006,8 @@ function updateOverlays() {
     lobbyStatus.textContent = state.startIn >= 0
       ? t("starting_in", Math.ceil(state.startIn))
       : t("waiting_players", players.length);
+    // 빠른참가는 곧 자동 시작되므로 "코드 공유" 안내 대신 그에 맞는 문구를 보여준다.
+    lobbyHint.textContent = joinMode === "quick" ? t("lobby_hint_quick") : t("lobby_hint");
   } else {
     // 게임 시작됨(또는 그 이후) → 대기실 닫고 게임/채팅/dev 버튼 노출
     if (!lobby.classList.contains("hidden")) lobby.classList.add("hidden");

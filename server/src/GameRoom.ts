@@ -2,7 +2,7 @@ import { Room, Client } from "@colyseus/core";
 import { GameState, Player, Enemy, Projectile, Beam, Item, Missile } from "./schema";
 import { GalSim } from "./GalSim";
 import type { SimEnemy } from "./GalSim";
-import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS } from "./constants";
+import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, QUICK_START_SECS } from "./constants";
 import { verifyToken, recordUnlock } from "./supa";
 
 const COLORS = ["#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
@@ -15,6 +15,7 @@ export class GameRoom extends Room<GameState> {
   maxClients = MAX_PLAYERS;
   sim!: GalSim;
   private startLevel = 1;   // 이 방이 시작한 레벨 (loss 후 재시작도 이 레벨로 되돌린다)
+  private isPrivate = false; // "방 만들기"(친구끼리)로 만든 비공개 방 → 빠른참가 자동 시작 대상 아님
   private imageSeq: string[] = [];   // 스테이지별 배경 이미지 순서(랜덤 셔플, 한 바퀴 동안 비중복)
   private enemySeq = 0;              // 적 스폰 id 카운터(라운드 넘어가도 재사용 안 함 → 전역 유일)
   private userIds = new Map<string, string>();   // sessionId → Supabase user id (토큰 검증됨). 도감 기록용.
@@ -23,6 +24,7 @@ export class GameRoom extends Room<GameState> {
     // dev 에서만 방을 만든 클라이언트가 고른 스테이지로 시작. 그 외에는 레벨 1.
     this.startLevel = DEV ? this.clampLevel(options.level) : 1;
     // "방 만들기"로 만든 방은 비공개 → 빠른 참가(joinOrCreate) 매칭에서 제외, 코드로만 입장.
+    this.isPrivate = !!options.private;
     if (options.private) this.setPrivate(true);
     this.setState(new GameState());
     // Broadcast state patches at PATCH_MS (~30Hz). Decoupled from the 42Hz sim so the
@@ -46,10 +48,11 @@ export class GameRoom extends Room<GameState> {
       this.sim.setBoost(client.sessionId, !!msg?.boost);
     });
 
-    // 로비 "지금 시작": 4명이 안 돼도 방에 있는 사람들끼리 3초 카운트다운 후 시작.
+    // 로비 "지금 시작": 대기 중이든 자동 카운트다운 중이든, 1명 이상 있으면 곧바로(1초 뒤) 시작.
+    // (기존엔 카운트다운이 이미 돌고 있으면 무시돼 빠른참가 방에서 버튼이 먹통이었다 → 항상 먹히게)
     this.onMessage("startNow", () => {
-      if (this.state.phase === "lobby" && this.state.startIn < 0 && this.state.players.size >= 1) {
-        this.state.startIn = 3;
+      if (this.state.phase === "lobby" && this.state.players.size >= 1) {
+        this.state.startIn = this.state.startIn < 0 ? 1 : Math.min(this.state.startIn, 1);
       }
     });
 
@@ -169,7 +172,10 @@ export class GameRoom extends Room<GameState> {
     if (this.state.phase === "lobby") {
       if (this.state.startIn >= 0) {
         this.state.startIn = Math.max(0, this.state.startIn - dt / 1000);
-        if (this.state.startIn <= 0) this.beginGame();
+        if (this.state.startIn <= 0) {
+          if (this.state.players.size < 1) { this.state.startIn = -1; return; }  // 아무도 없으면 시작 보류
+          this.beginGame();
+        }
       }
       return;
     }
@@ -341,8 +347,13 @@ export class GameRoom extends Room<GameState> {
       });
     }
 
-    // 로비가 꽉 차면(4명) 10초 카운트다운 후 자동 시작.
-    if (this.state.phase === "lobby" && this.state.startIn < 0 && this.state.players.size >= MAX_PLAYERS) {
+    // 빠른 참가(공개) 방: 첫 입장부터 짧은 카운트다운으로 자동 시작 → 혼자여도 로비에서 멈추지 않는다.
+    // 그 사이 다른 빠른참가 유저가 합류하면 같은 방에서 함께 시작(즉시 시작 + 협동 매칭 양립).
+    if (!this.isPrivate && this.state.phase === "lobby" && this.state.startIn < 0) {
+      this.state.startIn = QUICK_START_SECS;
+    }
+    // 비공개 방: 로비가 꽉 차면(4명) 10초 카운트다운 후 자동 시작.
+    else if (this.state.phase === "lobby" && this.state.startIn < 0 && this.state.players.size >= MAX_PLAYERS) {
       this.state.startIn = 10;
     }
   }

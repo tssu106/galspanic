@@ -53,6 +53,11 @@ export const WIN_COUNTDOWN_MS = 5000;
 export const MAX_PLAYERS = 4;
 export const START_LIVES = 3;
 
+// 빠른 참가(공개) 방은 첫 입장부터 이 시간(초) 뒤 자동 시작한다. 혼자여도 로비에서 멈추지 않고
+// 곧바로 게임으로 넘어가되, 그 짧은 사이 다른 빠른참가 유저가 합류하면 같은 방에서 함께 시작한다
+// (즉시 시작의 마찰 제거 + 협동 매칭 양립). 비공개(방 만들기) 방은 대상이 아니다.
+export const QUICK_START_SECS = 3;
+
 // Background artwork pool (100 images). GameRoom.imageAt shuffles this each cycle and
 // assigns one per stage, so every stage in a cycle gets a distinct, non-overlapping image
 // (and no repeat across the seam), reshuffling only after all 100 have been shown.

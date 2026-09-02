@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>Gals Panic — Online Co-op</title>
 <style>
   :root { --bg:#0b0d16; --panel:#161a2b; --ink:#e8ebf7; --muted:#8b93b5; }
@@ -71,25 +71,33 @@
                      border-radius:7px; cursor:pointer; font-size:13px; }
   #langMenu button:hover { background:#222a45; }
   #langMenu button.on { background:#2b3a66; font-weight:600; }
-  /* 모바일 터치 컨트롤 (D-패드 + 질주) */
-  #touch { position:fixed; left:0; right:0; bottom:0; z-index:35; display:flex; justify-content:space-between;
-           align-items:flex-end; padding:18px 22px calc(34px + env(safe-area-inset-bottom, 0px));
-           pointer-events:none; }
+  /* 모바일 터치 컨트롤 (플로팅 조이스틱 + 질주) */
+  #touch { position:fixed; inset:0; z-index:35; pointer-events:none; }
   #touch.hidden { display:none; }
-  #dpad { position:relative; width:168px; height:168px; pointer-events:auto; touch-action:none; }
-  .tbtn { position:absolute; width:56px; height:56px; border-radius:14px; border:1px solid #3a4570;
-          background:rgba(22,26,43,.72); color:#cfe; font-size:20px; display:flex; align-items:center;
-          justify-content:center; cursor:pointer; user-select:none; -webkit-user-select:none;
-          touch-action:none; -webkit-tap-highlight-color:transparent; }
-  .tbtn.on { background:#2b3a66; border-color:#6a4bff; color:#fff; }
-  #dpad .tup    { left:56px;  top:0; }
-  #dpad .tleft  { left:0;     top:56px; }
-  #dpad .tright { left:112px; top:56px; }
-  #dpad .tdown  { left:56px;  top:112px; }
-  .tsprint { position:relative; width:88px; height:88px; border-radius:50%; font-size:15px; font-weight:800;
-             background:rgba(124,92,255,.28); border-color:#7c5cff; color:#dcd6ff; pointer-events:auto; }
+  /* 좌측 하단 감지 영역: 여기를 터치하면 그 지점에 조이스틱이 생긴다 */
+  #joyZone { position:absolute; left:0; bottom:0; width:64%; height:58%; pointer-events:auto; touch-action:none; }
+  #joy { position:absolute; width:124px; height:124px; margin:-62px 0 0 -62px; border-radius:50%;
+         border:2px solid rgba(150,160,210,.45); background:rgba(18,24,42,.32); pointer-events:none;
+         touch-action:none; }
+  #joy.hidden { display:none; }
+  #joyKnob { position:absolute; left:50%; top:50%; width:58px; height:58px; margin:-29px 0 0 -29px;
+             border-radius:50%; background:rgba(124,92,255,.72); border:2px solid #c3b6ff;
+             box-shadow:0 4px 14px rgba(0,0,0,.4); }
+  .tsprint { position:absolute; right:22px; bottom:calc(30px + env(safe-area-inset-bottom, 0px));
+             width:88px; height:88px; border-radius:50%; border:1px solid #7c5cff; font-size:15px;
+             font-weight:800; background:rgba(124,92,255,.28); color:#dcd6ff; display:flex;
+             align-items:center; justify-content:center; cursor:pointer; user-select:none;
+             -webkit-user-select:none; touch-action:none; -webkit-tap-highlight-color:transparent;
+             pointer-events:auto; }
   .tsprint.on { background:rgba(124,92,255,.6); color:#fff; }
   body.touch #chatPanel { display:none !important; }   /* 모바일: 채팅 로그 숨김 */
+  /* 인게임 상단 게임 제목 + 상태 안내문 제거 → 게임 뷰 공간 확보 (제목은 타이틀 화면 로고로 충분) */
+  body > h1, #status { display:none; }
+  /* 모바일: 조이스틱 조작 중 화면이 스크롤/바운스/줌 되지 않게 완전 고정 + 여백 최소화로 뷰 확대 */
+  html { overscroll-behavior:none; }
+  body.touch { overscroll-behavior:none; }
+  body.touch.ingame { position:fixed; inset:0; overflow:hidden; touch-action:none; padding:6px; gap:6px; }
+  body.touch.ingame canvas { touch-action:none; height:min(90vh,960px); max-width:calc(100vw - 12px); }
   #start .logo { margin:0; font-size:min(16vw,68px); font-weight:800; letter-spacing:3px;
                  text-shadow:0 6px 34px rgba(255,93,177,.4); }
   #start .logo span { color:#ff5db1; }
@@ -424,15 +432,11 @@
   <button id="devLoseBtn" class="hidden" data-i18n="dev_lose"></button>
   <button id="devWinBtn" class="hidden" data-i18n="dev_win"></button>
 
-  <!-- 모바일 터치 컨트롤: 4방향 D-패드 + 질주 (터치 기기·게임 중에만 표시) -->
+  <!-- 모바일 터치 컨트롤: 플로팅 조이스틱(4방향 스냅) + 질주 (터치 기기·게임 중에만 표시) -->
   <div id="touch" class="hidden" aria-hidden="true">
-    <div id="dpad">
-      <button class="tbtn tup"    data-dir="ArrowUp"    aria-label="up">▲</button>
-      <button class="tbtn tleft"  data-dir="ArrowLeft"  aria-label="left">◀</button>
-      <button class="tbtn tright" data-dir="ArrowRight" aria-label="right">▶</button>
-      <button class="tbtn tdown"  data-dir="ArrowDown"  aria-label="down">▼</button>
-    </div>
-    <button id="sprintBtn" class="tbtn tsprint" data-i18n="key_sprint"></button>
+    <div id="joyZone"></div>                        <!-- 좌측 하단: 터치하면 그 자리에 조이스틱 생성 -->
+    <div id="joy" class="hidden"><div id="joyKnob"></div></div>
+    <button id="sprintBtn" class="tsprint" data-i18n="key_sprint"></button>
   </div>
 
 <!-- three.js 애드온이 bare 'three' 를 import 하므로, 로컬 vendored 빌드로 매핑한다. -->
@@ -1003,6 +1007,7 @@ function updateOverlays() {
       gameShown = true;
       if (!IS_TOUCH) chatPanel.classList.remove("hidden");           // 모바일에선 채팅 로그 숨김
       if (IS_TOUCH && touchEl) touchEl.classList.remove("hidden");   // 모바일 터치 컨트롤 노출
+      document.body.classList.add("ingame");                         // 인게임: 제목 숨김 + 모바일 스크롤 잠금
       if (devMode) { devBossBtn.classList.remove("hidden"); devLaserBtn.classList.remove("hidden"); devLoseBtn.classList.remove("hidden"); devWinBtn.classList.remove("hidden"); }
     }
     // 게임 오버: 화면 전체 3D 카운트다운(10초). 그 안에 Enter 면 이 방에서 재시작(window keydown),
@@ -1046,8 +1051,9 @@ function returnToTitle() {
   document.getElementById("gameover").classList.add("hidden"); hideCountdown3D();
   lastWonImageId = null;
   devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden"); devLoseBtn.classList.add("hidden"); devWinBtn.classList.add("hidden");
-  document.getElementById("touch")?.classList.add("hidden"); pressOrder.length = 0; boostHeld = false;   // 터치 컨트롤 숨김 + 눌림 초기화
-  document.querySelectorAll(".tbtn.on").forEach((b) => b.classList.remove("on"));
+  document.getElementById("touch")?.classList.add("hidden"); pressOrder.length = 0; resetTouch();   // 터치 컨트롤 숨김 + 상태 초기화
+  document.body.classList.remove("ingame");   // 스크롤 잠금 해제 + (있다면) 제목 복원
+
   startScreen.classList.remove("hidden");
   [startBtn, createBtn, joinBtn].forEach((b) => (b.disabled = false));
   startErr.textContent = "";
@@ -1134,68 +1140,78 @@ window.addEventListener("blur", releaseAllKeys);
 document.addEventListener("visibilitychange", () => { if (document.hidden) releaseAllKeys(); });
 restartBtn.onclick = () => room?.send("restart");
 
-// ── 모바일 터치 컨트롤: D-패드 + 질주 버튼. 기존 pressOrder/boostHeld/syncInput 을 그대로 재사용
-// 하므로 키보드와 동일하게 동작한다(방향은 "마지막으로 누른 것" 우선).
-// 실기기에서 버튼이 눌린 채 고정되는 것을 막기 위해: (1) setPointerCapture 로 손가락이 살짝
-// 벗어나도 pointerup 이 반드시 그 버튼에서 발생하게 하고, (2) lostpointercapture 와 (3) window
-// 전역 pointerup/cancel 안전망으로 놓친 해제를 잡아 항상 멈추게 한다. ──
+// ── 모바일 터치 컨트롤: 플로팅 조이스틱(4방향 스냅) + 질주 버튼. ──
+// 좌측 하단(joyZone)을 터치하면 그 지점에 조이스틱이 생기고, 스틱을 민 방향을 가장 가까운
+// 4방향(상/하/좌/우)으로 스냅해 기존 pressOrder/syncInput 입력에 그대로 넣는다(키보드와 동일).
+// setPointerCapture + 전역 pointerup/cancel 안전망으로 손을 떼면 항상 멈추게 한다.
 const IS_TOUCH = matchMedia("(pointer: coarse)").matches || "ontouchstart" in window || navigator.maxTouchPoints > 0;
 if (IS_TOUCH) document.body.classList.add("touch");
-const touchEl = document.getElementById("touch");
 const DIR_CODES = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
-const touchHeld = new Map();   // pointerId -> code ("__sprint__" 은 질주)
+const touchEl = document.getElementById("touch");
 const sprintBtn = document.getElementById("sprintBtn");
-function pressCode(code, on) {
-  const i = pressOrder.indexOf(code);
-  if (on) { if (i < 0) pressOrder.push(code); }
-  else if (i >= 0) pressOrder.splice(i, 1);
-  const btn = touchEl?.querySelector(`[data-dir="${code}"]`);
-  if (btn) btn.classList.toggle("on", on);
-  syncInput();
-}
-function releaseTouchPointer(pid) {
-  const code = touchHeld.get(pid);
-  if (code === undefined) return;   // 이 포인터는 터치 버튼이 아니었음 → 무시
-  touchHeld.delete(pid);
-  if (code === "__sprint__") { boostHeld = false; sprintBtn?.classList.remove("on"); syncInput(); }
-  else pressCode(code, false);
-}
-function releaseAllTouch() {
-  touchHeld.clear();
+const joyZone = document.getElementById("joyZone");
+const joy = document.getElementById("joy");
+const joyKnob = document.getElementById("joyKnob");
+const JOY_DEAD = 16, JOY_MAX = 46;   // 데드존 / 노브 최대 반경(px)
+let joyId = null, joyCx = 0, joyCy = 0, joyDir = null;
+
+// 조이스틱 방향을 하나만 유지. 바뀌면 이전 방향을 빼고 새 방향을 pressOrder 에 넣는다.
+function setJoyDir(code) {
+  if (code === joyDir) return;
   for (const c of DIR_CODES) { const i = pressOrder.indexOf(c); if (i >= 0) pressOrder.splice(i, 1); }
-  boostHeld = false;
-  touchEl?.querySelectorAll(".tbtn.on").forEach((b) => b.classList.remove("on"));
+  if (code) pressOrder.push(code);
+  joyDir = code || null;
   syncInput();
 }
-touchEl?.querySelectorAll("[data-dir]").forEach((b) => {
-  const code = b.dataset.dir;
-  b.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    try { b.setPointerCapture(e.pointerId); } catch {}
-    touchHeld.set(e.pointerId, code);
-    pressCode(code, true);
-  });
-  const rel = (e) => { e.preventDefault(); releaseTouchPointer(e.pointerId); };
-  b.addEventListener("pointerup", rel);
-  b.addEventListener("pointercancel", rel);
-  b.addEventListener("lostpointercapture", rel);
+function joyMove(px, py) {
+  const dx = px - joyCx, dy = py - joyCy, dist = Math.hypot(dx, dy);
+  const k = dist > JOY_MAX ? JOY_MAX / dist : 1;                 // 노브를 반경 안으로 클램프
+  joyKnob.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
+  if (dist < JOY_DEAD) { setJoyDir(null); return; }             // 데드존 안이면 정지
+  const code = Math.abs(dx) > Math.abs(dy)                       // 우세한 축으로 4방향 스냅
+    ? (dx > 0 ? "ArrowRight" : "ArrowLeft")
+    : (dy > 0 ? "ArrowDown" : "ArrowUp");
+  setJoyDir(code);
+}
+function joyEnd(pid) {
+  if (pid !== joyId) return;
+  joyId = null; joy.classList.add("hidden"); setJoyDir(null);
+}
+// 게임을 떠날 때 등 전체 초기화
+function resetTouch() {
+  joyId = null; joyDir = null; joy?.classList.add("hidden");
+  for (const c of DIR_CODES) { const i = pressOrder.indexOf(c); if (i >= 0) pressOrder.splice(i, 1); }
+  boostHeld = false; sprintBtn?.classList.remove("on");
+  syncInput();
+}
+joyZone?.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  // 클리어/게임오버 화면에선 조이스틱 대신 탭으로 진행(Enter 대체)
+  if (state && (state.phase === "won" || state.phase === "lost")) { room?.send("restart"); return; }
+  joyId = e.pointerId; joyCx = e.clientX; joyCy = e.clientY;
+  joy.style.left = joyCx + "px"; joy.style.top = joyCy + "px";
+  joyKnob.style.transform = "translate(0,0)";
+  joy.classList.remove("hidden");
+  try { joyZone.setPointerCapture(e.pointerId); } catch {}
 });
+joyZone?.addEventListener("pointermove", (e) => { if (e.pointerId === joyId) { e.preventDefault(); joyMove(e.clientX, e.clientY); } });
+joyZone?.addEventListener("pointerup", (e) => joyEnd(e.pointerId));
+joyZone?.addEventListener("pointercancel", (e) => joyEnd(e.pointerId));
+joyZone?.addEventListener("lostpointercapture", (e) => joyEnd(e.pointerId));
+
+// 질주 버튼 (우측)
 sprintBtn?.addEventListener("pointerdown", (e) => {
   e.preventDefault();
   try { sprintBtn.setPointerCapture(e.pointerId); } catch {}
-  touchHeld.set(e.pointerId, "__sprint__");
   sprintBtn.classList.add("on"); boostHeld = true; syncInput();
 });
 ["pointerup", "pointercancel", "lostpointercapture"].forEach((ev) =>
-  sprintBtn?.addEventListener(ev, (e) => { e.preventDefault(); releaseTouchPointer(e.pointerId); }));
-// 전역 안전망: 버튼이 놓친 해제를 잡는다(시스템 제스처로 터치가 가로채진 경우 등).
-window.addEventListener("pointerup", (e) => releaseTouchPointer(e.pointerId));
-window.addEventListener("pointercancel", (e) => releaseTouchPointer(e.pointerId));
-window.addEventListener("blur", releaseAllTouch);
-// 모바일: 클리어/게임오버 화면에서 캔버스를 탭하면 다음 스테이지/재시작 (키보드 Enter 대체).
-if (IS_TOUCH) canvas.addEventListener("pointerdown", () => {
-  if (state && (state.phase === "won" || state.phase === "lost")) room?.send("restart");
-});
+  sprintBtn?.addEventListener(ev, (e) => { e.preventDefault(); sprintBtn.classList.remove("on"); boostHeld = false; syncInput(); }));
+
+// 전역 안전망: 어디서든 손을 떼거나(포인터업/취소) 창을 벗어나면 조이스틱을 해제 → 항상 멈춤.
+window.addEventListener("pointerup", (e) => joyEnd(e.pointerId));
+window.addEventListener("pointercancel", (e) => joyEnd(e.pointerId));
+window.addEventListener("blur", resetTouch);
 
 // ---- render ----
 function playerColor(owner) {

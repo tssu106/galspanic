@@ -58,7 +58,16 @@
            background:radial-gradient(1200px 800px at 50% -10%, #1a1f38, var(--bg)); }
   #start.hidden { display:none; }
   /* 우측 상단 언어 전환 */
-  #langSwitch { position:absolute; top:14px; right:16px; z-index:20; }
+  #langSwitch { position:relative; z-index:20; }
+  /* 메인 상단 유틸 아이콘바 */
+  #start #topbar { position:absolute; top:14px; right:16px; left:16px; z-index:20;
+                   display:flex; align-items:center; gap:8px; }
+  #start #topbar #langSwitch { margin-right:auto; }   /* 언어는 좌측, 나머지 아이콘은 우측 */
+  #start .iconbtn { background:rgba(22,26,43,.85); color:var(--ink); border:1px solid #2a3350;
+                    border-radius:10px; height:38px; min-width:40px; padding:0 10px; font-size:17px;
+                    cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:3px; }
+  #start .iconbtn:hover { border-color:#3a4570; }
+  #start .iconbtn .gcount { font-size:11px; font-weight:800; color:#a3e635; }
   #langBtn { background:rgba(22,26,43,.85); color:var(--ink); border:1px solid #2a3350; border-radius:10px;
              padding:7px 11px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13px; }
   #langBtn:hover { border-color:#3a4570; }
@@ -151,11 +160,21 @@
   #start .joinrow input { flex:1; font-size:14px; padding:10px 12px; }
   #start .joinrow button { background:#232a44; color:var(--ink); border-radius:10px; padding:0 16px; font-size:14px; font-weight:700; }
   #start .joinrow button:hover { background:#2d3656; }
-  #start .dailyrow { display:flex; gap:8px; }
-  #start .go-daily { flex:1; background:linear-gradient(90deg,#f9a825,#ff7043); color:#1b1200; font-size:15px;
-                     font-weight:800; padding:11px 16px; border-radius:12px; box-shadow:0 6px 20px rgba(249,168,37,.28); }
+  #start .go-daily { background:linear-gradient(90deg,#f9a825,#ff7043); color:#1b1200; font-size:16px;
+                     font-weight:800; padding:12px 16px; border-radius:12px; box-shadow:0 6px 20px rgba(249,168,37,.28); }
   #start .go-daily:hover { filter:brightness(1.06); }
-  #start .dailyrow .ghost { flex:none; padding:0 14px; }
+  /* 접기 섹션(친구와 플레이 / 게임 방법) — 네이티브 <details> */
+  #start .fold { border:1px solid #232a44; border-radius:12px; background:#10152a; }
+  #start .fold > summary { list-style:none; cursor:pointer; padding:11px 14px; font-size:14px; font-weight:700;
+                           color:#c9d0f0; display:flex; align-items:center; }
+  #start .fold > summary::-webkit-details-marker { display:none; }
+  #start .fold > summary::after { content:"▾"; margin-left:auto; opacity:.6; transition:transform .15s; }
+  #start .fold[open] > summary::after { transform:rotate(180deg); }
+  #start .fold .foldbody { padding:2px 14px 14px; display:flex; flex-direction:column; gap:12px; }
+  #start .fold.howto > summary { justify-content:center; gap:7px; font-weight:600; font-size:13px; color:var(--muted); }
+  #start .fold.howto > summary::after { margin-left:7px; }
+  #start .fold.howto > summary .sep { opacity:.45; }
+  #start .fold.howto .rules { margin-top:2px; }
 
   /* 대기실(로비) */
   #lobby { position:fixed; inset:0; z-index:48; display:flex; align-items:center; justify-content:center;
@@ -349,57 +368,73 @@
 </head>
 <body>
   <div id="start">
-    <!-- 우측 상단 언어 전환 (메인 화면) -->
-    <div id="langSwitch">
-      <button id="langBtn" type="button" aria-haspopup="true">🌐 <span id="langCur">한국어</span> <span class="caret">▾</span></button>
-      <div id="langMenu" class="hidden">
-        <button type="button" data-lang="ko">한국어</button>
-        <button type="button" data-lang="en">English</button>
-        <button type="button" data-lang="ja">日本語</button>
+    <!-- 상단 유틸 아이콘바: 언어 · 랭킹 · 도감 · 로그인 -->
+    <div id="topbar">
+      <div id="langSwitch">
+        <button id="langBtn" type="button" aria-haspopup="true">🌐 <span id="langCur">한국어</span> <span class="caret">▾</span></button>
+        <div id="langMenu" class="hidden">
+          <button type="button" data-lang="ko">한국어</button>
+          <button type="button" data-lang="en">English</button>
+          <button type="button" data-lang="ja">日本語</button>
+        </div>
       </div>
+      <button id="rankBtn" class="iconbtn" data-i18n-title="btn_rank" aria-label="ranking">🏆</button>
+      <button id="galleryBtn" class="iconbtn" data-i18n-title="btn_gallery" aria-label="collection">📖<span id="galleryCount" class="gcount"></span></button>
+      <button id="loginBtn" class="iconbtn" aria-label="account">🔑</button>
     </div>
+
     <h1 class="logo">GALS <span>PANIC</span></h1>
     <div class="tag">Online Co-op</div>
+
     <div class="card">
-      <div class="rules" data-i18n-html="instr_html"></div>
-      <div class="controls" aria-hidden="true">
-        <div class="ctrl">
-          <div class="keys arrows">
-            <span class="key">↑</span><span class="key">←</span><span class="key">↓</span><span class="key">→</span>
-          </div>
-          <div class="clabel" data-i18n="key_move"></div>
-        </div>
-        <div class="ctrl">
-          <div class="keys"><span class="key wide">Shift</span></div>
-          <div class="clabel" data-i18n="key_sprint"></div>
-        </div>
-        <div class="ctrl">
-          <div class="keys"><span class="key wide">Enter</span></div>
-          <div class="clabel" data-i18n="key_chat"></div>
-        </div>
-      </div>
-      <div id="onlineCount" class="online">🟢 <span data-i18n="online_label"></span> <b id="onlineNum">--</b><span data-i18n="online_unit"></span></div>
       <input id="nameInput" maxlength="12" data-i18n-ph="ph_name" autocomplete="off" />
       <label id="devStage" class="dev-stage" hidden>
         <span data-i18n="dev_stage"></span>
         <select id="stageSelect"></select>
       </label>
+      <!-- 주 액션: 빠른 시작 + 오늘의 챌린지 -->
       <button id="startBtn" class="go" data-i18n="btn_start"></button>
-      <button id="createBtn" class="go2" data-i18n="btn_create"></button>
-      <div class="joinrow">
-        <input id="codeInput" maxlength="16" data-i18n-ph="ph_code" autocomplete="off" />
-        <button id="joinBtn" data-i18n="btn_join"></button>
-      </div>
-      <div class="dailyrow">
-        <button id="dailyBtn" class="go-daily" data-i18n="btn_daily"></button>
-        <button id="rankBtn" class="ghost" data-i18n="btn_rank"></button>
-      </div>
-      <button id="galleryBtn" class="ghost"><span data-i18n="btn_gallery"></span> <span id="galleryCount" class="gcount"></span></button>
-      <div class="authrow">
-        <button id="loginBtn" class="ghost"></button>
-        <button id="signupBtn" class="ghost" data-i18n="btn_signup"></button>
-      </div>
+      <button id="dailyBtn" class="go-daily" data-i18n="btn_daily"></button>
+
+      <!-- 친구와 플레이: 접기(기본 닫힘) — 방 만들기 / 코드로 참가 -->
+      <details class="fold">
+        <summary data-i18n="fold_friends"></summary>
+        <div class="foldbody">
+          <button id="createBtn" class="go2" data-i18n="btn_create"></button>
+          <div class="joinrow">
+            <input id="codeInput" maxlength="16" data-i18n-ph="ph_code" autocomplete="off" />
+            <button id="joinBtn" data-i18n="btn_join"></button>
+          </div>
+        </div>
+      </details>
+
       <div id="startErr" class="err"></div>
+
+      <!-- 접속자 수 + 게임 방법(규칙·조작키): 접기 -->
+      <details class="fold howto">
+        <summary>
+          <span id="onlineCount" class="online">🟢 <span data-i18n="online_label"></span> <b id="onlineNum">--</b><span data-i18n="online_unit"></span></span>
+          <span class="sep">·</span>
+          <span data-i18n="fold_howto"></span>
+        </summary>
+        <div class="foldbody">
+          <div class="rules" data-i18n-html="instr_html"></div>
+          <div class="controls" aria-hidden="true">
+            <div class="ctrl">
+              <div class="keys arrows"><span class="key">↑</span><span class="key">←</span><span class="key">↓</span><span class="key">→</span></div>
+              <div class="clabel" data-i18n="key_move"></div>
+            </div>
+            <div class="ctrl">
+              <div class="keys"><span class="key wide">Shift</span></div>
+              <div class="clabel" data-i18n="key_sprint"></div>
+            </div>
+            <div class="ctrl">
+              <div class="keys"><span class="key wide">Enter</span></div>
+              <div class="clabel" data-i18n="key_chat"></div>
+            </div>
+          </div>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -528,6 +563,7 @@ const I18N = {
     ph_name: "플레이어 이름 (선택)", dev_stage: "🛠 스테이지 (dev)",
     btn_start: "게임 시작", btn_create: "방 만들기 (친구끼리)", ph_code: "방 코드로 참가", btn_join: "참가",
     btn_daily: "🔥 오늘의 챌린지", btn_rank: "🏆 랭킹", daily_rank_title: "오늘의 랭킹",
+    fold_friends: "친구와 플레이", fold_howto: "게임 방법",
     daily_empty: "아직 기록이 없어요 · 첫 도전자가 되어보세요!", daily_needlogin: "로그인하면 랭킹에 등록돼요.",
     btn_gallery: "📖 도감", btn_login: "🔑 로그인", btn_signup: "📝 회원가입", logout: "로그아웃",
     lobby_title: "대기실", lobby_code_label: "방 코드", btn_copy: "복사", copied: "복사됨!",
@@ -584,6 +620,7 @@ const I18N = {
     ph_name: "Player name (optional)", dev_stage: "🛠 Stage (dev)",
     btn_start: "Start Game", btn_create: "Create Room (friends)", ph_code: "Join by room code", btn_join: "Join",
     btn_daily: "🔥 Daily Challenge", btn_rank: "🏆 Ranking", daily_rank_title: "Today's Ranking",
+    fold_friends: "Play with friends", fold_howto: "How to play",
     daily_empty: "No scores yet · be the first!", daily_needlogin: "Log in to appear on the ranking.",
     btn_gallery: "📖 Collection", btn_login: "🔑 Log in", btn_signup: "📝 Sign up", logout: "Log out",
     lobby_title: "Lobby", lobby_code_label: "Room code", btn_copy: "Copy", copied: "Copied!",
@@ -640,6 +677,7 @@ const I18N = {
     ph_name: "プレイヤー名（任意）", dev_stage: "🛠 ステージ (dev)",
     btn_start: "ゲーム開始", btn_create: "部屋を作る（友達と）", ph_code: "部屋コードで参加", btn_join: "参加",
     btn_daily: "🔥 今日のチャレンジ", btn_rank: "🏆 ランキング", daily_rank_title: "今日のランキング",
+    fold_friends: "友達とプレイ", fold_howto: "遊び方",
     daily_empty: "まだ記録がありません · 最初の挑戦者に！", daily_needlogin: "ログインするとランキングに登録されます。",
     btn_gallery: "📖 図鑑", btn_login: "🔑 ログイン", btn_signup: "📝 新規登録", logout: "ログアウト",
     lobby_title: "待機室", lobby_code_label: "部屋コード", btn_copy: "コピー", copied: "コピーしました！",
@@ -856,7 +894,8 @@ function addToCollection(imageId) {
 function updateGalleryCount() {
   const el = document.getElementById("galleryCount");
   if (!el) return;
-  el.textContent = remoteCache ? `(${remoteCache.size}/${imageCount || "?"})` : t("need_login_paren");
+  // 아이콘 옆 작은 배지: 로그인 시 수집 개수, 비로그인 시 비움.
+  el.textContent = remoteCache ? String(remoteCache.size) : "";
 }
 const artId = (i) => "art" + String(i).padStart(2, "0");   // 서버 명명과 일치 (art01.. art100)
 function openGallery() {
@@ -1057,15 +1096,16 @@ function closeLogin() { loginEl.classList.add("hidden"); }
 function updateLoginUI(user) {
   currentUser = user || null;
   const login = document.getElementById("loginBtn");
-  const signup = document.getElementById("signupBtn");
-  if (user) { login.textContent = t("logout"); login.dataset.in = "1"; signup.style.display = "none"; }
-  else { login.textContent = t("btn_login"); login.dataset.in = ""; signup.style.display = ""; }
+  if (!login) return;
+  // 상단 아이콘 버튼: 로그인 전 🔑 / 로그인 후 👤 (툴팁으로 상태 표시). 회원가입은 로그인 모달에서 전환.
+  login.dataset.in = user ? "1" : "";
+  login.textContent = user ? "👤" : "🔑";
+  login.title = user ? t("logout") : t("btn_login");
 }
 document.getElementById("loginBtn").addEventListener("click", async () => {
   if (document.getElementById("loginBtn").dataset.in) await signOut();   // 로그아웃 (onAuth 가 처리)
   else openLogin("in");
 });
-document.getElementById("signupBtn").addEventListener("click", () => openLogin("up"));
 document.getElementById("lgClose").addEventListener("click", closeLogin);
 document.getElementById("lgSwitch").addEventListener("click", (e) => {
   const b = e.target.closest("b[data-mode]"); if (b) setAuthMode(b.dataset.mode);

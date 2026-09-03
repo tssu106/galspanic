@@ -88,6 +88,10 @@ export class GameRoom extends Room<GameState> {
     this.onMessage("devLaser", () => {
       if (DEV && this.state.phase === "playing") this.sim.devLaser();
     });
+    // dev 전용: "몬스터 모두 제거" 버튼 → 필드의 적·탄·레이저·미사일·예고 보스를 즉시 비운다.
+    this.onMessage("devClear", () => {
+      if (DEV && this.state.phase === "playing") this.sim.devClearMonsters();
+    });
     // dev 전용: "게임오버 미리보기" 버튼 → 즉시 lost 로 전환해 죽는 화면(3D 카운트다운)을 확인.
     this.onMessage("devLose", () => {
       if (DEV && this.state.phase === "playing") this.state.phase = "lost";
@@ -123,17 +127,18 @@ export class GameRoom extends Room<GameState> {
 
   startRound(level: number) {
     this.sim.resetRound(level);
-    // Rebuild the grid arrays wholesale. Colyseus ArraySchema index-assignment
-    // (arr[i] = v) is O(N) per set → O(N²) for the whole 160×240×3 grid, i.e. a
-    // ~32s freeze at each round start. splice-then-push is O(N) total (~0.6s), so
-    // clear each array and repush instead of assigning by index. (see deploy/bench2.js)
-    this.state.cells.splice(0, this.state.cells.length);
-    this.state.trail.splice(0, this.state.trail.length);
-    this.state.web.splice(0, this.state.web.length);
+    // Reset the grid arrays IN PLACE with setAt (O(1)/cell → O(N) total), NOT splice+push.
+    // The arrays were created once in initGridSchema with stable keys 0..N-1; setAt(i, v)
+    // updates that cell directly and is O(1). We must keep those keys stable, because push()
+    // assigns a monotonically-increasing $refId as each item's key — so clearing and
+    // repushing every round would shift every cell's key by N and break the per-tick
+    // setAt(i, ...) sync (which addresses cells by 0-based index). (Avoid arr[i] = v here:
+    // the ArraySchema index-set proxy runs Array.from($items.keys()) per assignment — O(N)
+    // per set → O(N²) for the whole grid, the old ~32s round-start freeze.)
     for (let i = 0; i < this.sim.cellCount; i++) {
-      this.state.cells.push(this.sim.grid[i]);
-      this.state.trail.push(this.sim.trail[i]);
-      this.state.web.push(this.sim.web[i]);
+      this.state.cells.setAt(i, this.sim.grid[i]);
+      this.state.trail.setAt(i, this.sim.trail[i]);
+      this.state.web.setAt(i, this.sim.web[i]);
     }
     this.sim.gridDirty.clear();
     this.sim.trailDirty.clear();
@@ -210,10 +215,16 @@ export class GameRoom extends Room<GameState> {
     if (this.state.phase !== "playing") return;
     this.sim.update(dt / 1000);
 
-    // sync only changed cells
-    for (const i of this.sim.gridDirty) this.state.cells[i] = this.sim.grid[i];
-    for (const i of this.sim.trailDirty) this.state.trail[i] = this.sim.trail[i];
-    for (const i of this.sim.webDirty) this.state.web[i] = this.sim.web[i];
+    // sync only changed cells.
+    // NOTE: use setAt(i, v), NOT cells[i] = v. The ArraySchema index-set proxy runs
+    // `Array.from($items.keys())` on EVERY assignment (O(N), N=GRID_W*GRID_H=38400), so a
+    // single large capture — which dumps thousands of cells into gridDirty in one tick —
+    // costs O(cells * N) and freezes the sim loop for a frame (the "big-capture stutter").
+    // setAt() bypasses the proxy and is O(1) per cell, so the cost is O(cells). (Same reason
+    // startRound rebuilds with splice+push instead of index assignment.)
+    for (const i of this.sim.gridDirty) this.state.cells.setAt(i, this.sim.grid[i]);
+    for (const i of this.sim.trailDirty) this.state.trail.setAt(i, this.sim.trail[i]);
+    for (const i of this.sim.webDirty) this.state.web.setAt(i, this.sim.web[i]);
     this.sim.gridDirty.clear();
     this.sim.trailDirty.clear();
     this.sim.webDirty.clear();

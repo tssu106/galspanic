@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>Gals Panic — Online Co-op</title>
+<title>One More Inch (한뼘더) — Online Co-op</title>
 <style>
   :root { --bg:#0b0d16; --panel:#161a2b; --ink:#e8ebf7; --muted:#8b93b5; }
   * { box-sizing:border-box; }
@@ -383,7 +383,7 @@
       <button id="loginBtn" class="iconbtn" aria-label="account">🔑</button>
     </div>
 
-    <h1 class="logo">GALS <span>PANIC</span></h1>
+    <h1 class="logo">One More <span>Inch</span></h1>
     <div class="tag">Online Co-op</div>
 
     <div class="card">
@@ -450,7 +450,7 @@
     </div>
   </div>
 
-  <h1>GALS <span>PANIC</span> — Online Co-op</h1>
+  <h1>One More <span>Inch</span> — Online Co-op</h1>
   <div id="status" data-i18n="status_connecting"></div>
   <div id="hud"></div>
   <!-- 좌측 포획 랭킹: 포획 점수(⭐) 순으로 정렬 -->
@@ -578,7 +578,7 @@ const I18N = {
     go_hint_daily: "<b>GAME OVER</b> · 랭킹에 기록됐어요",
     sh_clear: "스테이지 {0} 클리어!", sh_score: "점수", sh_best: "최고", sh_stage: "스테이지", sh_over: "게임 오버",
     btn_share: "🔗 공유", share_saved: "이미지를 저장했어요", share_copied: "결과를 복사했어요",
-    share_normal: "GALS PANIC 스테이지 {0} · {1}점!", share_daily: "GALS PANIC 오늘의 챌린지 {1}점! (스테이지 {0})",
+    share_normal: "한뼘더 스테이지 {0} · {1}점!", share_daily: "한뼘더 오늘의 챌린지 {1}점! (스테이지 {0})",
     btn_close: "✕ 닫기", title_close: "닫기", btn_save: "🖼 저장", collected: "수집",
     need_login_paren: "(로그인 필요)", login_word: "로그인",
     gallery_needlogin_html: "🔑 로그인하면 수집한 그림을 볼 수 있어요.<br><button id=\"glLogin\">로그인</button>",
@@ -635,7 +635,7 @@ const I18N = {
     go_hint_daily: "<b>GAME OVER</b> · Saved to the ranking",
     sh_clear: "Stage {0} clear!", sh_score: "Score", sh_best: "Best", sh_stage: "Stage", sh_over: "Game Over",
     btn_share: "🔗 Share", share_saved: "Image saved", share_copied: "Result copied",
-    share_normal: "GALS PANIC stage {0} · {1} pts!", share_daily: "GALS PANIC daily challenge · {1} pts! (stage {0})",
+    share_normal: "One More Inch stage {0} · {1} pts!", share_daily: "One More Inch daily challenge · {1} pts! (stage {0})",
     btn_close: "✕ Close", title_close: "Close", btn_save: "🖼 Save", collected: "collected",
     need_login_paren: "(login required)", login_word: "Log in",
     gallery_needlogin_html: "🔑 Log in to see the pictures you've collected.<br><button id=\"glLogin\">Log in</button>",
@@ -692,7 +692,7 @@ const I18N = {
     go_hint_daily: "<b>GAME OVER</b> · ランキングに記録",
     sh_clear: "ステージ{0}クリア！", sh_score: "スコア", sh_best: "ベスト", sh_stage: "ステージ", sh_over: "ゲームオーバー",
     btn_share: "🔗 シェア", share_saved: "画像を保存しました", share_copied: "結果をコピーしました",
-    share_normal: "GALS PANIC ステージ{0} · {1}点！", share_daily: "GALS PANIC 今日のチャレンジ {1}点！(ステージ{0})",
+    share_normal: "One More Inch ステージ{0} · {1}点！", share_daily: "One More Inch 今日のチャレンジ {1}点！(ステージ{0})",
     btn_close: "✕ 閉じる", title_close: "閉じる", btn_save: "🖼 保存", collected: "収集",
     need_login_paren: "（ログインが必要）", login_word: "ログイン",
     gallery_needlogin_html: "🔑 ログインすると集めた絵を見られます。<br><button id=\"glLogin\">ログイン</button>",
@@ -992,11 +992,11 @@ function buildShareCard({ stage, score, ms, daily }) {
   const g = c.getContext("2d");
   const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, "#1a1f38"); bg.addColorStop(1, "#0b0d16");
   g.fillStyle = bg; g.fillRect(0, 0, W, H);
-  // 타이틀 GALS PANIC
+  // 타이틀 One More Inch
   g.font = "800 38px system-ui, sans-serif"; g.textAlign = "left";
-  const t1 = "GALS ", w1 = g.measureText(t1).width, w2 = g.measureText("PANIC").width, sx = (W - w1 - w2) / 2;
+  const t1 = "One More ", w1 = g.measureText(t1).width, w2 = g.measureText("Inch").width, sx = (W - w1 - w2) / 2;
   g.fillStyle = "#e8ebf7"; g.fillText(t1, sx, 66);
-  g.fillStyle = "#ff5db1"; g.fillText("PANIC", sx + w1, 66);
+  g.fillStyle = "#ff5db1"; g.fillText("Inch", sx + w1, 66);
   g.textAlign = "center";
   // 클리어 그림(있으면)
   const iw = 300, ih = 450, ix = (W - iw) / 2, iy = 92;
@@ -1018,13 +1018,13 @@ async function shareResult() {
   if (!state) return;
   const stage = state.level | 0, score = state.runScore | 0, ms = state.clearMs | 0, daily = state.daily ? 1 : 0;
   const card = buildShareCard({ stage, score, ms, daily });
-  const name = `galspanic_${daily ? "daily_" : ""}${score}.png`;
+  const name = `one-more-inch_${daily ? "daily_" : ""}${score}.png`;
   const text = shareText(stage, score, daily);
   const blob = await new Promise((res) => card.toBlob(res, "image/png"));
   try {
     if (blob && navigator.canShare) {
       const file = new File([blob], name, { type: "image/png" });
-      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "GALS PANIC", text }); return; }
+      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "One More Inch", text }); return; }
     }
   } catch { return; }   // 사용자가 공유 시트를 취소한 경우 — 조용히 종료
   if (blob) {   // 폴백: 이미지 저장
@@ -1043,7 +1043,7 @@ async function downloadImage(id) {
   try {
     const blob = await fetch(`${HTTP_URL}/images/${id}_blur.jpg`).then((r) => r.blob());
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = `galspanic_${id}.jpg`;
+    a.href = URL.createObjectURL(blob); a.download = `one-more-inch_${id}.jpg`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   } catch (err) { console.warn("이미지 저장 실패:", err); }

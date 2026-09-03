@@ -1300,8 +1300,13 @@ function updateOverlays() {
         }
         saveBest(b);
         scoreHud.innerHTML = renderScore(state, b);
+        // 승리 화면: 점수 요약을 (그림을 가리는 상단 패널 대신) 캔버스 하단 배너에 그린다.
+        wonStatsLine = `⏱ ${fmtSec(state.clearMs)} · +${state.stageScore} · ${t("sh_score")} ${state.runScore}`;
+        wonBestLine  = `${t("sh_best")} ${b.score} · ⚡ ${b.timeMs ? fmtSec(b.timeMs) : "—"} · ${t("sh_stage")} ${b.stage || "—"}`;
       }
-      scoreHud.classList.remove("hidden");
+      // 승리: 복원된 그림을 가리지 않도록 상단 패널을 숨기고, 요약은 하단 배너에 표시한다.
+      // 패배: 그림 리빌이 없으므로 상단 패널을 그대로 보여준다.
+      scoreHud.classList.toggle("hidden", state.phase === "won");
       document.body.classList.add("result");
     } else {
       scoreHud.classList.add("hidden");
@@ -2517,6 +2522,8 @@ function drawOverlay() {
 let fwParticles = [];
 let fwLastBurst = 0;
 let wonCelebActive = false;
+// 승리 배너(캔버스 하단)에 그릴 점수 요약 — 상태 갱신 시 채워진다(그림을 가리는 상단 패널 대체).
+let wonStatsLine = "", wonBestLine = "";
 const FW_COLORS = ["#ff5db1", "#a3e635", "#22d3ee", "#fb923c", "#ffe066", "#c084fc", "#ffffff"];
 function spawnBurst(x, y) {
   const n = 26 + (Math.random() * 18 | 0);
@@ -2536,7 +2543,7 @@ function drawWinCelebration(now, dt) {
 
   // 아래쪽에 불투명 배너 자리를 남기고, 그 위 영역에 그림을 "가로 폭 전체"로 크게 보여준다
   // (가로는 잘리지 않음). 세로로 넘치면 위→아래로 천천히 스크롤(핑퐁)하며 그림 전체를 다 훑는다.
-  const barH = 100, areaH = H - barH;
+  const barH = 140, areaH = H - barH;
   if (imgReady && img.width && img.height) {
     const scale = W / img.width;                                 // 가로에 꽉 맞춤 → 그림 전체가 다 보임(가로 크롭 없음)
     const dw = img.width * scale, dh = img.height * scale;       // dw === W
@@ -2571,18 +2578,27 @@ function drawWinCelebration(now, dt) {
   ctx.globalAlpha = 1;
 
   // ---- 불투명 CLEAR 배너: 하단 가로 막대 (그림을 가리지 않는다) ----
+  // 점수 요약(클리어 시간·획득·누적·최고)도 여기 함께 표시한다 — 상단 패널이 그림을 가리지 않도록.
   const barY = H - barH;
   ctx.fillStyle = "#0b0e1a"; ctx.fillRect(0, barY, W, barH);                 // 완전 불투명 막대
   ctx.strokeStyle = "#a3e635"; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(0, barY + 1); ctx.lineTo(W, barY + 1); ctx.stroke();   // 상단 강조선
   ctx.textAlign = "center";
-  ctx.fillStyle = "#a3e635"; ctx.font = "bold 32px system-ui";
-  ctx.fillText(t("level_clear", state.level), W / 2, barY + 38);
+  ctx.fillStyle = "#a3e635"; ctx.font = "bold 30px system-ui";
+  ctx.fillText(t("level_clear", state.level), W / 2, barY + 36);
+  if (wonStatsLine) {   // ⏱ 시간 · +스테이지점수 · 점수 누적
+    ctx.fillStyle = "#d7ffe4"; ctx.font = "600 15px system-ui";
+    ctx.fillText(wonStatsLine, W / 2, barY + 62);
+  }
+  if (wonBestLine) {    // 최고 기록
+    ctx.fillStyle = "#8b93b5"; ctx.font = "12px system-ui";
+    ctx.fillText(wonBestLine, W / 2, barY + 84);
+  }
   // No auto-advance: let players admire the picture, then press Enter (or tap on mobile) to continue.
   const pulse = 0.55 + 0.45 * Math.sin(now / 350);
   ctx.globalAlpha = pulse;
   ctx.fillStyle = "#c9d0f0"; ctx.font = "15px system-ui";
-  ctx.fillText(t(IS_TOUCH ? "next_stage_touch" : "next_stage"), W / 2, barY + 66);
+  ctx.fillText(t(IS_TOUCH ? "next_stage_touch" : "next_stage"), W / 2, barY + 116);
   ctx.globalAlpha = 1;
   ctx.textAlign = "left";
 }

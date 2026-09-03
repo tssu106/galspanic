@@ -6,6 +6,7 @@ export class Player extends Schema {
   @type("string") id: string = "";
   @type("string") name: string = "";
   @type("string") color: string = "#ffffff";
+  @type("string") skin: string = "dot";   // 마커 스킨 id (입장 시 클라가 전달, 다른 플레이어에게도 표시)
   @type("number") owner: number = 0;    // 1-based slot; matches trail cell values
   @type("number") x: number = 0;        // grid coords
   @type("number") y: number = 0;

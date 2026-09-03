@@ -403,7 +403,7 @@ export class GameRoom extends Room<GameState> {
     return 1;
   }
 
-  onJoin(client: Client, options: { name?: string; token?: string }) {
+  onJoin(client: Client, options: { name?: string; token?: string; skin?: string }) {
     const slot = this.freeSlot();
     const sp = this.sim.addPlayer(client.sessionId, slot);
 
@@ -411,6 +411,9 @@ export class GameRoom extends Room<GameState> {
     p.id = client.sessionId;
     p.name = options?.name || `P${slot}`;
     p.color = COLORS[(slot - 1) % COLORS.length];
+    // 마커 스킨: 클라가 보낸 id 를 그대로 저장(다른 플레이어에게도 브로드캐스트). 안전한 짧은
+    // 문자열만 허용(영숫자·_-, 24자 이하), 없으면 기본 "dot". 검증은 화면 표시용이라 가벼움.
+    { const s = String(options?.skin ?? ""); p.skin = /^[a-zA-Z0-9_-]{1,24}$/.test(s) ? s : "dot"; }
     p.owner = slot;
     p.x = sp.x; p.y = sp.y; p.lives = sp.lives;
     this.state.players.set(client.sessionId, p);

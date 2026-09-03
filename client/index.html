@@ -364,6 +364,11 @@
                border-radius:8px; padding:8px 12px; font-size:13px; cursor:pointer; }
   #devWinBtn:hover { background:#276b3f; }
   #devWinBtn.hidden { display:none; }
+  #devClearBtn { position:fixed; left:14px; top:246px; z-index:40; background:#5e4a1d; color:#ffeec2;
+                 border:1px solid #b98b1c; border-radius:8px; padding:8px 12px; font-size:13px;
+                 font-weight:700; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+  #devClearBtn:hover { background:#7a621f; }
+  #devClearBtn.hidden { display:none; }
 </style>
 </head>
 <body>
@@ -533,6 +538,7 @@
   <button id="devLaserBtn" class="hidden" data-i18n="dev_laser"></button>
   <button id="devLoseBtn" class="hidden" data-i18n="dev_lose"></button>
   <button id="devWinBtn" class="hidden" data-i18n="dev_win"></button>
+  <button id="devClearBtn" class="hidden" data-i18n="dev_clear"></button>
 
   <!-- 모바일 터치 컨트롤: 플로팅 조이스틱(4방향 스냅) + 질주 (터치 기기·게임 중에만 표시) -->
   <div id="touch" class="hidden" aria-hidden="true">
@@ -610,7 +616,7 @@ const I18N = {
     item_missile: "미사일!", item_freeze: "프리즈!", item_life: "목숨 +1!", item_generic: "아이템!",
     boss_incoming: "보스 출현", restart_here: "Enter ▶ 이 방에서 재시작", stage_n: "스테이지 {0}",
     level_clear: "레벨 {0} 클리어!", next_stage: "Enter ▶ 다음 스테이지", next_stage_touch: "탭하여 다음 스테이지 ▶",
-    dev_boss: "🕳 보스 소환", dev_laser: "⚡ 레이저 보스", dev_lose: "💀 게임오버", dev_win: "🏆 스테이지 완료",
+    dev_boss: "🕳 보스 소환", dev_laser: "⚡ 레이저 보스", dev_lose: "💀 게임오버", dev_win: "🏆 스테이지 완료", dev_clear: "🧹 몬스터 모두 제거",
     collected_fmt: "{0} / {1} 수집",
   },
   en: {
@@ -667,7 +673,7 @@ const I18N = {
     item_missile: "Missile!", item_freeze: "Freeze!", item_life: "Life +1!", item_generic: "Item!",
     boss_incoming: "BOSS INCOMING", restart_here: "Enter ▶ Restart in this room", stage_n: "Stage {0}",
     level_clear: "LEVEL {0} CLEAR!", next_stage: "Enter ▶ Next stage", next_stage_touch: "Tap for next stage ▶",
-    dev_boss: "🕳 Summon Boss", dev_laser: "⚡ Laser Boss", dev_lose: "💀 Game Over", dev_win: "🏆 Stage Clear",
+    dev_boss: "🕳 Summon Boss", dev_laser: "⚡ Laser Boss", dev_lose: "💀 Game Over", dev_win: "🏆 Stage Clear", dev_clear: "🧹 Clear Monsters",
     collected_fmt: "{0} / {1} collected",
   },
   ja: {
@@ -724,7 +730,7 @@ const I18N = {
     item_missile: "ミサイル！", item_freeze: "フリーズ！", item_life: "ライフ +1！", item_generic: "アイテム！",
     boss_incoming: "ボス出現", restart_here: "Enter ▶ この部屋でリスタート", stage_n: "ステージ {0}",
     level_clear: "レベル {0} クリア！", next_stage: "Enter ▶ 次のステージ", next_stage_touch: "タップで次のステージ ▶",
-    dev_boss: "🕳 ボス召喚", dev_laser: "⚡ レーザーボス", dev_lose: "💀 ゲームオーバー", dev_win: "🏆 ステージクリア",
+    dev_boss: "🕳 ボス召喚", dev_laser: "⚡ レーザーボス", dev_lose: "💀 ゲームオーバー", dev_win: "🏆 ステージクリア", dev_clear: "🧹 敵を全滅",
     collected_fmt: "{0} / {1} 収集",
   },
 };
@@ -797,6 +803,7 @@ const devBossBtn = document.getElementById("devBossBtn");  // dev 전용 보스 
 const devLaserBtn = document.getElementById("devLaserBtn"); // dev 전용 레이저 보스 버튼
 const devLoseBtn = document.getElementById("devLoseBtn");   // dev 전용 게임오버 미리보기 버튼
 const devWinBtn = document.getElementById("devWinBtn");     // dev 전용 스테이지 완료 미리보기 버튼
+const devClearBtn = document.getElementById("devClearBtn"); // dev 전용 몬스터 모두 제거 버튼
 const onlineNum = document.getElementById("onlineNum");
 const createBtn = document.getElementById("createBtn");
 const codeInput = document.getElementById("codeInput");
@@ -1249,7 +1256,7 @@ function updateOverlays() {
       if (!IS_TOUCH) chatPanel.classList.remove("hidden");           // 모바일에선 채팅 로그 숨김
       if (IS_TOUCH && touchEl) touchEl.classList.remove("hidden");   // 모바일 터치 컨트롤 노출
       document.body.classList.add("ingame");                         // 인게임: 제목 숨김 + 모바일 스크롤 잠금
-      if (devMode) { devBossBtn.classList.remove("hidden"); devLaserBtn.classList.remove("hidden"); devLoseBtn.classList.remove("hidden"); devWinBtn.classList.remove("hidden"); }
+      if (devMode) { devBossBtn.classList.remove("hidden"); devLaserBtn.classList.remove("hidden"); devLoseBtn.classList.remove("hidden"); devWinBtn.classList.remove("hidden"); devClearBtn.classList.remove("hidden"); }
     }
     // 게임 오버: 화면 전체 3D 카운트다운(10초). 그 안에 Enter 면 이 방에서 재시작(window keydown),
     // 시간이 지나면 방을 떠나 첫(타이틀) 화면으로 되돌린다.
@@ -1351,7 +1358,7 @@ function returnToTitle() {
   document.getElementById("rank").classList.add("hidden");
   document.getElementById("gameover").classList.add("hidden"); hideCountdown3D();
   lastWonImageId = null;
-  devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden"); devLoseBtn.classList.add("hidden"); devWinBtn.classList.add("hidden");
+  devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden"); devLoseBtn.classList.add("hidden"); devWinBtn.classList.add("hidden"); devClearBtn.classList.add("hidden");
   document.getElementById("touch")?.classList.add("hidden"); pressOrder.length = 0; resetTouch();   // 터치 컨트롤 숨김 + 상태 초기화
   document.body.classList.remove("ingame");   // 스크롤 잠금 해제 + (있다면) 제목 복원
   scoreHud.classList.add("hidden"); document.body.classList.remove("result"); lastScoreKey = "";
@@ -1375,6 +1382,8 @@ devBossBtn.addEventListener("click", () => { room?.send("devBoss"); devBossBtn.b
 devLaserBtn.addEventListener("click", () => { room?.send("devLaser"); devLaserBtn.blur(); });
 devLoseBtn.addEventListener("click", () => { room?.send("devLose"); devLoseBtn.blur(); });
 devWinBtn.addEventListener("click", () => { room?.send("devWin"); devWinBtn.blur(); });
+// dev 몬스터 모두 제거: 필드의 적·탄·미사일·예고 보스를 즉시 비운다 (반복 클릭 가능)
+devClearBtn.addEventListener("click", () => { room?.send("devClear"); devClearBtn.blur(); });
 // 이름 칸에서 Enter 로도 시작 (IME 조합 중 Enter 는 무시 — 부분 입력 방지)
 nameInput.addEventListener("keydown", (e) => {
   e.stopPropagation();

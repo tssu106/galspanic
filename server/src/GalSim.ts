@@ -645,6 +645,18 @@ export class GalSim {
     e.modeT = 1.2; e.forceLaser = true;
   }
 
+  // dev "몬스터 모두 제거": 현재 필드의 모든 적과 그들이 만든 위협(탄·레이저·미사일)과
+  // 등장 대기 중인 보스(블랙홀 예고)까지 즉시 비운다. 진행도/점수/보스 타이머는 건드리지
+  // 않으므로 이후 적 스폰과 보스 등장은 평소대로 이어진다. (스키마 배열은 GameRoom.tick 이
+  // 길이를 맞춰 자동 정리한다.)
+  devClearMonsters() {
+    this.enemies = [];
+    this.projectiles = [];
+    this.beams = [];
+    this.missiles = [];
+    this.pendingWarps = [];
+  }
+
   private renormVel(e: SimEnemy) {   // 방향 유지, 크기만 현재 speed 로
     const c = Math.hypot(e.vx, e.vy) || 1; e.vx = e.vx / c * e.speed; e.vy = e.vy / c * e.speed;
   }

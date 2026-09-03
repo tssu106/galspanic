@@ -916,6 +916,25 @@ const SKINS = [
   { id:"star8", kind:"draw",  draw:drawStar8Skin, unlock:{type:"daily"} },
 ];
 const SKIN_BY_ID = Object.fromEntries(SKINS.map(s => [s.id, s]));
+// 이모지는 textBaseline="middle" 이어도 폰트마다 상하(때론 좌우)로 치우쳐 그려진다. 글리프별
+// 시각 중심(그려진 픽셀 bbox 중앙)을 한 번 측정해 폰트크기 대비 비율(ox/oy)로 캐시 → 렌더 시 보정.
+function measureGlyphOffset(glyph) {
+  try {
+    const S = 64, fs = 40, cv = document.createElement("canvas"); cv.width = S; cv.height = S;
+    const g = cv.getContext("2d");
+    g.font = `${fs}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",system-ui,sans-serif`;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(glyph, S / 2, S / 2);
+    const d = g.getImageData(0, 0, S, S).data;
+    let minX = S, maxX = 0, minY = S, maxY = 0, n = 0;
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      if (d[(y * S + x) * 4 + 3] > 16) { n++; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+    }
+    if (!n) return { ox: 0, oy: 0 };
+    return { ox: ((minX + maxX) / 2 - S / 2) / fs, oy: ((minY + maxY) / 2 - S / 2) / fs };
+  } catch { return { ox: 0, oy: 0 }; }
+}
+for (const s of SKINS) if (s.kind === "emoji") { const o = measureGlyphOffset(s.glyph); s.ox = o.ox; s.oy = o.oy; }
 let selectedSkin = "dot";
 try { const s = localStorage.getItem("galspanic:skin"); if (s && SKIN_BY_ID[s]) selectedSkin = s; } catch {}
 function bestStageLocal()   { try { return +(localStorage.getItem("galsBestStage") || 0) || 0; } catch { return 0; } }
@@ -940,7 +959,8 @@ function drawMarkerSkin(g, skinId, cx, cy, r, color) {
     const fs = r * 1.7;   // 원보다 약간 작게 → 색 테두리가 보이고 중앙 정렬이 또렷
     g.font = `${fs}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",system-ui,sans-serif`;
     g.textAlign = "center"; g.textBaseline = "middle";
-    g.fillText(s.glyph, cx, cy);
+    // 글리프별 시각중심 보정(ox/oy: 폰트크기 대비 비율) → 이모지가 원 정중앙에 오게 한다.
+    g.fillText(s.glyph, cx - (s.ox || 0) * fs, cy - (s.oy || 0) * fs);
     g.textAlign = "left"; g.textBaseline = "alphabetic";
   } else if (s.kind === "draw") {
     s.draw(g, cx, cy, r * 0.92, color);

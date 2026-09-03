@@ -4,6 +4,25 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>One More Inch (한뼘더) — Online Co-op</title>
+<!-- ── 구글 애드센스 (H5 Games Ads · 스테이지 클리어 전면광고) ──────────────────────
+     본인 AdSense 퍼블리셔 ID(ca-pub-...)를 아래 ADSENSE_CLIENT 에 넣으면, 스테이지 클리어 후
+     다음 스테이지로 넘어갈 때 전면(인터스티셜) 광고가 뜹니다. 비워두면 광고 비활성(게임 정상 동작).
+     전제: (1) 공개 도메인에서 서비스 + AdSense 사이트 승인, (2) 계정에 H5 Games Ads(전면/보상형)
+     사용 설정. 개발 중에는 localhost/file:// 에서 실제 광고가 뜨지 않습니다(코드/흐름만 확인 가능). -->
+<script>
+  window.ADSENSE_CLIENT = "";   // 예: "ca-pub-1234567890123456"  (비우면 광고 비활성)
+  window.AD_FROM_STAGE  = 2;    // 이 스테이지 클리어부터 광고 노출 (1스테이지 클리어는 제외)
+  window.adsbygoogle = window.adsbygoogle || [];
+  if (window.ADSENSE_CLIENT) {
+    const s = document.createElement("script");
+    s.async = true; s.crossOrigin = "anonymous";
+    s.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=" + window.ADSENSE_CLIENT;
+    (document.head || document.documentElement).appendChild(s);
+    // Ad Placement API: 게임 레벨 전환용 전면/보상형 광고 호출 헬퍼
+    window.adBreak = window.adConfig = function (o) { adsbygoogle.push(o); };
+    window.adConfig({ preloadAdBreaks: "on", sound: "on" });   // 다음 광고 미리 로드
+  }
+</script>
 <style>
   :root { --bg:#0b0d16; --panel:#161a2b; --ink:#e8ebf7; --muted:#8b93b5; }
   * { box-sizing:border-box; }
@@ -1423,9 +1442,9 @@ window.addEventListener("keydown", (e) => {
   if (CODE_DIR[e.code] != null || e.code === "Enter") e.preventDefault();
   if (e.repeat) return;                       // ignore OS key auto-repeat
   if (e.code === "Enter") {
-    // while playing, Enter opens the chat box; on win/loss it restarts
+    // while playing, Enter opens the chat box; on win/loss it restarts (win → 광고 후 다음 스테이지)
     if (state && state.phase === "playing") { releaseAllKeys(); chatInput.focus(); return; }
-    room?.send("restart"); return;
+    restartOrNextStage(); return;
   }
   if (e.code === "ShiftLeft" || e.code === "ShiftRight") { boostHeld = true; syncInput(); return; }
   if (!pressOrder.includes(e.code)) pressOrder.push(e.code);
@@ -1454,7 +1473,27 @@ chatInput.addEventListener("keydown", (e) => {
 function releaseAllKeys(){ pressOrder.length = 0; boostHeld = false; syncInput(); }
 window.addEventListener("blur", releaseAllKeys);
 document.addEventListener("visibilitychange", () => { if (document.hidden) releaseAllKeys(); });
-restartBtn.onclick = () => room?.send("restart");
+// 클리어/게임오버에서 "다음/재시작". 승리(클리어)이고 설정 스테이지 이상이면 다음 스테이지로
+// 넘어가기 전에 전면광고(H5 Games Ads)를 한 번 노출한다. 광고가 없거나(퍼블리셔 ID 미설정) 스킵돼도
+// adBreakDone 이 항상 호출되므로 게임은 정상적으로 다음 스테이지로 진행된다.
+let adBreakInProgress = false;
+function restartOrNextStage() {
+  if (!room) return;
+  const wonAdvance = state && state.phase === "won" && (state.level | 0) >= (window.AD_FROM_STAGE | 0);
+  if (wonAdvance && typeof window.adBreak === "function") {
+    if (adBreakInProgress) return;   // 광고 표시 중 중복 트리거 방지
+    adBreakInProgress = true;
+    window.adBreak({
+      type: "next",                  // 레벨 전환 사이의 전면광고
+      name: "stage-clear",
+      beforeAd: () => { releaseAllKeys(); },
+      adBreakDone: () => { adBreakInProgress = false; room && room.send("restart"); },
+    });
+    return;
+  }
+  room.send("restart");
+}
+restartBtn.onclick = () => restartOrNextStage();
 
 // ── 모바일 터치 컨트롤: 플로팅 조이스틱(4방향 스냅) + 질주 버튼. ──
 // 좌측 하단(joyZone)을 터치하면 그 지점에 조이스틱이 생기고, 스틱을 민 방향을 가장 가까운
@@ -1502,8 +1541,8 @@ function resetTouch() {
 }
 joyZone?.addEventListener("pointerdown", (e) => {
   e.preventDefault();
-  // 클리어/게임오버 화면에선 조이스틱 대신 탭으로 진행(Enter 대체)
-  if (state && (state.phase === "won" || state.phase === "lost")) { room?.send("restart"); return; }
+  // 클리어/게임오버 화면에선 조이스틱 대신 탭으로 진행(Enter 대체, 승리 시 광고 후 다음 스테이지)
+  if (state && (state.phase === "won" || state.phase === "lost")) { restartOrNextStage(); return; }
   joyId = e.pointerId; joyCx = e.clientX; joyCy = e.clientY;
   joy.style.left = joyCx + "px"; joy.style.top = joyCy + "px";
   joyKnob.style.transform = "translate(0,0)";

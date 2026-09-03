@@ -3,5 +3,7 @@ dist/
 server/public/images/*_orig.*
 .env
 .DS_Store
+# JetBrains IDE 설정
+.idea/
 # generated: browser bundle of the shared sim, rebuilt on `npm start` (prestart)
 client/sim.bundle.js

@@ -1091,6 +1091,13 @@ export class GalSim {
     let mainId = -1, mainSize = -1;
     for (let id = 0; id < nComp; id++)
       if (enemiesOf[id].length && size[id] > mainSize) { mainSize = size[id]; mainId = id; }
+    // 필드에 적이 하나도 없으면 "적 없는 영역 전체 점유"를 막는다. 가장 큰 빈 영역은 열린 채 두고
+    // 실제로 에워싼(그 외) 영역만 점유한다 → 몬스터가 없어도 직접 90%까지 밝혀야 클리어된다.
+    let openId = -1;
+    if (this.enemies.length === 0) {
+      let bigSize = -1;
+      for (let id = 0; id < nComp; id++) if (size[id] > bigSize) { bigSize = size[id]; openId = id; }
+    }
     const trapThreshold = this.totalInterior * TRAP_RATIO;
     const claimIt = new Uint8Array(nComp);
     const trapped = new Set<SimEnemy>();
@@ -1099,7 +1106,10 @@ export class GalSim {
     let trapCount = 0, trapSX = 0, trapSY = 0;
     for (let id = 0; id < nComp; id++) {
       const es = enemiesOf[id];
-      if (es.length === 0) { claimIt[id] = 1; continue; }
+      if (es.length === 0) {
+        if (id === openId) continue;   // 적 0마리일 때 가장 큰 빈 영역은 열어둔다(에워싼 부분만 점유)
+        claimIt[id] = 1; continue;
+      }
       const keepOpen = (id === mainId) && size[id] > trapThreshold;
       if (!keepOpen) {
         claimIt[id] = 1;

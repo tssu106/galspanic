@@ -106,6 +106,11 @@ export class GameState extends Schema {
   // 데일리 챌린지 방이면 1 (클라가 UI·랭킹 제출을 다르게 처리). 0 = 일반 방.
   @type("number") daily: number = 0;
 
+  // 로그라이트 버프. boonOffers: 클리어 시 제시되는 3택 후보 id들(콤마 구분, 비면 선택창 없음).
+  // boons: 이번 런에 적용된 버프 누적("id:count" 콤마 구분) — 클라가 현재 스택 표시용.
+  @type("string") boonOffers: string = "";
+  @type("string") boons: string = "";
+
   // Public id of the current image (client fetches a BLURRED version only).
   @type("string") imageId: string = "";
 

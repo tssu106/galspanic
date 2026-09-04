@@ -275,6 +275,22 @@
   #scoreHud .sh-run b { color:#a3e635; font-size:17px; font-variant-numeric:tabular-nums; }
   #scoreHud .sh-best { font-size:12px; color:#8b93b5; font-variant-numeric:tabular-nums; }
   body.result #hud { display:none; }   /* 결과 화면에선 실시간 칩 대신 점수 패널을 보여준다 */
+  /* 로그라이트 버프 3택 카드(클리어 화면 중앙) */
+  #boonPick { position:fixed; left:50%; top:47%; transform:translate(-50%,-50%); z-index:55;
+              display:flex; flex-direction:column; align-items:center; gap:12px; width:min(560px,94vw); pointer-events:none; }
+  #boonPick.hidden { display:none; }
+  #boonPick .bp-title { font-size:16px; font-weight:800; color:#ffe08a; text-align:center; text-shadow:0 2px 12px rgba(0,0,0,.8); }
+  #boonPick .bp-cards { display:flex; gap:10px; width:100%; justify-content:center; }
+  #boonPick .bp-card { pointer-events:auto; flex:1; max-width:168px; background:rgba(12,16,30,.94); border:1px solid #3a4570;
+                       border-radius:14px; padding:14px 10px; text-align:center; cursor:pointer;
+                       transition:transform .1s, border-color .1s; box-shadow:0 12px 32px rgba(0,0,0,.55); }
+  #boonPick .bp-card:hover { transform:translateY(-3px); border-color:#a3e635; }
+  #boonPick .bp-ico { font-size:30px; line-height:1; }
+  #boonPick .bp-name { font-size:15px; font-weight:800; color:#e8ebf7; margin-top:7px; }
+  #boonPick .bp-desc { font-size:12px; color:#9fb0d6; margin-top:5px; line-height:1.4; }
+  #boonPick .bp-key { display:inline-block; margin-top:9px; font-size:11px; color:#8b93b5;
+                      border:1px solid #2a3350; border-radius:6px; padding:1px 8px; }
+  #boonPick .bp-cur { font-size:12px; color:#dfe4f5; text-align:center; min-height:16px; text-shadow:0 1px 8px rgba(0,0,0,.8); }
   #shareBtn { background:#232a44; color:#e8ebf7; font-weight:700; }
   #shareBtn:hover { background:#2d3656; }
   /* 공유 결과 안내 토스트 */
@@ -530,6 +546,13 @@
   <!-- 점수/최고기록 패널: 클리어·게임오버 화면에서만 표시 (updateOverlays 가 내용 채움) -->
   <div id="scoreHud" class="hidden"></div>
 
+  <!-- 로그라이트 버프 선택: 클리어 화면에서 3택 (updateOverlays 가 카드 채움) -->
+  <div id="boonPick" class="hidden">
+    <div class="bp-title" data-i18n="boon_title"></div>
+    <div id="boonCards" class="bp-cards"></div>
+    <div id="boonCur" class="bp-cur"></div>
+  </div>
+
   <!-- 데일리 챌린지 랭킹 모달: 그날 같은 보드의 점수 순위 -->
   <div id="dailyBoard" class="hidden">
     <div class="dwrap">
@@ -624,6 +647,12 @@ const I18N = {
     go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ 이어하기",
     go_hint_daily: "<b>GAME OVER</b> · 랭킹에 기록됐어요",
     sh_clear: "스테이지 {0} 클리어!", sh_score: "점수", sh_best: "최고", sh_stage: "스테이지", sh_over: "게임 오버",
+    boon_title: "버프 선택 — 하나 골라 다음 스테이지로", boon_cur: "현재",
+    boon_life_n: "생명력", boon_life_d: "매 스테이지 목숨 +1",
+    boon_score_n: "점수광", boon_score_d: "이후 점수 +30%",
+    boon_slow_n: "둔화", boon_slow_d: "적 이동속도 -15%",
+    boon_speed_n: "신속", boon_speed_d: "내 이동속도 +12%",
+    boon_stam_n: "지구력", boon_stam_d: "질주 지속·회복 강화",
     btn_share: "🔗 공유", share_saved: "이미지를 저장했어요", share_copied: "결과를 복사했어요",
     share_normal: "한뼘더 스테이지 {0} · {1}점!", share_daily: "한뼘더 오늘의 챌린지 {1}점! (스테이지 {0})",
     btn_close: "✕ 닫기", title_close: "닫기", btn_save: "🖼 저장", collected: "수집",
@@ -682,6 +711,12 @@ const I18N = {
     go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ Continue",
     go_hint_daily: "<b>GAME OVER</b> · Saved to the ranking",
     sh_clear: "Stage {0} clear!", sh_score: "Score", sh_best: "Best", sh_stage: "Stage", sh_over: "Game Over",
+    boon_title: "Pick a boon — choose one to continue", boon_cur: "Active",
+    boon_life_n: "Vitality", boon_life_d: "+1 life each stage",
+    boon_score_n: "Scorer", boon_score_d: "+30% score gained",
+    boon_slow_n: "Slow", boon_slow_d: "Enemies -15% speed",
+    boon_speed_n: "Swift", boon_speed_d: "You move +12% faster",
+    boon_stam_n: "Stamina", boon_stam_d: "Sprint lasts & recovers more",
     btn_share: "🔗 Share", share_saved: "Image saved", share_copied: "Result copied",
     share_normal: "One More Inch stage {0} · {1} pts!", share_daily: "One More Inch daily challenge · {1} pts! (stage {0})",
     btn_close: "✕ Close", title_close: "Close", btn_save: "🖼 Save", collected: "collected",
@@ -740,6 +775,12 @@ const I18N = {
     go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ つづける",
     go_hint_daily: "<b>GAME OVER</b> · ランキングに記録",
     sh_clear: "ステージ{0}クリア！", sh_score: "スコア", sh_best: "ベスト", sh_stage: "ステージ", sh_over: "ゲームオーバー",
+    boon_title: "バフ選択 — 1つ選んで次のステージへ", boon_cur: "現在",
+    boon_life_n: "生命力", boon_life_d: "毎ステージ ライフ+1",
+    boon_score_n: "スコア", boon_score_d: "以降スコア +30%",
+    boon_slow_n: "鈍化", boon_slow_d: "敵の移動 -15%",
+    boon_speed_n: "俊足", boon_speed_d: "自分の移動 +12%",
+    boon_stam_n: "スタミナ", boon_stam_d: "ダッシュ持続・回復強化",
     btn_share: "🔗 シェア", share_saved: "画像を保存しました", share_copied: "結果をコピーしました",
     share_normal: "One More Inch ステージ{0} · {1}点！", share_daily: "One More Inch 今日のチャレンジ {1}点！(ステージ{0})",
     btn_close: "✕ 閉じる", title_close: "閉じる", btn_save: "🖼 保存", collected: "収集",
@@ -1421,6 +1462,7 @@ function updateOverlays() {
       : t("waiting_players", players.length);
     // 빠른참가는 곧 자동 시작되므로 "코드 공유" 안내 대신 그에 맞는 문구를 보여준다.
     lobbyHint.textContent = joinMode === "quick" ? t("lobby_hint_quick") : t("lobby_hint");
+    hideBoonPick();
   } else {
     // 게임 시작됨(또는 그 이후) → 대기실 닫고 게임/채팅/dev 버튼 노출
     if (!lobby.classList.contains("hidden")) lobby.classList.add("hidden");
@@ -1486,10 +1528,14 @@ function updateOverlays() {
       // 패배: 그림 리빌이 없으므로 상단 패널을 그대로 보여준다.
       scoreHud.classList.toggle("hidden", state.phase === "won");
       document.body.classList.add("result");
+      // 로그라이트 버프 3택: 클리어 + 서버가 후보를 제시했을 때만
+      if (state.phase === "won" && state.boonOffers) renderBoons(state.boonOffers, state.boons);
+      else hideBoonPick();
     } else {
       scoreHud.classList.add("hidden");
       document.body.classList.remove("result");
       lastScoreKey = "";
+      hideBoonPick();
     }
   }
 }
@@ -1545,6 +1591,7 @@ function returnToTitle() {
   document.getElementById("touch")?.classList.add("hidden"); pressOrder.length = 0; resetTouch();   // 터치 컨트롤 숨김 + 상태 초기화
   document.body.classList.remove("ingame");   // 스크롤 잠금 해제 + (있다면) 제목 복원
   scoreHud.classList.add("hidden"); document.body.classList.remove("result"); lastScoreKey = "";
+  hideBoonPick();
 
   startScreen.classList.remove("hidden");
   [startBtn, createBtn, joinBtn].forEach((b) => (b.disabled = false));
@@ -1600,6 +1647,12 @@ window.addEventListener("keydown", (e) => {
   if (typingInField()) return;   // 입력창/셀렉트에 타이핑 중이면 게임 입력으로 가로채지 않음
   if (CODE_DIR[e.code] != null || e.code === "Enter") e.preventDefault();
   if (e.repeat) return;                       // ignore OS key auto-repeat
+  // 클리어 화면 버프 선택: 1/2/3 로 해당 버프, Enter 로 첫 번째 버프
+  if (state && state.phase === "won" && state.boonOffers) {
+    const di = { Digit1: 0, Numpad1: 0, Digit2: 1, Numpad2: 1, Digit3: 2, Numpad3: 2 }[e.code];
+    if (di != null) { pickBoon(boonOfferList[di]); return; }
+    if (e.code === "Enter") { pickBoon(boonOfferList[0]); return; }
+  }
   if (e.code === "Enter") {
     // while playing, Enter opens the chat box; on win/loss it restarts (win → 광고 후 다음 스테이지)
     if (state && state.phase === "playing") { releaseAllKeys(); chatInput.focus(); return; }
@@ -1636,23 +1689,65 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) relea
 // 넘어가기 전에 전면광고(H5 Games Ads)를 한 번 노출한다. 광고가 없거나(퍼블리셔 ID 미설정) 스킵돼도
 // adBreakDone 이 항상 호출되므로 게임은 정상적으로 다음 스테이지로 진행된다.
 let adBreakInProgress = false;
-function restartOrNextStage() {
-  if (!room) return;
+// 클리어 진행(광고 게이팅 공통): 승리+설정 스테이지 이상이면 전면광고 후 sendFn 실행, 아니면 즉시.
+function advanceWithAd(sendFn) {
   const wonAdvance = state && state.phase === "won" && (state.level | 0) >= (window.AD_FROM_STAGE | 0);
   if (wonAdvance && typeof window.adBreak === "function") {
     if (adBreakInProgress) return;   // 광고 표시 중 중복 트리거 방지
     adBreakInProgress = true;
     window.adBreak({
-      type: "next",                  // 레벨 전환 사이의 전면광고
-      name: "stage-clear",
+      type: "next", name: "stage-clear",
       beforeAd: () => { releaseAllKeys(); },
-      adBreakDone: () => { adBreakInProgress = false; room && room.send("restart"); },
+      adBreakDone: () => { adBreakInProgress = false; sendFn(); },
     });
     return;
   }
-  room.send("restart");
+  sendFn();
+}
+function restartOrNextStage() {
+  if (!room) return;
+  if (state && state.phase === "won" && state.boonOffers) return;   // 버프를 골라야 진행(버프 카드에서 선택)
+  advanceWithAd(() => room.send("restart"));
 }
 restartBtn.onclick = () => restartOrNextStage();
+
+// ── 로그라이트 버프 3택 ──
+const BOON_META = {
+  life:  { ico: "❤️", n: "boon_life_n",  d: "boon_life_d" },
+  score: { ico: "✨", n: "boon_score_n", d: "boon_score_d" },
+  slow:  { ico: "🐢", n: "boon_slow_n",  d: "boon_slow_d" },
+  speed: { ico: "⚡", n: "boon_speed_n", d: "boon_speed_d" },
+  stam:  { ico: "🏃", n: "boon_stam_n",  d: "boon_stam_d" },
+};
+const boonPickEl = document.getElementById("boonPick");
+const boonCardsEl = document.getElementById("boonCards");
+const boonCurEl = document.getElementById("boonCur");
+let lastBoonOffers = "";
+let boonOfferList = [];
+function renderBoons(offersStr, boonsStr) {
+  if (offersStr !== lastBoonOffers) {   // 후보가 바뀔 때만 카드 재생성
+    lastBoonOffers = offersStr;
+    boonOfferList = offersStr.split(",").filter(Boolean);
+    boonCardsEl.innerHTML = boonOfferList.map((id, i) => {
+      const m = BOON_META[id]; if (!m) return "";
+      return `<div class="bp-card" data-boon="${id}"><div class="bp-ico">${m.ico}</div>`
+           + `<div class="bp-name">${t(m.n)}</div><div class="bp-desc">${t(m.d)}</div>`
+           + `<div class="bp-key">${i + 1}</div></div>`;
+    }).join("");
+    boonCardsEl.querySelectorAll(".bp-card").forEach((el) => el.addEventListener("click", () => pickBoon(el.dataset.boon)));
+    const cur = (boonsStr || "").split(",").filter(Boolean).map((kv) => {
+      const [k, c] = kv.split(":"); const m = BOON_META[k]; return m ? `${m.ico}×${c}` : "";
+    }).filter(Boolean).join("  ");
+    boonCurEl.textContent = cur ? `${t("boon_cur")}: ${cur}` : "";
+  }
+  boonPickEl.classList.remove("hidden");
+}
+function hideBoonPick() { boonPickEl.classList.add("hidden"); lastBoonOffers = ""; boonOfferList = []; }
+function pickBoon(id) {
+  if (!room || !boonOfferList.includes(id)) return;
+  hideBoonPick();
+  advanceWithAd(() => room.send("boon", { id }));   // 광고 후(있으면) 서버에 선택 전송 → 다음 스테이지
+}
 
 // ── 모바일 터치 컨트롤: 플로팅 조이스틱(4방향 스냅) + 질주 버튼. ──
 // 좌측 하단(joyZone)을 터치하면 그 지점에 조이스틱이 생기고, 스틱을 민 방향을 가장 가까운
@@ -2872,7 +2967,8 @@ function drawHud() {
       <span class="rscore">⭐${p.bonus | 0}</span><span class="rtraps">🕸${p.traps | 0}</span></div>`;
   }).join("");
   rankEl.classList.toggle("hidden", state.phase === "lobby" || ranked.length === 0);
-  restartBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
+  // 클리어 화면에 버프 선택창이 떠 있으면 "다음" 버튼 대신 버프 카드로 진행하므로 버튼은 숨긴다.
+  restartBtn.style.display = (state.phase === "lost" || (state.phase === "won" && !state.boonOffers)) ? "" : "none";
   shareBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
   // 클리어(승리) 화면에서는 채팅 입력창을 숨긴다
   chatInput.style.display = (state.phase === "won") ? "none" : "";

@@ -4,7 +4,8 @@ import { GalSim } from "./GalSim";
 import type { SimEnemy } from "./GalSim";
 import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, QUICK_START_SECS,
          SCORE_LEVEL, SCORE_COVER, SCORE_TRAP, SCORE_SPEED_BASE, SCORE_SPEED_DROP,
-         CONTINUE_LIVES, CONTINUE_SCORE_KEEP } from "./constants";
+         CONTINUE_LIVES, CONTINUE_SCORE_KEEP,
+         BOON_IDS, BOON_OFFER_COUNT, BOON_SCORE_ADD, BOON_SLOW_MULT, BOON_SPEED_MULT, BOON_STAM_MULT } from "./constants";
 import { verifyToken, recordUnlock, recordBest, submitDaily } from "./supa";
 import { dailyKey, dailySeed } from "./daily";
 
@@ -27,6 +28,9 @@ export class GameRoom extends Room<GameState> {
   private userIds = new Map<string, string>();   // sessionId → Supabase user id (토큰 검증됨). 도감 기록용.
   private isDaily = false;    // 데일리 챌린지 방(솔로, 날짜 시드, 이어하기 없음, 랭킹 제출)
   private dailyDay = "";      // 이 데일리 방의 날짜 키(KST "YYYY-MM-DD")
+  private scoreMult = 1;      // 로그라이트 "점수" 버프 누적 배수
+  private bonusLives = 0;     // 로그라이트 "생명" 버프 누적(매 스테이지 기본 목숨에 가산)
+  private boonStacks: Record<string, number> = {};   // 적용된 버프 id → 스택 수(클라 표시용)
 
   onCreate(options: { level?: number; private?: boolean; daily?: boolean } = {}) {
     this.isDaily = !!options.daily;
@@ -75,9 +79,21 @@ export class GameRoom extends Room<GameState> {
       // On the clear screen, Enter advances to the next stage (no auto-advance, so players
       // can admire the picture as long as they like). On a loss, Enter restarts: prod from
       // level 1, dev from the room's chosen start level so testing stays put.
-      if (this.state.phase === "won") this.startRound(this.sim.level + 1);   // 다음 스테이지로
+      // 클리어 화면: 버프를 아직 안 골랐으면(=선택창이 떠 있으면) restart 로는 진행하지 않는다.
+      if (this.state.phase === "won" && !this.state.boonOffers) this.startRound(this.sim.level + 1);
       // 이어하기(현재 스테이지 재도전). 데일리는 공정성을 위해 이어하기 없음(1회 시도).
       else if (this.state.phase === "lost" && !this.isDaily) this.continueRun();
+    });
+
+    // 로그라이트 버프 선택: 클리어 화면에서 제시된 3택 중 하나를 고르면 적용하고 다음 스테이지로.
+    this.onMessage("boon", (client, msg: { id?: string }) => {
+      if (this.state.phase !== "won" || !this.state.boonOffers) return;   // 클리어+선택창 있을 때만
+      const offers = this.state.boonOffers.split(",");
+      const id = String(msg?.id ?? "");
+      if (!offers.includes(id)) return;                                   // 제시된 후보만 유효
+      this.applyBoon(id);
+      this.state.boonOffers = "";                                         // 선택 소진(중복 방지)
+      this.startRound(this.sim.level + 1);                               // 다음 스테이지로
     });
 
     // dev 전용: 클라이언트의 "보스 소환" 버튼 → 10초 카운트다운 후 보스 등장 (4종 순환).
@@ -164,6 +180,10 @@ export class GameRoom extends Room<GameState> {
     this.state.clearMs = 0;
     this.state.runScore = this.runScore;        // 다음 스테이지/이어하기에서도 누적 점수 유지
 
+    // 로그라이트 "생명" 버프: 매 스테이지 기본 목숨 위에 누적 보너스만큼 더 준다
+    // (resetRound 가 START_LIVES 로 초기화하므로 매 라운드 다시 얹어야 유지된다).
+    if (this.bonusLives) this.sim.players.forEach((sp) => { sp.lives += this.bonusLives; });
+
     // reflect reset player stats
     this.sim.players.forEach((sp) => {
       const p = this.state.players.get(sp.sessionId);
@@ -178,8 +198,31 @@ export class GameRoom extends Room<GameState> {
   private beginGame() {
     this.state.startIn = -1;
     this.runScore = 0; this.continues = 0;   // 새 런 시작 → 누적 점수·이어하기 초기화
+    this.scoreMult = 1; this.bonusLives = 0; this.boonStacks = {}; this.sim.mods = { enemy: 1, move: 1, stamina: 1 };  // 버프 초기화
+    this.state.boons = ""; this.state.boonOffers = "";
     this.startRound(this.startLevel);   // phase 를 "playing" 으로 전환
     this.lock();                        // 이후 새 플레이어 입장 차단
+  }
+
+  // 클리어 시 제시할 버프 후보 N개를 무작위(비중복)로 뽑아 상태에 싣는다.
+  private offerBoons() {
+    const pool = [...BOON_IDS];
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    this.state.boonOffers = pool.slice(0, Math.min(BOON_OFFER_COUNT, pool.length)).join(",");
+  }
+
+  // 고른 버프를 런에 누적 적용(서버 권위). 시뮬 배율/점수배수/목숨에 반영하고 스택 표시를 갱신.
+  private applyBoon(id: string) {
+    switch (id) {
+      case "life":  this.bonusLives++; break;                                    // 매 스테이지 +1 목숨(누적)
+      case "score": this.scoreMult += BOON_SCORE_ADD; break;                     // 이후 점수 배수↑
+      case "slow":  this.sim.mods.enemy *= BOON_SLOW_MULT; break;                // 적 둔화
+      case "speed": this.sim.mods.move *= BOON_SPEED_MULT; break;                // 이동 빨라짐
+      case "stam":  this.sim.mods.stamina *= BOON_STAM_MULT; break;             // 스태미나 강화
+      default: return;
+    }
+    this.boonStacks[id] = (this.boonStacks[id] || 0) + 1;
+    this.state.boons = Object.entries(this.boonStacks).map(([k, v]) => `${k}:${v}`).join(",");
   }
 
   // 이어하기: 전멸한 스테이지를 그대로 재도전한다. 목숨은 CONTINUE_LIVES, 런 점수는 일부 차감.
@@ -342,6 +385,7 @@ export class GameRoom extends Room<GameState> {
     // 계정 최고기록: 이 스테이지 클리어 시간(최소)·도달 스테이지(최대)·런 점수(최대)
     this.recordBests({ timeMs: clearMs, stage: this.sim.level, score: this.runScore });
     this.submitDailyScores();   // 데일리면 매 클리어마다 현재 점수(최고만 반영) 제출
+    this.offerBoons();          // 다음 스테이지로 가기 전 버프 3택 제시(선택해야 진행)
   }
 
   // 데일리 챌린지 랭킹 제출: 방의 로그인 플레이어들의 현재 런 점수를 그날 보드로 제출(최고만 반영).
@@ -359,7 +403,8 @@ export class GameRoom extends Room<GameState> {
     this.sim.players.forEach((p) => { traps += p.traps; bonus += p.bonus; });
     const ratio = this.sim.claimedInterior / Math.max(1, this.sim.totalInterior);
     const speed = Math.max(0, Math.round(SCORE_SPEED_BASE - (clearMs / 1000) * SCORE_SPEED_DROP));
-    return Math.round(this.sim.level * SCORE_LEVEL + ratio * SCORE_COVER + traps * SCORE_TRAP + bonus + speed);
+    const base = this.sim.level * SCORE_LEVEL + ratio * SCORE_COVER + traps * SCORE_TRAP + bonus + speed;
+    return Math.round(base * this.scoreMult);   // 로그라이트 "점수" 버프 배수 적용
   }
 
   // 로그인 플레이어들의 계정 최고기록 갱신(서버 권위). 값이 없거나 테이블(SQL) 미준비면 조용히 스킵.

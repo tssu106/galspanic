@@ -70,6 +70,16 @@ export const SCORE_SPEED_DROP = 20;   // 초당 감소 (100초부터 속도 보�
 export const CONTINUE_LIVES = 2;        // 이어하기 시 목숨(정상 3에서 감소)
 export const CONTINUE_SCORE_KEEP = 0.8; // 이어하기 시 런 점수 20% 차감
 
+// ── 로그라이트 버프(boons) ──────────────────────────────────────
+// 스테이지 클리어마다 이 중 3개를 무작위로 제시하고, 하나를 골라 런 내내 누적 적용한다.
+// 효과 크기는 여기서 관리(서버 권위). 이름/설명 문구는 클라 i18n(boon_*).
+export const BOON_IDS = ["life", "score", "slow", "speed", "stam"] as const;
+export const BOON_OFFER_COUNT = 3;      // 매 클리어에 제시하는 후보 수
+export const BOON_SCORE_ADD = 0.3;      // "점수" 1스택당 런 점수 배수 +0.3
+export const BOON_SLOW_MULT = 0.85;     // "둔화" 1스택당 적 속도 ×0.85
+export const BOON_SPEED_MULT = 0.88;    // "신속" 1스택당 이동 간격 ×0.88 (=더 빠름)
+export const BOON_STAM_MULT = 1.4;      // "지구력" 1스택당 스태미나 지속·회복 ×1.4
+
 // Background artwork pool (219 images). GameRoom.imageAt shuffles this each cycle and
 // assigns one per stage, so every stage in a cycle gets a distinct, non-overlapping image
 // (and no repeat across the seam), reshuffling only after all 219 have been shown.

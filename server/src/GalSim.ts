@@ -229,6 +229,9 @@ export class GalSim {
   revealX = 0; revealY = 0;   // center of the round-start bright zone; anchors (re)spawns
   over: null | "won" | "lost" = null;
   enemySpeed = 8;
+  // 로그라이트 버프 배율(런 내내 유지, resetRound 로는 초기화 안 함 — 룸이 새 런 시작 때 리셋).
+  // enemy: 적 속도 배율, move: 이동 간격 배율(작을수록 빠름), stamina: 스태미나 지속/회복 배율.
+  mods = { enemy: 1, move: 1, stamina: 1 };
   spawnThresholds: number[] = [];
 
   // seeded RNG: one game seed (the only real randomness), re-seeded per round from
@@ -291,7 +294,7 @@ export class GalSim {
     }
 
     this.enemies = [];
-    this.enemySpeed = 18 + (level - 1) * 3.6;  // cells per second (2x the old base+ramp, test)
+    this.enemySpeed = (18 + (level - 1) * 3.6) * this.mods.enemy;  // cells/s × 둔화 버프 배율
     this.spawnThresholds = [0.20, 0.40, 0.60];
     const active = Math.max(1, this.players.length);
     const count = 4 + active * 2 + (level - 1) * 2;   // more monsters to populate the larger map
@@ -995,7 +998,8 @@ export class GalSim {
     // Prime the step timer on a fresh direction so the first move fires on the NEXT tick
     // (~16ms) instead of waiting up to MOVE_MS (45ms) for the accumulator. This cuts
     // turn/start latency with zero client-side prediction — the server stays authoritative.
-    if (nd && changed && !p.retreating && p.acc < MOVE_MS) p.acc = MOVE_MS;
+    const mv = MOVE_MS * this.mods.move;
+    if (nd && changed && !p.retreating && p.acc < mv) p.acc = mv;
   }
 
   setBoost(sessionId: string, on: boolean) {
@@ -1232,14 +1236,16 @@ export class GalSim {
       else if (p.stamina >= STAMINA_REARM) p.exhausted = false;
       const canBoost = !!(p.boost && held && p.stamina > 0 && !p.exhausted);
       p.boosting = canBoost;
-      if (canBoost) p.stamina = Math.max(0, p.stamina - STAMINA_DRAIN * dtSec);
-      else          p.stamina = Math.min(STAMINA_MAX, p.stamina + STAMINA_RECOVER * dtSec);
+      // 지구력 버프: 소모 느리게(÷배율), 회복 빠르게(×배율)
+      if (canBoost) p.stamina = Math.max(0, p.stamina - (STAMINA_DRAIN / this.mods.stamina) * dtSec);
+      else          p.stamina = Math.min(STAMINA_MAX, p.stamina + (STAMINA_RECOVER * this.mods.stamina) * dtSec);
       p.acc += dtSec * 1000;
       let guard = 0;
       while (guard++ < 8) {
         // 거미줄(web) 위에 서 있으면 이동이 느려진다(칸당 이동 시간 ×WEB_SLOW).
         const webF = this.web[idx(p.x, p.y)] ? WEB_SLOW : 1;
-        const interval = (canBoost ? MOVE_MS / BOOST_MULT : MOVE_MS) * webF;
+        const baseMove = MOVE_MS * this.mods.move;   // 신속 버프: 간격이 줄어 더 빨리 이동
+        const interval = (canBoost ? baseMove / BOOST_MULT : baseMove) * webF;
         if (p.acc < interval) break;
         p.acc -= interval;
         if (held) this.step(p, held[0], held[1]);

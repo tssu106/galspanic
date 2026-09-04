@@ -245,6 +245,17 @@
   #gameover .go-hint { position:absolute; left:0; right:0; bottom:5.5vh; text-align:center;
                        color:#e8ebf7; font-size:15px; text-shadow:0 2px 10px rgba(0,0,0,.85); }
   #gameover .go-hint b { color:#ffd54a; }
+  #gameover .go-hint .go-big { display:inline-block; margin:7px 0; font-size:28px; font-weight:900; letter-spacing:.5px; }
+  /* HUD 활성 버프 아이콘(내 배너) + 툴팁 */
+  .chip .boons { display:flex; gap:5px; margin-top:5px; flex-wrap:wrap; }
+  .chip .bicon { position:relative; font-size:15px; line-height:1; cursor:pointer; user-select:none;
+                 -webkit-user-select:none; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+  .chip .bicon .bx { font-size:10px; color:#a3e635; font-weight:800; vertical-align:top; }
+  #boonTip { position:fixed; z-index:70; max-width:230px; background:rgba(10,13,24,.96); color:#e8ebf7;
+             border:1px solid #3a4570; border-radius:10px; padding:8px 11px; font-size:12px; line-height:1.4;
+             box-shadow:0 10px 28px rgba(0,0,0,.55); pointer-events:none; opacity:0; transition:opacity .12s; }
+  #boonTip.show { opacity:1; }
+  #boonTip b { color:#ffe08a; }
   #gameover .go-num-fallback { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
                                font-size:min(24vh,190px); font-weight:900; color:#fff; display:none;
                                text-shadow:0 0 26px #ff5db1, 0 0 60px #ff2a7a; }
@@ -527,6 +538,9 @@
   <!-- 점수/최고기록 패널: 클리어·게임오버 화면에서만 표시 (updateOverlays 가 내용 채움) -->
   <div id="scoreHud" class="hidden"></div>
 
+  <!-- HUD 버프 아이콘 툴팁 (hover/터치 시 잠깐 표시) -->
+  <div id="boonTip"></div>
+
   <!-- 로그라이트 버프 선택: 클리어 화면에서 3택 (updateOverlays 가 카드 채움) -->
   <div id="boonPick" class="hidden">
     <div class="bp-title" data-i18n="boon_title"></div>
@@ -627,6 +641,8 @@ const I18N = {
     chat_empty: "아직 메시지가 없어요 · Enter 로 입력",
     go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ 이어하기",
     go_hint_daily: "<b>GAME OVER</b> · 랭킹에 기록됐어요",
+    go_hint_continue: "<b>GAME OVER</b><br><span class='go-big' style='color:#ffd54a'>🔄 이어하기 {0}회 남음</span><br><span style='opacity:.8'><b>Enter</b> ▶ 계속하기</span>",
+    go_hint_restart: "<b>GAME OVER</b><br><span class='go-big' style='color:#ff6b8b'>이어하기 모두 소진</span><br><span style='opacity:.8'><b>Enter</b> ▶ 처음부터 다시</span>",
     sh_clear: "스테이지 {0} 클리어!", sh_score: "점수", sh_best: "최고", sh_stage: "스테이지", sh_over: "게임 오버",
     boon_title: "버프 선택 — 하나 골라 다음 스테이지로", boon_cur: "현재",
     boon_life_n: "생명력", boon_life_d: "매 스테이지 목숨 +1",
@@ -692,6 +708,8 @@ const I18N = {
     chat_empty: "No messages yet · Enter to type",
     go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ Continue",
     go_hint_daily: "<b>GAME OVER</b> · Saved to the ranking",
+    go_hint_continue: "<b>GAME OVER</b><br><span class='go-big' style='color:#ffd54a'>🔄 Continue — {0} left</span><br><span style='opacity:.8'><b>Enter</b> ▶ Continue</span>",
+    go_hint_restart: "<b>GAME OVER</b><br><span class='go-big' style='color:#ff6b8b'>No continues left</span><br><span style='opacity:.8'><b>Enter</b> ▶ Restart from stage 1</span>",
     sh_clear: "Stage {0} clear!", sh_score: "Score", sh_best: "Best", sh_stage: "Stage", sh_over: "Game Over",
     boon_title: "Pick a boon — choose one to continue", boon_cur: "Active",
     boon_life_n: "Vitality", boon_life_d: "+1 life each stage",
@@ -757,6 +775,8 @@ const I18N = {
     chat_empty: "まだメッセージがありません · Enterで入力",
     go_hint_html: "<b>GAME OVER</b> · <b>Enter</b> ▶ つづける",
     go_hint_daily: "<b>GAME OVER</b> · ランキングに記録",
+    go_hint_continue: "<b>GAME OVER</b><br><span class='go-big' style='color:#ffd54a'>🔄 コンティニュー 残り{0}回</span><br><span style='opacity:.8'><b>Enter</b> ▶ つづける</span>",
+    go_hint_restart: "<b>GAME OVER</b><br><span class='go-big' style='color:#ff6b8b'>コンティニュー切れ</span><br><span style='opacity:.8'><b>Enter</b> ▶ 最初から</span>",
     sh_clear: "ステージ{0}クリア！", sh_score: "スコア", sh_best: "ベスト", sh_stage: "ステージ", sh_over: "ゲームオーバー",
     boon_title: "バフ選択 — 1つ選んで次のステージへ", boon_cur: "現在",
     boon_life_n: "生命力", boon_life_d: "毎ステージ ライフ+1",
@@ -888,6 +908,7 @@ let room = null, state = null, GW = 64, GH = 64;
 let joinMode = "quick";            // 현재 방 접속 방식(quick=빠른참가 / create·join=친구끼리) — 로비 안내문 분기용
 let lostSince = 0;                 // 게임 오버가 시작된 시각(ms). 0 이면 오버 아님.
 const LOST_TIMEOUT_MS = 10000;    // 오버 후 이 시간 안에 Enter 면 재시작, 지나면 첫 화면으로.
+const MAX_CONTINUES = 2;          // 이어하기 가능 횟수(서버 constants.MAX_CONTINUES 와 일치) — 안내문용.
 const img = new Image(); img.crossOrigin = "anonymous"; let imgReady = false;
 let imgVersion = 0;   // bumps on every (re)load so the cached grid layer rebuilds
 img.onload = () => { imgReady = true; imgVersion++; };
@@ -1473,11 +1494,17 @@ function updateOverlays() {
         const ok = showCountdown3D();                          // three.js 시작(실패 시 false)
         gameoverEl.classList.remove("hidden");
         goNumEl.style.display = ok ? "none" : "";              // WebGL 없으면 2D 숫자 폴백
-        // 데일리는 이어하기가 없다 → 안내문을 바꾸고, 잠시 뒤 오늘의 랭킹을 자동으로 띄운다.
-        if (state.daily) {
+        if (state.daily) {   // 데일리: 랭킹 기록 안내 + 잠시 뒤 랭킹 자동 표시(1회성)
           document.querySelector("#gameover .go-hint").innerHTML = t("go_hint_daily");
           setTimeout(openDailyBoard, 1600);
         }
+      }
+      // 이어하기 남은 횟수 안내는 최신 state.continues 로 갱신(정확). 게임오버 화면이라 매 프레임도 무방.
+      if (!state.daily) {
+        const left = MAX_CONTINUES - (state.continues | 0);
+        const want = left > 0 ? t("go_hint_continue", left) : t("go_hint_restart");
+        const hintEl = document.querySelector("#gameover .go-hint");
+        if (hintEl.innerHTML !== want) hintEl.innerHTML = want;
       }
       const remain = Math.max(0, Math.ceil((LOST_TIMEOUT_MS - (performance.now() - lostSince)) / 1000));
       goNumEl.textContent = remain;   // 2D 폴백 숫자 (WebGL 미지원 시)
@@ -1738,6 +1765,26 @@ function pickBoon(id) {
   if (!room || !boonOfferList.includes(id)) return;
   hideBoonPick();
   advanceWithAd(() => room.send("boon", { id }));   // 광고 후(있으면) 서버에 선택 전송 → 다음 스테이지
+}
+
+// HUD 버프 아이콘: 마우스 올리거나 터치하면 능력 이름·설명 툴팁을 2.5초 표시.
+const boonTipEl = document.getElementById("boonTip");
+let boonTipTimer = 0;
+function showBoonTip(iconEl) {
+  const m = BOON_META[iconEl.dataset.boon]; if (!m) return;
+  boonTipEl.innerHTML = `<b>${m.ico} ${t(m.n)}</b><br>${t(m.d)}`;
+  boonTipEl.classList.add("show");
+  const r = iconEl.getBoundingClientRect(), tw = boonTipEl.offsetWidth, th = boonTipEl.offsetHeight;
+  let x = Math.max(6, Math.min(r.left + r.width / 2 - tw / 2, innerWidth - tw - 6));
+  let y = r.top - th - 8; if (y < 6) y = r.bottom + 8;   // 위 공간 없으면 아래로
+  boonTipEl.style.left = x + "px"; boonTipEl.style.top = y + "px";
+  clearTimeout(boonTipTimer); boonTipTimer = setTimeout(() => boonTipEl.classList.remove("show"), 2500);
+}
+{
+  const hudEl = document.getElementById("hud");
+  const onIcon = (e, prevent) => { const b = e.target.closest && e.target.closest(".bicon"); if (b) { if (prevent) e.preventDefault(); showBoonTip(b); } };
+  hudEl?.addEventListener("pointerover", (e) => onIcon(e, false));   // 데스크톱 hover
+  hudEl?.addEventListener("pointerdown", (e) => onIcon(e, true));    // 터치/클릭
 }
 
 // ── 모바일 터치 컨트롤: 플로팅 조이스틱(4방향 스냅) + 질주 버튼. ──
@@ -2952,9 +2999,14 @@ function drawHud() {
     const score = p.bonus | 0;   // 포획 점수(등급별 누적) — 질주와 무관하게 보관
     const stam = Math.max(0, Math.min(100, p.stamina || 0));   // 질주 스태미나 (자기 것만 바로 표시)
     const stamBar = me ? `<div class="stam${stam < 25 ? " low" : ""}" title="${t("stam_title")}"><i style="width:${stam}%"></i></div>` : "";
+    // 내 배너에 활성 로그라이크 버프 아이콘(hover/터치하면 툴팁). 버프는 런 공유라 내 칩에만 표시.
+    const boonsRow = (me && state.boons) ? `<div class="boons">` + state.boons.split(",").filter(Boolean).map((kv) => {
+      const [k, c] = kv.split(":"); const m = BOON_META[k]; if (!m) return "";
+      return `<span class="bicon" data-boon="${k}">${m.ico}${(+c > 1) ? `<span class="bx">×${c}</span>` : ""}</span>`;
+    }).join("") + `</div>` : "";
     html += `<div class="chip ${p.out ? "dead" : ""} ${me ? "me" : ""}">
       <div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}${me?t("me_suffix"):""}</div>
-      <div class="meta"><span style="color:#ffd54a">⭐${score}</span><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div>${stamBar}</div>`;
+      <div class="meta"><span style="color:#ffd54a">⭐${score}</span><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div>${stamBar}${boonsRow}</div>`;
   });
   html += `<div class="chip"><div class="top">${t("hud_progress", state.level)}</div>
     <div class="meta"><span>${ratio}%</span><span>${t("hud_goal")}</span></div></div>`;

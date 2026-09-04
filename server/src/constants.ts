@@ -69,6 +69,7 @@ export const SCORE_SPEED_DROP = 20;   // 초당 감소 (100초부터 속도 보�
 // 이어하기(전멸 후 현재 스테이지 재도전): 목숨·점수 일부만 유지.
 export const CONTINUE_LIVES = 2;        // 이어하기 시 목숨(정상 3에서 감소)
 export const CONTINUE_SCORE_KEEP = 0.8; // 이어하기 시 런 점수 20% 차감
+export const MAX_CONTINUES = 2;         // 한 런에서 이어하기 가능 횟수. 초과하면 처음 스테이지부터 다시.
 
 // ── 로그라이트 버프(boons) ──────────────────────────────────────
 // 스테이지 클리어마다 이 중 3개를 무작위로 제시하고, 하나를 골라 런 내내 누적 적용한다.

@@ -4,7 +4,7 @@ import { GalSim } from "./GalSim";
 import type { SimEnemy } from "./GalSim";
 import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, QUICK_START_SECS,
          SCORE_LEVEL, SCORE_COVER, SCORE_TRAP, SCORE_SPEED_BASE, SCORE_SPEED_DROP,
-         CONTINUE_LIVES, CONTINUE_SCORE_KEEP,
+         CONTINUE_LIVES, CONTINUE_SCORE_KEEP, MAX_CONTINUES,
          BOON_IDS, BOON_OFFER_COUNT, BOON_SCORE_ADD, BOON_SLOW_MULT, BOON_SPEED_MULT, BOON_STAM_MULT,
          REVIVE_SEC } from "./constants";
 import { verifyToken, recordUnlock, recordBest, submitDaily } from "./supa";
@@ -83,7 +83,11 @@ export class GameRoom extends Room<GameState> {
       // 클리어 화면: 버프를 아직 안 골랐으면(=선택창이 떠 있으면) restart 로는 진행하지 않는다.
       if (this.state.phase === "won" && !this.state.boonOffers) this.startRound(this.sim.level + 1);
       // 이어하기(현재 스테이지 재도전). 데일리는 공정성을 위해 이어하기 없음(1회 시도).
-      else if (this.state.phase === "lost" && !this.isDaily) this.continueRun();
+      // 이어하기(현재 스테이지 재도전)는 MAX_CONTINUES 회까지. 초과하면 처음 스테이지부터 새 런.
+      else if (this.state.phase === "lost" && !this.isDaily) {
+        if (this.continues < MAX_CONTINUES) this.continueRun();
+        else this.restartFromStart();
+      }
     });
 
     // 로그라이트 버프 선택: 클리어 화면에서 제시된 3택 중 하나를 고르면 적용하고 다음 스테이지로.
@@ -198,7 +202,7 @@ export class GameRoom extends Room<GameState> {
   // 로비 → 게임 시작: 라운드를 열고(플레이어 스폰·무적), 방을 잠가 진행 중 방엔 못 들어오게 한다.
   private beginGame() {
     this.state.startIn = -1;
-    this.runScore = 0; this.continues = 0;   // 새 런 시작 → 누적 점수·이어하기 초기화
+    this.runScore = 0; this.continues = 0; this.state.continues = 0;   // 새 런 시작 → 누적 점수·이어하기 초기화
     this.scoreMult = 1; this.bonusLives = 0; this.boonStacks = {}; this.sim.mods = { enemy: 1, move: 1, stamina: 1 };  // 버프 초기화
     this.state.boons = ""; this.state.boonOffers = "";
     this.startRound(this.startLevel);   // phase 를 "playing" 으로 전환
@@ -230,9 +234,19 @@ export class GameRoom extends Room<GameState> {
   private continueRun() {
     this.runScore = Math.round(this.runScore * CONTINUE_SCORE_KEEP);
     this.continues++;
+    this.state.continues = this.continues;   // 클라 안내(남은 이어하기)용
     this.startRound(this.sim.level);    // 현재 스테이지 유지(진행 보존)
     this.sim.players.forEach((sp) => { sp.lives = CONTINUE_LIVES; });
     this.state.players.forEach((p) => { p.lives = CONTINUE_LIVES; });
+  }
+
+  // 이어하기 소진 후: 처음 스테이지부터 완전히 새 런(점수·버프·이어하기·목숨 초기화).
+  private restartFromStart() {
+    this.runScore = 0; this.continues = 0; this.state.continues = 0;
+    this.scoreMult = 1; this.bonusLives = 0; this.boonStacks = {};
+    this.sim.mods = { enemy: 1, move: 1, stamina: 1 };
+    this.state.boons = ""; this.state.boonOffers = "";
+    this.startRound(this.startLevel);
   }
 
   private makeEnemySchema(e: SimEnemy): Enemy {

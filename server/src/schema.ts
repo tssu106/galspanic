@@ -107,6 +107,9 @@ export class GameState extends Schema {
   // 데일리 챌린지 방이면 1 (클라가 UI·랭킹 제출을 다르게 처리). 0 = 일반 방.
   @type("number") daily: number = 0;
 
+  // 이어하기 사용 횟수(게임오버 화면에서 남은 횟수 안내에 사용). 상한 초과 시 처음부터 재시작.
+  @type("number") continues: number = 0;
+
   // 로그라이트 버프. boonOffers: 클리어 시 제시되는 3택 후보 id들(콤마 구분, 비면 선택창 없음).
   // boons: 이번 런에 적용된 버프 누적("id:count" 콤마 구분) — 클라가 현재 스택 표시용.
   @type("string") boonOffers: string = "";

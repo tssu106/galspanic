@@ -1028,6 +1028,8 @@ async function connect(name, level, mode = "quick", code = "") {
       text: ev.count > 1 ? t("capture_multi", ev.count, ev.bonus) : t("capture_one", ev.count, ev.bonus),
     });
     sfxCapture(ev.count);   // 포획 효과음
+    spawnJuice(ev.x + 0.5, ev.y + 0.5, playerColor(ev.owner), 10 + ev.count * 6, 1.2 + ev.count * 0.25);
+    addShake(0.2 + Math.min(0.24, ev.count * 0.05));   // 포획 손맛(잡을수록 크게)
   });
   // 아이템 획득: 점유한 칸의 아이템을 먹으면 서버가 종류/위치를 알려준다 → 이름 팝업 + 효과음
   room.onMessage("item", (ev) => {
@@ -1036,6 +1038,8 @@ async function connect(name, level, mode = "quick", code = "") {
       text: `${ITEM_ICON[ev.kind] || "★"} ${I18N[LANG]["item_" + ev.kind] ? t("item_" + ev.kind) : t("item_generic")}`,
     });
     sfxItem();    // 파워업 획득음
+    spawnJuice(ev.x + 0.5, ev.y + 0.5, ITEM_COLOR[ev.kind] || "#fff", 16, 1.5);
+    addShake(0.18);
   });
   // 블랙홀 예고: 그 자리에 블랙홀을 띄워 회피를 유도(예고가 끝나면 서버가 맵을 지우고 보스 등장)
   room.onMessage("warp", (ev) => {
@@ -1530,7 +1534,7 @@ function renderScore(s, b) {
 function returnToTitle() {
   try { room?.leave(); } catch {}
   room = null; state = null; gameShown = false; lostSince = 0; lastLobbyKey = "";
-  bubbles.clear(); pmove.clear(); prevMarker.clear(); flashes.length = 0; warps.length = 0;
+  bubbles.clear(); pmove.clear(); prevMarker.clear(); flashes.length = 0; warps.length = 0; particles.length = 0;
   prevCells = null; lastClaimed = -1; gridBuilt = false; gridDirty = true; gridScan = 0;   // force a full grid repaint on the next game
   lobby.classList.add("hidden");
   chatPanel.classList.add("hidden");
@@ -1884,6 +1888,20 @@ const WARP_TTL = WARP_TELE_MS + WARP_POP_MS;   // 블랙홀 전체 수명(ms)
 const WARP_R_CELLS = 12;       // 왜곡(렌즈) 반경(셀)
 const WARP_ERASE_CELLS = 9;    // 서버가 지우고/죽이는 원형 반경(셀) — 위험 원 표시에 사용
 const SHAKE_DUR = 0.5;         // 흔들림 지속(초)
+// ── 손맛(juice): 파티클 + 화면 흔들림 헬퍼 ──
+// 파티클은 그리드 좌표(셀 단위)로 저장하고, 월드 카메라 변환 안에서 그린다(맵과 함께 스크롤).
+const particles = [];
+const MAX_PARTICLES = 320;     // 성능 안전상 총량 제한
+function addShake(sec) { shakeT = Math.min(SHAKE_DUR, Math.max(shakeT, sec)); }   // 더 센 흔들림으로 갱신
+function spawnJuice(gx, gy, color, n, power) {
+  for (let k = 0; k < n && particles.length < MAX_PARTICLES; k++) {
+    const a = Math.random() * Math.PI * 2, sp = (0.6 + Math.random() * 1.9) * power;
+    particles.push({
+      x: gx, y: gy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - sp * 0.5,   // 살짝 위로 튄 뒤 중력
+      life: 0.45 + Math.random() * 0.55, ttl: 1, color, size: 0.16 + Math.random() * 0.24,
+    });
+  }
+}
 // 블랙홀 렌즈 왜곡용 오프스크린 버퍼 (매 프레임 현재 화면을 복사해 왜곡 샘플링)
 const warpBuf = document.createElement("canvas");
 warpBuf.width = canvas.width; warpBuf.height = canvas.height;
@@ -2423,6 +2441,8 @@ function render() {
     // 캐시된 그리드 레이어: 변경 시 예약(gridDirty)하고, 매 프레임 예산만큼 이어 칠한다(끊김 방지).
     const full = state.level !== lastLevel || imgVersion !== lastImgVer || GW !== lastGW || GH !== lastGH;
     if (full) markGridFull();
+    // 이번 프레임 새로 점유한 양(셀). 새 라운드(full)나 적이 지워 줄어든 경우는 손맛 제외.
+    const claimDelta = (!full && lastClaimed >= 0) ? (state.claimedInterior - lastClaimed) : 0;
     if (full || state.claimedInterior !== lastClaimed) gridDirty = true;
     lastClaimed = state.claimedInterior; lastLevel = state.level;
     lastImgVer = imgVersion; lastGW = GW; lastGH = GH;
@@ -2430,6 +2450,15 @@ function render() {
     // ---- self-centered camera: ~VIEW cells across, follows my predicted marker ----
     let me = null;
     if (room) state.players.forEach((p) => { if (p.id === room.sessionId) me = p; });
+    // 영역 점유 손맛: 딴 만큼 파티클(작게라도 반짝), 큰 덩어리면 흔들림 + "+N%" 팝업.
+    if (claimDelta > 0 && state.phase === "playing" && me && !me.out) {
+      const frac = claimDelta / Math.max(1, state.totalInterior);
+      spawnJuice(me.x + 0.5, me.y + 0.5, playerColor(me.owner), Math.round(Math.min(70, 4 + frac * 500)), 1 + Math.min(3.2, frac * 30));
+      if (frac >= 0.03) {
+        addShake(0.25 + Math.min(0.25, frac * 5));
+        flashes.push({ x: me.x + 0.5, y: me.y, color: "#ffe08a", life: 1.0, ttl: 1.0, text: "+" + Math.round(frac * 100) + "%" });
+      }
+    }
     let camS = 1, camX = 0, camY = 0, myPos = null;
     if (me && !me.out) {
       // cells across the shorter side (higher = zoomed out). 모바일은 더 확대(작은 VIEW)해서
@@ -2616,6 +2645,20 @@ function render() {
         ctx.restore();
       }
     });
+    // 파티클(점유·포획·아이템·리빌 시 튀는 조각) — 월드 좌표로 그려 맵과 함께 스크롤
+    if (particles.length) {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i]; p.life -= dt;
+        if (p.life <= 0) { particles.splice(i, 1); continue; }
+        p.vy += 3.4 * dt;                          // 중력(그리드/초²)
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        ctx.globalAlpha = Math.max(0, p.life / p.ttl);
+        ctx.fillStyle = p.color;
+        const s = p.size * cw;
+        ctx.fillRect(p.x * cw - s / 2, p.y * ch - s / 2, s, s);
+      }
+      ctx.globalAlpha = 1;
+    }
     // capture popups
     for (let i = flashes.length-1; i >= 0; i--) {
       const f = flashes[i]; f.life -= dt;

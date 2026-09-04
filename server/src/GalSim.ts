@@ -1,4 +1,4 @@
-import { GRID_W, GRID_H, BORDER as B, CLEAR_RATIO, MOVE_MS, START_LIVES, BOOST_MULT, STAMINA_MAX, STAMINA_DRAIN, STAMINA_RECOVER, START_REVEAL_RATIO } from "./constants";
+import { GRID_W, GRID_H, BORDER as B, CLEAR_RATIO, MOVE_MS, START_LIVES, BOOST_MULT, STAMINA_MAX, STAMINA_DRAIN, STAMINA_RECOVER, START_REVEAL_RATIO, REVIVE_RADIUS, REVIVE_SEC, REVIVE_LIVES } from "./constants";
 
 const COLS = GRID_W, ROWS = GRID_H, N = COLS * ROWS;
 const EMPTY = 0, CLAIMED = 1;
@@ -161,6 +161,7 @@ export interface SimPlayer {
   bonus: number;             // capture score (accumulates)
   stamina: number;           // 0..100 sprint gauge
   out: boolean;
+  revT: number;              // 부활 진행 시간(초). 쓰러진 동안 살아있는 동료가 근처면 차오른다.
   acc: number;               // ms accumulator for the move timer
   idle: number;              // ms stalled while drawing (triggers retrace)
   drawOriginX: number; drawOriginY: number;  // safe cell a line started from
@@ -215,6 +216,7 @@ export class GalSim {
   missiles: { x: number; y: number; vx: number; vy: number; life: number; owner: number; target: SimEnemy | null }[] = [];
   freezeT = 0;                          // >0 이면 적 정지(프리즈 아이템)
   itemEvents: { x: number; y: number; kind: string; owner: number }[] = [];   // 획득 연출용 (룸이 drain)
+  reviveEvents: { x: number; y: number; owner: number }[] = [];   // 동료 부활 연출용 (룸이 drain → "revive")
   warpEvents: BossEvent[] = [];         // 블랙홀 예고 시작 이벤트 (룸이 drain → "warp" 브로드캐스트)
   // 예고 중인 블랙홀들. 타이머가 끝나면 맵을 원형으로 지우고 플레이어를 죽인 뒤 보스를 생성한다.
   private pendingWarps: { x: number; y: number; type: BossType; t: number }[] = [];
@@ -286,7 +288,7 @@ export class GalSim {
     for (const p of this.players) {
       const [sx, sy] = this.pickSafeSpawn(this.revealX, this.revealY);   // 밝은 구역 위에서 시작
       p.x = sx; p.y = sy; p.spawnX = sx; p.spawnY = sy;
-      p.drawing = false; p.retreating = false; p.out = false; p.lives = START_LIVES;
+      p.drawing = false; p.retreating = false; p.out = false; p.revT = 0; p.lives = START_LIVES;
       p.boost = false; p.boosting = false; p.exhausted = false; p.stamina = STAMINA_MAX;
       p.claimed = 0; p.traps = 0; p.bonus = 0; p.acc = 0; p.idle = 0;
       p.drawOriginX = sx; p.drawOriginY = sy; p.trailCells.length = 0;
@@ -975,7 +977,7 @@ export class GalSim {
     const p: SimPlayer = {
       sessionId, owner, x: sx, y: sy, spawnX: sx, spawnY: sy,
       heldDir: null, boost: false, boosting: false, exhausted: false, stamina: STAMINA_MAX, drawing: false, retreating: false, lives: START_LIVES,
-      claimed: 0, traps: 0, bonus: 0, out: false, acc: 0, idle: 0,
+      claimed: 0, traps: 0, bonus: 0, out: false, revT: 0, acc: 0, idle: 0,
       drawOriginX: sx, drawOriginY: sy, trailCells: [], invuln: INVULN_SEC,
     };
     this.players.push(p);
@@ -1189,8 +1191,33 @@ export class GalSim {
     p.invuln = INVULN_SEC;      // 부활 직후 잠시 무적
     p.lives--;
     if (p.lives <= 0) {
-      p.out = true;
+      p.out = true; p.revT = 0;   // 쓰러짐(부활 대기). 동료가 다가오면 revT 가 차오른다.
       if (this.players.length && this.players.every(q => q.out)) this.over = "lost";
+    }
+  }
+
+  // 코옵 부활: 쓰러진 동료 근처에 살아있는 동료가 있으면 진행, 없으면 서서히 감소.
+  // 완료되면 그 자리에서 되살아난다(잠시 무적). 솔로/전원 다운이면 살릴 사람이 없어 그대로.
+  private updateRevives(dtSec: number) {
+    if (this.players.length < 2) return;   // 동료가 있어야 부활 가능
+    const alive = this.players.filter((q) => !q.out);
+    if (!alive.length) return;
+    for (const p of this.players) {
+      if (!p.out) continue;
+      const helper = alive.some((q) => {
+        const dx = q.x - p.x, dy = q.y - p.y;
+        return dx * dx + dy * dy <= REVIVE_RADIUS * REVIVE_RADIUS;
+      });
+      if (helper) {
+        p.revT += dtSec;
+        if (p.revT >= REVIVE_SEC) {   // 부활!
+          p.out = false; p.revT = 0; p.lives = REVIVE_LIVES; p.invuln = INVULN_SEC;
+          p.drawing = false; p.retreating = false; p.acc = 0; p.idle = 0;
+          this.reviveEvents.push({ x: p.x, y: p.y, owner: p.owner });
+        }
+      } else {
+        p.revT = Math.max(0, p.revT - dtSec * 0.6);   // 동료가 없으면 서서히 식음
+      }
     }
   }
 
@@ -1251,6 +1278,8 @@ export class GalSim {
         if (held) this.step(p, held[0], held[1]);
       }
     }
+
+    this.updateRevives(dtSec);   // 코옵: 쓰러진 동료 부활 진행
 
     // 맵 아이템: 랜덤 간격으로 가끔 하나씩 등장하고, ITEM_LIFE 초 뒤 사라진다(막판엔 깜빡임).
     this.itemSpawnT -= dtSec;

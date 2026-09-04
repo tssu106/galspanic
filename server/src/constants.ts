@@ -80,6 +80,11 @@ export const BOON_SLOW_MULT = 0.85;     // "둔화" 1스택당 적 속도 ×0.85
 export const BOON_SPEED_MULT = 0.88;    // "신속" 1스택당 이동 간격 ×0.88 (=더 빠름)
 export const BOON_STAM_MULT = 1.4;      // "지구력" 1스택당 스태미나 지속·회복 ×1.4
 
+// ── 코옵 부활 ──: 쓰러진 동료 위치에 살아있는 동료가 다가가 잠시 있으면 되살린다(솔로는 동료가 없어 무효).
+export const REVIVE_RADIUS = 4;   // 부활 인정 거리(셀)
+export const REVIVE_SEC = 2.5;    // 부활에 필요한 시간(초)
+export const REVIVE_LIVES = 1;    // 부활 시 목숨
+
 // Background artwork pool (219 images). GameRoom.imageAt shuffles this each cycle and
 // assigns one per stage, so every stage in a cycle gets a distinct, non-overlapping image
 // (and no repeat across the seam), reshuffling only after all 219 have been shown.

@@ -135,21 +135,7 @@
                  box-shadow:0 20px 60px rgba(0,0,0,.5); }
   #start .rules { color:var(--muted); font-size:13px; line-height:1.7; text-align:left; }
   #start .rules b { color:var(--ink); }
-  /* ---- 마커 스킨 선택 ---- */
-  #skinPick { display:flex; flex-direction:column; gap:6px; }
-  #skinPick .skl { font-size:12px; color:var(--muted); text-align:left; letter-spacing:.3px; }
-  #skinPick .row { display:flex; gap:8px; overflow-x:auto; padding:2px 1px 6px; }
-  #skinPick .sk { position:relative; flex:0 0 auto; width:44px; height:44px; border-radius:12px;
-                  background:#10152a; border:1px solid #2a3350; cursor:pointer; padding:0;
-                  display:flex; align-items:center; justify-content:center; transition:border-color .1s, transform .1s; }
-  #skinPick .sk:hover { transform:translateY(-1px); border-color:#3a4570; }
-  #skinPick .sk.sel { border-color:#ff5db1; box-shadow:0 0 0 2px rgba(255,93,177,.35); }
-  #skinPick .sk canvas { width:34px; height:34px; display:block; }
-  #skinPick .sk.locked { cursor:not-allowed; }
-  #skinPick .sk.locked canvas { opacity:.28; filter:grayscale(1); }
-  #skinPick .sk .lock { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-                        font-size:16px; pointer-events:none; }
-  #skinPick .hint { font-size:11px; color:#8b93b5; min-height:14px; text-align:left; }
+  /* (마커 스킨 선택 UI 제거 — 추후 이미지 기반으로 재작업 예정) */
   /* ---- 조작 안내: CSS 로 그린 키보드 ---- */
   #start .controls { display:flex; justify-content:center; align-items:flex-end; gap:20px; flex-wrap:wrap;
                      padding:6px 0 2px; border-top:1px solid #232a44; }
@@ -443,12 +429,7 @@
 
     <div class="card">
       <input id="nameInput" maxlength="12" data-i18n-ph="ph_name" autocomplete="off" />
-      <!-- 마커 스킨 선택: 기본 몇 개 + 스테이지 도달/챌린지로 언락 -->
-      <div id="skinPick">
-        <div class="skl" data-i18n="skin_label"></div>
-        <div class="row" id="skinRow"></div>
-        <div class="hint" id="skinHint"></div>
-      </div>
+      <!-- (마커 스킨 선택 제거 — 추후 이미지 기반으로 재작업) -->
       <label id="devStage" class="dev-stage" hidden>
         <span data-i18n="dev_stage"></span>
         <select id="stageSelect"></select>
@@ -653,6 +634,7 @@ const I18N = {
     boon_slow_n: "둔화", boon_slow_d: "적 이동속도 -15%",
     boon_speed_n: "신속", boon_speed_d: "내 이동속도 +12%",
     boon_stam_n: "지구력", boon_stam_d: "질주 지속·회복 강화",
+    revived: "부활!",
     btn_share: "🔗 공유", share_saved: "이미지를 저장했어요", share_copied: "결과를 복사했어요",
     share_normal: "한뼘더 스테이지 {0} · {1}점!", share_daily: "한뼘더 오늘의 챌린지 {1}점! (스테이지 {0})",
     btn_close: "✕ 닫기", title_close: "닫기", btn_save: "🖼 저장", collected: "수집",
@@ -717,6 +699,7 @@ const I18N = {
     boon_slow_n: "Slow", boon_slow_d: "Enemies -15% speed",
     boon_speed_n: "Swift", boon_speed_d: "You move +12% faster",
     boon_stam_n: "Stamina", boon_stam_d: "Sprint lasts & recovers more",
+    revived: "Revived!",
     btn_share: "🔗 Share", share_saved: "Image saved", share_copied: "Result copied",
     share_normal: "One More Inch stage {0} · {1} pts!", share_daily: "One More Inch daily challenge · {1} pts! (stage {0})",
     btn_close: "✕ Close", title_close: "Close", btn_save: "🖼 Save", collected: "collected",
@@ -781,6 +764,7 @@ const I18N = {
     boon_slow_n: "鈍化", boon_slow_d: "敵の移動 -15%",
     boon_speed_n: "俊足", boon_speed_d: "自分の移動 +12%",
     boon_stam_n: "スタミナ", boon_stam_d: "ダッシュ持続・回復強化",
+    revived: "復活！",
     btn_share: "🔗 シェア", share_saved: "画像を保存しました", share_copied: "結果をコピーしました",
     share_normal: "One More Inch ステージ{0} · {1}点！", share_daily: "One More Inch 今日のチャレンジ {1}点！(ステージ{0})",
     btn_close: "✕ 閉じる", title_close: "閉じる", btn_save: "🖼 保存", collected: "収集",
@@ -1046,7 +1030,7 @@ async function connect(name, level, mode = "quick", code = "") {
   // level 은 dev 서버에서만 서버가 신뢰한다 (프로덕션에선 무시되고 레벨 1로 시작).
   // token: 로그인했으면 Supabase access token 을 서버로 전달 → 서버가 검증해 클리어 시 도감 기록.
   const token = await getToken();
-  const opts = { name, skin: currentSkin() };   // 마커 스킨 id 전달 → 다른 플레이어에게도 표시
+  const opts = { name };   // (마커 스킨 제거 — 서버 기본 "dot" 사용)
   if (level) opts.level = level;
   if (token) opts.token = token;
   if (mode === "daily") room = await client.create("game", { ...opts, daily: true });       // 데일리 챌린지(솔로·날짜 시드)
@@ -1081,6 +1065,13 @@ async function connect(name, level, mode = "quick", code = "") {
     sfxItem();    // 파워업 획득음
     spawnJuice(ev.x + 0.5, ev.y + 0.5, ITEM_COLOR[ev.kind] || "#fff", 16, 1.5);
     addShake(0.18);
+  });
+  // 동료 부활: 되살아난 자리에 초록 파티클 + 팝업 + 효과음
+  room.onMessage("revive", (ev) => {
+    flashes.push({ x: ev.x, y: ev.y, color: "#a3e635", life: 1.4, ttl: 1.4, text: t("revived") });
+    spawnJuice(ev.x + 0.5, ev.y + 0.5, "#a3e635", 26, 1.8);
+    addShake(0.22);
+    try { sfxItem(); } catch {}
   });
   // 블랙홀 예고: 그 자리에 블랙홀을 띄워 회피를 유도(예고가 끝나면 서버가 맵을 지우고 보스 등장)
   room.onMessage("warp", (ev) => {
@@ -2693,7 +2684,21 @@ function render() {
     // server-owned trail it detaches the marker from its line on direction changes.)
     const pulse = 0.5 + 0.5 * Math.sin(now / 150);   // 0..1 blink, ~1.1 Hz
     state.players.forEach((p) => {
-      if (p.out) { pmove.delete(p.id); prevMarker.delete(p.id); return; }
+      if (p.out) {
+        pmove.delete(p.id); prevMarker.delete(p.id);
+        // 쓰러진 동료: 반투명 💀 마커 + 부활 진행 링(동료가 근처면 차오름). 부활은 코옵에서만.
+        const dx = (p.x + 0.5) * cw, dy = (p.y + 0.5) * ch, dr = 11 / camS;
+        ctx.save();
+        ctx.globalAlpha = 0.6; ctx.font = `${18 / camS}px system-ui`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("💀", dx, dy);
+        const rp = p.revP || 0;
+        if (rp > 0) {   // 부활 진행 링(초록, 12시부터 시계방향)
+          ctx.globalAlpha = 0.95; ctx.strokeStyle = "#a3e635"; ctx.lineWidth = 3 / camS;
+          ctx.beginPath(); ctx.arc(dx, dy, dr + 4 / camS, -Math.PI / 2, -Math.PI / 2 + rp * Math.PI * 2); ctx.stroke();
+        }
+        ctx.restore();
+        return;
+      }
       const pos = playerRenderPos(p.id, p.x, p.y, now);
       const vx = pos.x, vy = pos.y;
       const isMe = room && p.id === room.sessionId;

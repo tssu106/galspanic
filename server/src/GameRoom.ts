@@ -5,7 +5,8 @@ import type { SimEnemy } from "./GalSim";
 import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, QUICK_START_SECS,
          SCORE_LEVEL, SCORE_COVER, SCORE_TRAP, SCORE_SPEED_BASE, SCORE_SPEED_DROP,
          CONTINUE_LIVES, CONTINUE_SCORE_KEEP,
-         BOON_IDS, BOON_OFFER_COUNT, BOON_SCORE_ADD, BOON_SLOW_MULT, BOON_SPEED_MULT, BOON_STAM_MULT } from "./constants";
+         BOON_IDS, BOON_OFFER_COUNT, BOON_SCORE_ADD, BOON_SLOW_MULT, BOON_SPEED_MULT, BOON_STAM_MULT,
+         REVIVE_SEC } from "./constants";
 import { verifyToken, recordUnlock, recordBest, submitDaily } from "./supa";
 import { dailyKey, dailySeed } from "./daily";
 
@@ -283,6 +284,7 @@ export class GameRoom extends Room<GameState> {
       p.lives = sp.lives; p.claimed = sp.claimed; p.out = sp.out ? 1 : 0;
       p.traps = sp.traps; p.bonus = sp.bonus; p.stamina = sp.stamina;
       p.inv = sp.invuln > 0 ? 1 : 0;   // 무적 표시(마커 희미하게)
+      p.revP = sp.out && sp.revT > 0 ? Math.min(1, sp.revT / REVIVE_SEC) : 0;   // 부활 진행 링
     });
 
     // enemies can grow (reveal spawns) or shrink (captures) — match the list length
@@ -348,6 +350,11 @@ export class GameRoom extends Room<GameState> {
     if (this.sim.itemEvents.length) {
       for (const ev of this.sim.itemEvents) this.broadcast("item", ev);
       this.sim.itemEvents.length = 0;
+    }
+    // 동료 부활 연출 이벤트
+    if (this.sim.reviveEvents.length) {
+      for (const ev of this.sim.reviveEvents) this.broadcast("revive", ev);
+      this.sim.reviveEvents.length = 0;
     }
 
     // 블랙홀 예고 이벤트 → 클라이언트가 그 자리에 블랙홀을 띄워 회피를 유도

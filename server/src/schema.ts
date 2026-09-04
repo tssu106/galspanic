@@ -18,7 +18,8 @@ export class Player extends Schema {
   @type("number") traps: number = 0;    // monsters captured
   @type("number") bonus: number = 0;    // capture score (accumulates; no longer spent on sprint)
   @type("number") stamina: number = 100; // 0..100 sprint gauge (drains while boosting, recovers otherwise)
-  @type("number") out: number = 0;      // 0/1 — eliminated this round
+  @type("number") out: number = 0;      // 0/1 — eliminated this round (쓰러짐: 동료가 부활 가능)
+  @type("number") revP: number = 0;     // 0..1 — 부활 진행도(쓰러진 마커에 링으로 표시)
   @type("number") inv: number = 0;      // 0/1 — invincible (spawn/respawn grace) → client draws marker faint
 }
 

@@ -404,15 +404,19 @@ export function renderShatter(dt) {
       for (const tt of b.teeth) tt.rotateY(dt * (5 + fast * 3));          // 톱니는 궤도 없이 자기 축으로 회전
       sp.scale.setScalar(1 + 0.08 * Math.sin(b.t * 3.2));                 // 충전 맥동
       if (b.eye) { const bp = b.t % (fast ? 1.8 : 3.2); b.eye.scale.y = bp < 0.18 ? Math.max(0.07, 1 - Math.sin(bp / 0.18 * Math.PI) * 0.93) : 1; }   // 깜빡임(격노 시 자주)
-    } else if (b.kind === "boss_spiral") {        // 매듭: 천천히 선회 + "묶였다 풀렸다"(양끝에서 잠깐 멈춤 + 이징 → 자연스럽게)
-      sp.rotation.z += dt * (0.5 + fast * 0.7); sp.rotation.x = Math.sin(b.t * 0.5) * 0.4;
+    } else if (b.kind === "boss_spiral") {        // 매듭: 천천히 선회 + "묶였다 풀렸다". 발사 중엔 빠르게 요동(채찍처럼)
+      sp.rotation.z += dt * (b.firing ? 3.4 : (0.5 + fast * 0.7)); sp.rotation.x = Math.sin(b.t * 0.5) * 0.4;
       ox = Math.cos(b.t * 1.1) * sz * 0.16; oy = Math.sin(b.t * 1.1) * sz * 0.16;
       if (b.knot && b.knot.morphTargetInfluences) {
-        const cyc = (b.t * (0.3 + fast * 0.3)) % 1;   // 한 사이클 ~3.3초(격노 시 빠름)
-        // 0~0.4 풀림(0→1) · 0.4~0.5 풀린 채 유지 · 0.5~0.9 다시 묶임(1→0) · 0.9~1 묶인 채 유지
-        let m = cyc < 0.4 ? cyc / 0.4 : cyc < 0.5 ? 1 : cyc < 0.9 ? 1 - (cyc - 0.5) / 0.4 : 0;
-        m = m * m * (3 - 2 * m);                       // smoothstep 이징(부드러운 가감속)
-        b.knot.morphTargetInfluences[0] = m;
+        if (b.firing) {
+          // 발사: 매듭을 빠르게 조였다 풀며 에너지를 감았다 채찍처럼 푸는 느낌
+          b.knot.morphTargetInfluences[0] = 0.5 - 0.5 * Math.cos(b.t * 15);
+        } else {
+          const cyc = (b.t * (0.3 + fast * 0.3)) % 1;   // 한 사이클 ~3.3초(격노 시 빠름)
+          // 0~0.4 풀림(0→1) · 0.4~0.5 풀린 채 유지 · 0.5~0.9 다시 묶임(1→0) · 0.9~1 묶인 채 유지
+          let m = cyc < 0.4 ? cyc / 0.4 : cyc < 0.5 ? 1 : cyc < 0.9 ? 1 - (cyc - 0.5) / 0.4 : 0;
+          b.knot.morphTargetInfluences[0] = m * m * (3 - 2 * m);   // smoothstep 이징(부드러운 가감속)
+        }
       }
     } else if (b.kind === "boss_spread") {        // 조준 방향을 노려보다 확 돌진(런지) — 포식자 외눈
       sp.rotation.z = b.aim; sp.rotation.x = Math.sin(b.t * 7) * 0.12;
@@ -441,10 +445,9 @@ export function renderShatter(dt) {
         for (const nd of b.crossNodes) nd.material.emissiveIntensity = ch;
       }
     }
-    // 발사 이펙트: 레이저 발사(예고 포함) 중이면 보스 전체 크기를 빠르게 키웠다 줄인다(펄스) + 코어를 살짝 뜨겁게.
+    // 발사 이펙트(공통): 코어를 살짝 뜨겁게. 크기 펄스는 기어 링만(다른 보스는 각자 형태에 맞는 효과 사용).
     if (b.firing) {
-      const base = b.sizePx / b.baseR;
-      b.group.scale.setScalar(base * (1 + 0.22 * Math.sin(b.t * 30)));
+      if (b.kind === "boss_ring") b.group.scale.setScalar((b.sizePx / b.baseR) * (1 + 0.22 * Math.sin(b.t * 30)));
       if (b.coreMat) b.coreMat.emissiveIntensity = Math.max(b.coreMat.emissiveIntensity || 0, 0.55);
     }
     b.group.position.set(b.baseX + ox, b.baseY + oy, 0);

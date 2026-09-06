@@ -404,18 +404,21 @@ export function renderShatter(dt) {
       for (const tt of b.teeth) tt.rotateY(dt * (5 + fast * 3));          // 톱니는 궤도 없이 자기 축으로 회전
       sp.scale.setScalar(1 + 0.08 * Math.sin(b.t * 3.2));                 // 충전 맥동
       if (b.eye) { const bp = b.t % (fast ? 1.8 : 3.2); b.eye.scale.y = bp < 0.18 ? Math.max(0.07, 1 - Math.sin(bp / 0.18 * Math.PI) * 0.93) : 1; }   // 깜빡임(격노 시 자주)
-    } else if (b.kind === "boss_spiral") {        // 매듭: 천천히 선회 + "묶였다 풀렸다". 발사 중엔 빠르게 요동(채찍처럼)
-      sp.rotation.z += dt * (b.firing ? 3.4 : (0.5 + fast * 0.7)); sp.rotation.x = Math.sin(b.t * 0.5) * 0.4;
-      ox = Math.cos(b.t * 1.1) * sz * 0.16; oy = Math.sin(b.t * 1.1) * sz * 0.16;
-      if (b.knot && b.knot.morphTargetInfluences) {
-        if (b.firing) {
-          // 발사: 매듭을 빠르게 조였다 풀며 에너지를 감았다 채찍처럼 푸는 느낌
-          b.knot.morphTargetInfluences[0] = 0.5 - 0.5 * Math.cos(b.t * 15);
-        } else {
-          const cyc = (b.t * (0.3 + fast * 0.3)) % 1;   // 한 사이클 ~3.3초(격노 시 빠름)
-          // 0~0.4 풀림(0→1) · 0.4~0.5 풀린 채 유지 · 0.5~0.9 다시 묶임(1→0) · 0.9~1 묶인 채 유지
+    } else if (b.kind === "boss_spiral") {        // 매듭: 평상시엔 3D로 뒹굴며(다축 텀블) 8자 경로로 떠돎, 발사 중엔 채찍처럼 요동
+      if (b.firing) {
+        sp.rotation.z += dt * 3.4;                                          // 고속 회전
+        ox = Math.cos(b.t * 1.1) * sz * 0.16; oy = Math.sin(b.t * 1.1) * sz * 0.16;
+        if (b.knot && b.knot.morphTargetInfluences) b.knot.morphTargetInfluences[0] = 0.5 - 0.5 * Math.cos(b.t * 15);   // 빠른 조임↔풀림
+      } else {
+        sp.rotation.x += dt * (0.7 + fast * 0.5);                           // 다축 텀블(공중에서 뒹구는 매듭)
+        sp.rotation.y += dt * (0.95 + fast * 0.6);
+        sp.rotation.z += dt * (0.45 + fast * 0.4);
+        ox = Math.sin(b.t * 0.85) * sz * 0.24;                              // 8자(리사주): x 1배 · y 2배 주기
+        oy = Math.sin(b.t * 1.7) * sz * 0.15;
+        if (b.knot && b.knot.morphTargetInfluences) {
+          const cyc = (b.t * 0.28) % 1;                                     // 천천히 묶였다 풀렸다(양끝 dwell + 이징)
           let m = cyc < 0.4 ? cyc / 0.4 : cyc < 0.5 ? 1 : cyc < 0.9 ? 1 - (cyc - 0.5) / 0.4 : 0;
-          b.knot.morphTargetInfluences[0] = m * m * (3 - 2 * m);   // smoothstep 이징(부드러운 가감속)
+          b.knot.morphTargetInfluences[0] = m * m * (3 - 2 * m);
         }
       }
     } else if (b.kind === "boss_spread") {        // 조준 방향을 노려보다 확 돌진(런지) — 포식자 외눈

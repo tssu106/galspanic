@@ -2939,7 +2939,7 @@ function render() {
       if (isBoss) {
         const sp = gridToScreen(v.x, v.y);
         let handled = false;
-        try { handled = updateBoss3D(e.id, sp.x, sp.y, R * camS, e.enr | 0, KIND_COLOR[e.kind] || "#ff3b5c", e.shape, e.aim || 0); } catch {}
+        try { handled = updateBoss3D(e.id, sp.x, sp.y, R * camS * 2, e.enr | 0, KIND_COLOR[e.kind] || "#ff3b5c", e.shape, e.aim || 0); } catch {}
         if (handled) {
           if (e.sh) { ctx.save(); ctx.translate(v.x*cw, v.y*ch);   // 보호막 링만 2D 로 덧그림
             ctx.globalAlpha = 0.55 + 0.35 * Math.sin(spin * 3); ctx.strokeStyle = "#7dd3fc"; ctx.lineWidth = Math.max(1.5, R * 0.2);

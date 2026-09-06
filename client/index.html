@@ -280,6 +280,25 @@
   #scoreHud .sh-run b { color:#a3e635; font-size:17px; font-variant-numeric:tabular-nums; }
   #scoreHud .sh-best { font-size:12px; color:#8b93b5; font-variant-numeric:tabular-nums; }
   body.result #hud { display:none; }   /* 결과 화면에선 실시간 칩 대신 점수 패널을 보여준다 */
+  /* 게스트 로그인/회원가입 유도 카드: 클리어·게임오버 화면에서 비로그인 사용자에게만(하단 슬라이드업) */
+  #guestNudge { position:fixed; left:50%; bottom:12vh; transform:translateX(-50%) translateY(16px);
+                z-index:60; width:min(400px,92vw); box-sizing:border-box; text-align:center;
+                background:linear-gradient(180deg,rgba(23,27,50,.97),rgba(14,17,34,.97));
+                border:1px solid #33407a; border-radius:16px; padding:15px 18px 13px;
+                box-shadow:0 18px 52px rgba(0,0,0,.6), 0 0 0 1px rgba(124,92,255,.16);
+                opacity:0; pointer-events:none; transition:opacity .28s ease, transform .28s ease; }
+  #guestNudge.show { opacity:1; transform:translateX(-50%) translateY(0); pointer-events:auto; }
+  #guestNudge .gnTitle { font-size:16px; font-weight:800; color:#fff; }
+  #guestNudge .gnSub { font-size:12.5px; color:#aab2d6; line-height:1.55; margin-top:5px; }
+  #guestNudge .gnBtns { display:flex; gap:8px; margin-top:13px; }
+  #guestNudge .gnUp { flex:1; background:linear-gradient(90deg,#ff5db1,#7c5cff); color:#fff; border:0;
+                      border-radius:11px; padding:11px; font-size:14.5px; font-weight:800; cursor:pointer; }
+  #guestNudge .gnIn { flex:1; background:#26305a; color:#e8ebf7; border:0; border-radius:11px;
+                      padding:11px; font-size:14.5px; font-weight:700; cursor:pointer; }
+  #guestNudge .gnUp:hover { filter:brightness(1.08); }
+  #guestNudge .gnIn:hover { background:#2f3a68; }
+  #guestNudge .gnLater { background:none; border:0; color:#7b83a8; font-size:12.5px; cursor:pointer; margin-top:9px; }
+  #guestNudge .gnLater:hover { color:#aab2d6; }
   /* 로그라이트 버프 3택 카드(클리어 화면 중앙) */
   #boonPick { position:fixed; left:50%; top:47%; transform:translate(-50%,-50%); z-index:55;
               display:flex; flex-direction:column; align-items:center; gap:12px; width:min(560px,94vw); pointer-events:none; }
@@ -299,8 +318,8 @@
   #boonPick .bp-cur { font-size:12px; color:#dfe4f5; text-align:center; min-height:16px; text-shadow:0 1px 8px rgba(0,0,0,.8); }
   #boonPick .bp-status { font-size:13px; font-weight:700; color:#ffe08a; text-align:center; min-height:18px; text-shadow:0 1px 8px rgba(0,0,0,.8); }
   #boonPick .bp-waiting { padding:26px 10px; font-size:15px; font-weight:700; color:#9fb0d6; text-align:center; }
-  #shareBtn { background:#232a44; color:#e8ebf7; font-weight:700; }
-  #shareBtn:hover { background:#2d3656; }
+  #shareBtn, #titleBtn { background:#232a44; color:#e8ebf7; font-weight:700; }
+  #shareBtn:hover, #titleBtn:hover { background:#2d3656; }
   /* 공유 결과 안내 토스트 */
   #toast { position:fixed; left:50%; bottom:12%; transform:translateX(-50%); z-index:80;
            background:rgba(10,13,24,.94); color:#e8ebf7; border:1px solid #2a3350; border-radius:12px;
@@ -530,6 +549,7 @@
     <div style="margin-top:6px">
       <button id="restart" style="display:none" data-i18n="btn_restart"></button>
       <button id="shareBtn" style="display:none" data-i18n="btn_share"></button>
+      <button id="titleBtn" style="display:none" data-i18n="btn_title"></button>
     </div>
   </div>
 
@@ -550,6 +570,17 @@
 
   <!-- 점수/최고기록 패널: 클리어·게임오버 화면에서만 표시 (updateOverlays 가 내용 채움) -->
   <div id="scoreHud" class="hidden"></div>
+
+  <!-- 게스트 로그인/회원가입 유도: 비로그인 사용자가 스테이지 클리어/게임오버에 도달하면 노출 -->
+  <div id="guestNudge" role="dialog" aria-live="polite">
+    <div class="gnTitle" id="gnTitle"></div>
+    <div class="gnSub" id="gnSub"></div>
+    <div class="gnBtns">
+      <button class="gnUp" id="gnUp" data-i18n="gn_signup"></button>
+      <button class="gnIn" id="gnIn" data-i18n="gn_login"></button>
+    </div>
+    <button class="gnLater" id="gnLater" data-i18n="gn_later"></button>
+  </div>
 
   <!-- HUD 버프 아이콘 툴팁 (hover/터치 시 잠깐 표시) -->
   <div id="boonTip"></div>
@@ -679,10 +710,15 @@ const I18N = {
     boon_frost_n: "혹한", boon_frost_d: "스테이지 시작 시 적 정지",
     guard_block: "🛡️ 막음!",
     revived: "부활!",
-    btn_share: "🔗 공유", share_saved: "이미지를 저장했어요", share_copied: "결과를 복사했어요",
+    btn_share: "🔗 공유", btn_title: "🏠 메인화면으로", share_saved: "이미지를 저장했어요", share_copied: "결과를 복사했어요",
     share_normal: "한뼘더 스테이지 {0} · {1}점!", share_daily: "한뼘더 오늘의 챌린지 {1}점! (스테이지 {0})",
     btn_close: "✕ 닫기", title_close: "닫기", btn_save: "🖼 저장", collected: "수집",
     need_login_paren: "(로그인 필요)", login_word: "로그인",
+    gn_signup: "📝 회원가입", gn_login: "🔑 로그인", gn_later: "나중에",
+    gn_won_title: "🖼 이 그림, 도감에 남길까요?",
+    gn_won_sub: "게스트는 저장되지 않아요. 회원가입하거나 로그인하면 수집한 그림이 계정에 계속 쌓여요.",
+    gn_lost_title: "🏆 점수를 기록으로 남길까요?",
+    gn_lost_sub: "게스트 점수는 이 기기에만 남아요. 회원가입하면 랭킹·최고기록이 계정에 저장돼요.",
     gallery_needlogin_html: "🔑 로그인하면 수집한 그림을 볼 수 있어요.<br><button id=\"glLogin\">로그인</button>",
     lg_title_in: "🔑 로그인", lg_title_up: "📝 회원가입",
     ph_lgname: "플레이어 이름 (게임에서 표시)", ph_email: "이메일", ph_pass: "비밀번호 (6자 이상)",
@@ -757,10 +793,15 @@ const I18N = {
     boon_frost_n: "Frost", boon_frost_d: "Enemies freeze at stage start",
     guard_block: "🛡️ Blocked!",
     revived: "Revived!",
-    btn_share: "🔗 Share", share_saved: "Image saved", share_copied: "Result copied",
+    btn_share: "🔗 Share", btn_title: "🏠 Main menu", share_saved: "Image saved", share_copied: "Result copied",
     share_normal: "One More Inch stage {0} · {1} pts!", share_daily: "One More Inch daily challenge · {1} pts! (stage {0})",
     btn_close: "✕ Close", title_close: "Close", btn_save: "🖼 Save", collected: "collected",
     need_login_paren: "(login required)", login_word: "Log in",
+    gn_signup: "📝 Sign up", gn_login: "🔑 Log in", gn_later: "Later",
+    gn_won_title: "🖼 Keep this picture in your collection?",
+    gn_won_sub: "Guests can't save it. Sign up or log in and your collected pictures stay on your account.",
+    gn_lost_title: "🏆 Save your score?",
+    gn_lost_sub: "Guest scores stay on this device only. Sign up to keep your ranking & best on your account.",
     gallery_needlogin_html: "🔑 Log in to see the pictures you've collected.<br><button id=\"glLogin\">Log in</button>",
     lg_title_in: "🔑 Log in", lg_title_up: "📝 Sign up",
     ph_lgname: "Player name (shown in game)", ph_email: "Email", ph_pass: "Password (6+ chars)",
@@ -835,10 +876,15 @@ const I18N = {
     boon_frost_n: "極寒", boon_frost_d: "ステージ開始時に敵停止",
     guard_block: "🛡️ 防いだ！",
     revived: "復活！",
-    btn_share: "🔗 シェア", share_saved: "画像を保存しました", share_copied: "結果をコピーしました",
+    btn_share: "🔗 シェア", btn_title: "🏠 メインへ", share_saved: "画像を保存しました", share_copied: "結果をコピーしました",
     share_normal: "One More Inch ステージ{0} · {1}点！", share_daily: "One More Inch 今日のチャレンジ {1}点！(ステージ{0})",
     btn_close: "✕ 閉じる", title_close: "閉じる", btn_save: "🖼 保存", collected: "収集",
     need_login_paren: "（ログインが必要）", login_word: "ログイン",
+    gn_signup: "📝 新規登録", gn_login: "🔑 ログイン", gn_later: "あとで",
+    gn_won_title: "🖼 この絵を図鑑に残しますか？",
+    gn_won_sub: "ゲストは保存されません。新規登録またはログインで集めた絵がアカウントに残ります。",
+    gn_lost_title: "🏆 スコアを記録に残しますか？",
+    gn_lost_sub: "ゲストのスコアはこの端末だけに残ります。新規登録でランキング・自己ベストがアカウントに保存されます。",
     gallery_needlogin_html: "🔑 ログインすると集めた絵を見られます。<br><button id=\"glLogin\">ログイン</button>",
     lg_title_in: "🔑 ログイン", lg_title_up: "📝 新規登録",
     ph_lgname: "プレイヤー名（ゲームで表示）", ph_email: "メール", ph_pass: "パスワード（6文字以上）",
@@ -896,6 +942,7 @@ function applyI18n() {
   try { setAuthMode(authMode); } catch {}                       // 로그인/회원가입 팝업 재현지화
   try { updateLoginUI(currentUser); } catch {}                  // 로그인/로그아웃 버튼
   try { updateGalleryCount(); } catch {}                        // 도감 카운트/로그인 필요 문구
+  try { refreshGuestNudge(); } catch {}                         // 게스트 유도 카드 문구(표시 중이면)
   try {                                                          // dev 스테이지 선택 항목
     const ss = document.getElementById("stageSelect");
     if (ss) [...ss.options].forEach((o) => { o.textContent = t("stage_n", o.value); });
@@ -927,6 +974,7 @@ const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const restartBtn = document.getElementById("restart");
 const shareBtn = document.getElementById("shareBtn");
+const titleBtn = document.getElementById("titleBtn");
 const chatInput = document.getElementById("chat");
 const chatPanel = document.getElementById("chatPanel");
 const chatLog = document.getElementById("chatLog");
@@ -1501,6 +1549,7 @@ onAuth(async (user) => {
   nameInput.disabled = true;
   updateLoginUI(user);
   updateGalleryCount();
+  if (user) { guestNudgeKey = null; try { hideGuestNudge(); } catch {} }   // 로그인 완료 → 유도 카드 닫기
   if (!galleryEl.classList.contains("hidden")) openGallery();
 });
 
@@ -1678,9 +1727,43 @@ function updateOverlays() {
       hideBoonPick();
     }
   }
+  syncGuestNudge();   // 게스트면 결과화면(승리/게임오버)에서 로그인·회원가입 유도 카드 노출
 }
 const gameoverEl = document.getElementById("gameover");
 const goNumEl = document.getElementById("goNum");
+
+// ── 게스트 로그인/회원가입 유도 카드 ─────────────────────────────
+// 비로그인(게스트) 사용자가 스테이지 클리어(won)/게임오버(lost)에 도달하면 하단 카드로
+// 회원가입·로그인을 유도한다. 결과 1회당 한 번만 뜨고(같은 결과 재노출 방지), 로그인하거나
+// 타이틀로 돌아가면 사라진다. (게스트는 도감 저장·클라우드 기록이 안 되므로 이때가 최적 유도 시점)
+const guestNudgeEl = document.getElementById("guestNudge");
+const gnTitleEl = document.getElementById("gnTitle");
+const gnSubEl = document.getElementById("gnSub");
+let guestNudgeKind = null;   // "won" | "lost" — 현재 표시 중인 문구 종류(언어 전환 시 재현지화용)
+let guestNudgeKey = null;    // 이미 노출한 결과 식별자 → 같은 결과에서 반복 노출 방지
+function refreshGuestNudge() {
+  if (!guestNudgeEl || !guestNudgeKind) return;
+  gnTitleEl.textContent = t(guestNudgeKind === "won" ? "gn_won_title" : "gn_lost_title");
+  gnSubEl.textContent   = t(guestNudgeKind === "won" ? "gn_won_sub"   : "gn_lost_sub");
+}
+function showGuestNudge(kind) { guestNudgeKind = kind; refreshGuestNudge(); guestNudgeEl?.classList.add("show"); }
+function hideGuestNudge() { guestNudgeEl?.classList.remove("show"); }
+// 매 프레임 호출(updateOverlays): 게스트 & 결과화면이면 1회 노출, 그 외엔 숨김.
+function syncGuestNudge() {
+  const p = state && state.phase;
+  if (!currentUser && (p === "won" || p === "lost")) {
+    const key = p === "won" ? ("won:" + (state.level | 0)) : "lost";
+    if (key !== guestNudgeKey) { guestNudgeKey = key; showGuestNudge(p); }
+  } else {
+    if (guestNudgeKey !== null) guestNudgeKey = null;
+    hideGuestNudge();
+  }
+}
+if (guestNudgeEl) {
+  document.getElementById("gnUp").addEventListener("click", () => openLogin("up"));
+  document.getElementById("gnIn").addEventListener("click", () => openLogin("in"));
+  document.getElementById("gnLater").addEventListener("click", hideGuestNudge);
+}
 
 // ── 점수/최고기록 패널 ──────────────────────────────────────────
 // 최고기록은 브라우저(localStorage)에 저장한다(게스트 포함 즉시 동작). 로그인 시에는 서버가
@@ -1730,6 +1813,7 @@ function returnToTitle() {
   document.getElementById("rank").classList.add("hidden");
   document.getElementById("gameover").classList.add("hidden"); hideCountdown3D();
   lastWonImageId = null;
+  guestNudgeKey = null; hideGuestNudge();   // 결과화면 유도 카드 정리(다음 결과에서 다시 노출 가능)
   devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden"); devLoseBtn.classList.add("hidden"); devWinBtn.classList.add("hidden"); devClearBtn.classList.add("hidden");
   document.getElementById("touch")?.classList.add("hidden"); pressOrder.length = 0; resetTouch();   // 터치 컨트롤 숨김 + 상태 초기화
   document.body.classList.remove("ingame");   // 스크롤 잠금 해제 + (있다면) 제목 복원
@@ -1853,6 +1937,8 @@ function restartOrNextStage() {
   advanceWithAd(() => room.send("restart"));
 }
 restartBtn.onclick = () => restartOrNextStage();
+// 클리어/게임오버 화면에서 "메인화면으로" — 방을 떠나 타이틀로 복귀(이어하기/다음 스테이지 대신 종료).
+titleBtn.onclick = () => returnToTitle();
 
 // 사운드 음소거 토글: 배경음악+효과음을 함께 끈다/켠다(localStorage 유지). 해제 시 오디오·BGM 재개.
 const muteBtn = document.getElementById("muteBtn");
@@ -3364,6 +3450,7 @@ function drawHud() {
   // 클리어 화면에 버프 선택창이 떠 있으면 "다음" 버튼 대신 버프 카드로 진행하므로 버튼은 숨긴다.
   restartBtn.style.display = (state.phase === "lost" || (state.phase === "won" && !state.boonOffers)) ? "" : "none";
   shareBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
+  titleBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
   // 클리어(승리) 화면에서는 채팅 입력창을 숨긴다
   chatInput.style.display = (state.phase === "won") ? "none" : "";
   if (state.phase === "won" && document.activeElement === chatInput) chatInput.blur();

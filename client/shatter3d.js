@@ -409,6 +409,12 @@ export function renderShatter(dt) {
       sp.rotation.z = b.crossRot;
       const ap = 1 + 0.11 * Math.sin(b.t * 3.4); sp.scale.set(ap, ap, 1);
     }
+    // 발사 이펙트: 레이저 발사(예고 포함) 중이면 보스 전체 크기를 빠르게 키웠다 줄인다(펄스) + 코어를 살짝 뜨겁게.
+    if (b.firing) {
+      const base = b.sizePx / b.baseR;
+      b.group.scale.setScalar(base * (1 + 0.22 * Math.sin(b.t * 30)));
+      if (b.coreMat) b.coreMat.emissiveIntensity = Math.max(b.coreMat.emissiveIntensity || 0, 0.55);
+    }
     b.group.position.set(b.baseX + ox, b.baseY + oy, 0);
   }
   if (bosses.size) any = true;

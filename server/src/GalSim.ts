@@ -108,6 +108,7 @@ const ITEM_MAX_ON_MAP = 3;   // 동시에 존재 가능한 최대 아이템 수
 // 데일리(보스전): 미사일이 핵심 처치 수단이라 아이템을 더 자주·더 많이 뿌린다.
 const DAILY_ITEM_MAX = 6;    // 데일리 동시 아이템 상한(일반 3 → 6)
 const DAILY_ITEM_RATE = 0.45;// 데일리 아이템 간격 배수(<1 = 더 자주)
+const BOMB_CLAIM_R = 11;     // 폭탄: 미차지 맵의 랜덤 지점을 이 반경만큼 원형으로 터뜨려 밝힌다
 // 거미줄(감속 필드)
 const WEB_SLOW = 2.0;      // 거미줄 위 이동 시간 배수(느려짐)
 const WEB_LIFE = 9;        // 거미줄 지속(초)
@@ -588,23 +589,27 @@ export class GalSim {
     }
   }
 
-  // 폭탄: 플레이어 주변 반경의 일반 적을 한 번에 포획(점수·콤보 반영). 보스는 제외.
+  // 폭탄: (1) 플레이어 주변 반경의 일반 적을 한 번에 포획(보스 제외). (2) 미차지 맵의 랜덤 지점을
+  // 원형으로 "터뜨려" 밝힌다(폭발 리빌). 적이 없어도 (2)는 항상 실행된다.
   private bombItem(p: SimPlayer) {
     const R = 15, R2 = R * R;
     const trapped = this.enemies.filter(e => !e.boss && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 <= R2);
-    if (!trapped.length) return;
-    this.enemies = this.enemies.filter(e => !trapped.includes(e));
-    let bonus = 0; for (const e of trapped) bonus += (CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT) * this.mods.trap;
-    this.combo++; this.comboT = COMBO_WINDOW;
-    bonus = Math.round(bonus * (1 + (this.combo - 1) * COMBO_BONUS));
-    p.traps += trapped.length; p.bonus += bonus;
-    this.captureEvents.push({ x: p.x, y: p.y, count: trapped.length, bonus, owner: p.owner, combo: this.combo });
+    if (trapped.length) {
+      this.enemies = this.enemies.filter(e => !trapped.includes(e));
+      let bonus = 0; for (const e of trapped) bonus += (CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT) * this.mods.trap;
+      this.combo++; this.comboT = COMBO_WINDOW;
+      bonus = Math.round(bonus * (1 + (this.combo - 1) * COMBO_BONUS));
+      p.traps += trapped.length; p.bonus += bonus;
+      this.captureEvents.push({ x: p.x, y: p.y, count: trapped.length, bonus, owner: p.owner, combo: this.combo });
+    }
+    const [bx, by] = this.randomEmptySpot();               // 미차지(EMPTY) 랜덤 지점
+    const gained = this.claimDisc(bx, by, BOMB_CLAIM_R);   // 그 자리를 원형으로 밝힘(중앙 폭발 연출)
+    if (gained > 0) { p.claimed += gained; if (this.ratio >= this.clearTarget) this.over = "won"; }
   }
 
-  // 스윕: 플레이어 주변 원형 내부(EMPTY) 셀을 즉시 점유(맵 밝힘). 진행도·클리어 판정 반영.
-  private sweepItem(p: SimPlayer) {
-    const R = 13, cx = Math.floor(p.x), cy = Math.floor(p.y), R2 = (R + 0.5) * (R + 0.5);
-    let gained = 0, sx = 0, sy = 0;
+  // 원형 영역의 빈(EMPTY) 셀을 즉시 점유하고 중앙에서 리빌(파편 폭발) 연출을 띄운다. 점유 수 반환.
+  private claimDisc(cx: number, cy: number, R: number): number {
+    const R2 = (R + 0.5) * (R + 0.5); let gained = 0, sx = 0, sy = 0;
     for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
       if (dx * dx + dy * dy > R2) continue;
       const gx = cx + dx, gy = cy + dy;
@@ -612,11 +617,14 @@ export class GalSim {
       const i = idx(gx, gy);
       if (this.grid[i] === EMPTY) { this.setGrid(i, CLAIMED); gained++; sx += gx; sy += gy; }
     }
-    if (gained > 0) {
-      p.claimed += gained; this.claimedInterior += gained;
-      this.revealEvents.push({ x: sx / gained, y: sy / gained, n: gained });
-      if (this.ratio >= this.clearTarget) this.over = "won";
-    }
+    if (gained > 0) { this.claimedInterior += gained; this.revealEvents.push({ x: sx / gained, y: sy / gained, n: gained }); }
+    return gained;
+  }
+
+  // 스윕: 플레이어 주변 원형 내부(EMPTY) 셀을 즉시 점유(맵 밝힘). 진행도·클리어 판정 반영.
+  private sweepItem(p: SimPlayer) {
+    const gained = this.claimDisc(Math.floor(p.x), Math.floor(p.y), 13);
+    if (gained > 0) { p.claimed += gained; if (this.ratio >= this.clearTarget) this.over = "won"; }
   }
 
 

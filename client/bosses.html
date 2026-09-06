@@ -18,6 +18,9 @@
 </head><body>
 <h1>보스 3D 미리보기</h1>
 <div class="sub">4종 보스 · 각자 다른 모양 · 움직임 · 공격 라인 (실시간 렌더)</div>
+<div style="text-align:center;margin-bottom:12px">
+  <button id="fireBtn" style="background:linear-gradient(90deg,#ff5db1,#ff8a3b);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:800;cursor:pointer">⚡ 레이저 발사 효과</button>
+</div>
 <div id="stage"><canvas id="c" width="512" height="768"></canvas></div>
 <canvas id="fx3dShatter"></canvas>
 <script type="module">
@@ -38,12 +41,20 @@ function place() {
   const r = c.getBoundingClientRect(), rad = r.width * 96 / 512;   // 화면상 보스 반경(px)
   for (const b of BOSSES) { b.el.style.left = (r.left + r.width * b.x) + "px"; b.el.style.top = (r.top + r.height * b.y + rad + 10) + "px"; }
 }
+// 발사 이펙트 토글: 켜면 모든 보스가 발사(충전 발광) 상태로 렌더된다(십자 보스는 회전도 멈춤).
+let firing = false;
+const fireBtn = document.getElementById("fireBtn");
+fireBtn.addEventListener("click", () => {
+  firing = !firing;
+  fireBtn.textContent = firing ? "⏹ 발사 멈추기" : "⚡ 레이저 발사 효과";
+  fireBtn.style.filter = firing ? "brightness(1.15)" : "";
+});
 let last = performance.now();
 function loop() {
   const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
   for (const b of BOSSES) {
     const aim = b.kind === "boss_spread" ? now / 1500 : 0;   // 화살촉은 조준을 천천히 돌려 사이트 라인을 보여준다
-    updateBoss3D(b.id, 512 * b.x, 768 * b.y, 96, 0, b.col, b.kind, aim);
+    updateBoss3D(b.id, 512 * b.x, 768 * b.y, 96, 0, b.col, b.kind, aim, firing);
   }
   renderShatter(dt); place(); requestAnimationFrame(loop);
 }

@@ -232,7 +232,14 @@ function tubeIndexUV(T, R) {
   return { index, uv };
 }
 const knotCurve = (tt) => { const t = tt * Math.PI * 2, R = 0.46, r = 0.18, p = 2, q = 3, cq = Math.cos(q * t); return new THREE.Vector3((R + r * cq) * Math.cos(p * t), (R + r * cq) * Math.sin(p * t), r * Math.sin(q * t)); };
-const looseCurve = (tt) => { const t = tt * Math.PI * 2, R = 0.62; return new THREE.Vector3(R * Math.cos(t), R * Math.sin(t), 0); };
+// 풀린 상태 = 원이 아니라 "길게 뻗은 밧줄 한 가닥"(닫힌 튜브라 위/아래 두 가닥이 양 끝에서 둥글게 이어진 헤어핀).
+const looseCurve = (tt) => {
+  const t = tt * Math.PI * 2;
+  const x = Math.cos(t) * 1.28;                                   // 좌우로 길게 뻗음
+  const y = 0.15 * Math.sin(t) + 0.05 * Math.sin(t * 3);          // 위/아래 가닥 분리 + 살짝 물결(밧줄 느낌)
+  const z = 0.06 * Math.sin(t * 2);
+  return new THREE.Vector3(x, y, z);
+};
 
 // 린넨(천) 질감 텍스처 — 캔버스로 직조(가로·세로 실) 패턴 + 노이즈. 색맵 겸 범프맵으로 쓴다.
 function fabricTex() {
@@ -312,11 +319,27 @@ function makeBossGroup(kind, colorCss) {
     head.rotation.z = -Math.PI / 2; head.position.x = 0.15; spinner.add(head); addEdges(head, edgeCol, 1, edgeOp);
     const finGeo = new THREE.BoxGeometry(0.55, 0.09, 0.75);
     for (const s of [1, -1]) { const f = new THREE.Mesh(finGeo, darkMat); f.position.set(-0.5, 0, 0); f.rotation.z = s * 0.5; spinner.add(f); addEdges(f, edgeCol, 1, 0.55); }
+    // 포식자 외눈: 스피너가 조준 방향(aim)으로 회전하므로 눈도 그쪽을 노려본다. 동공은 앞(+x)으로 쏠려 있음.
+    const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.36, 20, 16),
+      new THREE.MeshStandardMaterial({ color: 0xffe4c0, emissive: 0xff4a1e, emissiveIntensity: 0.75, roughness: 0.45, metalness: 0.1 }));
+    eyeWhite.position.set(0.02, 0, 0.22); spinner.add(eyeWhite);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.19, 16, 12), new THREE.MeshBasicMaterial({ color: 0x180200 }));
+    pupil.position.set(0.2, 0, 0.34); spinner.add(pupil);   // 앞쪽으로 쏠린 동공 = 조준 방향을 노려봄
+    b.spreadEye = eyeWhite; b.spreadPupil = pupil;
     b.baseR = 1.1;
-  } else {                                    // boss_cross: 금빛 3D 플러스. (4방향 빔 라인 제거 — 요청)
+  } else {                                    // boss_cross: 금빛 3D 플러스 + 네 팔 끝 에미터 노드 + 중앙 코어 젬
     for (const geo of [new THREE.BoxGeometry(2.5, 0.5, 0.5), new THREE.BoxGeometry(0.5, 2.5, 0.5), new THREE.BoxGeometry(0.82, 0.82, 0.82)]) {
       const m = new THREE.Mesh(geo, coreMat); spinner.add(m); addEdges(m, edgeCol, 1, edgeOp);
     }
+    b.crossNodes = [];   // 십자 레이저 직전 밝게 충전되는 발광 노드(네 방향 포탑 정체성)
+    for (const [nx, ny] of [[1.28, 0], [-1.28, 0], [0, 1.28], [0, -1.28]]) {
+      const nd = new THREE.Mesh(new THREE.SphereGeometry(0.36, 16, 12),
+        new THREE.MeshStandardMaterial({ color: 0xfff2c0, emissive: 0xffcf3a, emissiveIntensity: 0.55, roughness: 0.35, metalness: 0.3 }));
+      nd.position.set(nx, ny, 0); spinner.add(nd); b.crossNodes.push(nd);
+    }
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.5),
+      new THREE.MeshStandardMaterial({ color: 0xfff6d8, emissive: 0xffcf3a, emissiveIntensity: 0.45, roughness: 0.2, metalness: 0.7 }));
+    spinner.add(gem); addEdges(gem, edgeCol, 1, edgeOp); b.crossGem = gem;
     b.baseR = 1.4;
   }
   // 고정 3/4 뷰 기울기 → 정면 평면 실루엣이 아니라 부피가 보이는 입체로. (위치는 그대로, 보이는 각도만 기울임)
@@ -391,10 +414,14 @@ export function renderShatter(dt) {
         m = m * m * (3 - 2 * m);                       // smoothstep 이징(부드러운 가감속)
         b.knot.morphTargetInfluences[0] = m;
       }
-    } else if (b.kind === "boss_spread") {        // 조준 방향을 향해 주기적으로 확 돌진(런지)
+    } else if (b.kind === "boss_spread") {        // 조준 방향을 노려보다 확 돌진(런지) — 포식자 외눈
       sp.rotation.z = b.aim; sp.rotation.x = Math.sin(b.t * 7) * 0.12;
       const lunge = Math.max(0, Math.sin(b.t * 2.2));
       ox = Math.cos(b.aim) * lunge * sz * 0.55; oy = Math.sin(b.aim) * lunge * sz * 0.55;
+      if (b.spreadEye) {   // 외눈 깜빡임 + 돌진/발사 순간 붉게 번뜩임
+        const bp = b.t % 2.6; b.spreadEye.scale.y = bp < 0.14 ? Math.max(0.1, 1 - Math.sin(bp / 0.14 * Math.PI) * 0.9) : 1;
+        b.spreadEye.material.emissiveIntensity = 0.6 + lunge * 0.9 + (b.firing ? 0.6 : 0);
+      }
     } else {                                      // boss_cross: 90°씩 끊어 도는 계단 회전(좌우 랜덤, 느리게) · 발사 중 정지
       if (b.crossRot == null) { b.crossRot = 0; b.crossTarget = 0; b.crossWait = 0.6; }
       if (!b.firing) {
@@ -408,6 +435,11 @@ export function renderShatter(dt) {
       }
       sp.rotation.z = b.crossRot;
       const ap = 1 + 0.11 * Math.sin(b.t * 3.4); sp.scale.set(ap, ap, 1);
+      if (b.crossGem) b.crossGem.rotation.set(b.t * 1.2, b.t * 1.6, 0);   // 중앙 코어 젬 회전
+      if (b.crossNodes) {   // 팔 끝 노드: 발사 중이면 밝게 충전(맥동), 평소엔 은은하게
+        const ch = b.firing ? 0.8 + 1.5 * (0.5 + 0.5 * Math.sin(b.t * 24)) : 0.5 + 0.14 * Math.sin(b.t * 2);
+        for (const nd of b.crossNodes) nd.material.emissiveIntensity = ch;
+      }
     }
     // 발사 이펙트: 레이저 발사(예고 포함) 중이면 보스 전체 크기를 빠르게 키웠다 줄인다(펄스) + 코어를 살짝 뜨겁게.
     if (b.firing) {

@@ -66,6 +66,13 @@
   @media (max-width:900px){ #rank { display:none; } }
   canvas { background:#05060c; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.5);
            aspect-ratio:2/3; height:min(84vh, 860px); width:auto; max-width:94vw; }
+  /* 돌 파편 오버레이: #c 위에 겹치되(모듈이 매 프레임 위치 동기화) 클릭은 통과, 게임 캔버스 위·UI 아래 */
+  #fx3dShatter { position:fixed; left:0; top:0; z-index:12; pointer-events:none; display:none; background:transparent; border-radius:14px; }
+  /* 사운드 음소거 토글: 좌하단 고정, 캔버스/오버레이 위, 항상 클릭 가능 */
+  #muteBtn { position:fixed; left:12px; bottom:12px; z-index:62; width:38px; height:38px; border-radius:10px;
+             background:rgba(22,26,43,.85); color:#e8ebf7; border:1px solid #2a3350; font-size:16px; cursor:pointer;
+             display:flex; align-items:center; justify-content:center; }
+  #muteBtn:hover { border-color:#3a4570; }
   #help { color:var(--muted); font-size:12px; text-align:center; max-width:640px; line-height:1.5; }
   #status { font-size:13px; color:#ffb400; min-height:18px; }
   kbd { background:#232a44; border-radius:5px; padding:1px 6px; font-size:11px; }
@@ -83,8 +90,9 @@
                    display:flex; align-items:center; gap:8px; }
   #start #topbar #langSwitch { margin-right:auto; }   /* 언어는 좌측, 나머지 아이콘은 우측 */
   #start .iconbtn { background:rgba(22,26,43,.85); color:var(--ink); border:1px solid #2a3350;
-                    border-radius:10px; height:38px; min-width:40px; padding:0 10px; font-size:17px;
-                    cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:3px; }
+                    border-radius:10px; height:38px; min-width:40px; padding:0 11px; font-size:14px; font-weight:700;
+                    white-space:nowrap; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:4px; }
+  #start #topbar { flex-wrap:wrap; }   /* 라벨이 붙어 넓어져도 좁은 화면에서 줄바꿈되게 */
   #start .iconbtn:hover { border-color:#3a4570; }
   #start .iconbtn .gcount { font-size:11px; font-weight:800; color:#a3e635; }
   #langBtn { background:rgba(22,26,43,.85); color:var(--ink); border:1px solid #2a3350; border-radius:10px;
@@ -278,16 +286,19 @@
   #boonPick.hidden { display:none; }
   #boonPick .bp-title { font-size:16px; font-weight:800; color:#ffe08a; text-align:center; text-shadow:0 2px 12px rgba(0,0,0,.8); }
   #boonPick .bp-cards { display:flex; gap:10px; width:100%; justify-content:center; }
-  #boonPick .bp-card { pointer-events:auto; flex:1; max-width:168px; background:rgba(12,16,30,.94); border:1px solid #3a4570;
-                       border-radius:14px; padding:14px 10px; text-align:center; cursor:pointer;
-                       transition:transform .1s, border-color .1s; box-shadow:0 12px 32px rgba(0,0,0,.55); }
-  #boonPick .bp-card:hover { transform:translateY(-3px); border-color:#a3e635; }
+  #boonPick .bp-card { pointer-events:auto; flex:1; max-width:168px; background:rgba(12,16,30,.94);
+                       border:1px solid var(--rc,#3a4570); border-radius:14px; padding:12px 10px 14px; text-align:center; cursor:pointer;
+                       transition:transform .1s, filter .1s, box-shadow .1s; box-shadow:0 0 0 1px var(--rc,transparent), 0 10px 30px var(--rg,rgba(0,0,0,.55)); }
+  #boonPick .bp-card:hover { transform:translateY(-3px); filter:brightness(1.14); box-shadow:0 0 0 2px var(--rc,#a3e635), 0 14px 36px var(--rg,rgba(0,0,0,.6)); }
+  #boonPick .bp-rar { font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--rc,#9fb0d6); margin-bottom:6px; text-shadow:0 0 10px var(--rg,transparent); }
   #boonPick .bp-ico { font-size:30px; line-height:1; }
   #boonPick .bp-name { font-size:15px; font-weight:800; color:#e8ebf7; margin-top:7px; }
   #boonPick .bp-desc { font-size:12px; color:#9fb0d6; margin-top:5px; line-height:1.4; }
   #boonPick .bp-key { display:inline-block; margin-top:9px; font-size:11px; color:#8b93b5;
                       border:1px solid #2a3350; border-radius:6px; padding:1px 8px; }
   #boonPick .bp-cur { font-size:12px; color:#dfe4f5; text-align:center; min-height:16px; text-shadow:0 1px 8px rgba(0,0,0,.8); }
+  #boonPick .bp-status { font-size:13px; font-weight:700; color:#ffe08a; text-align:center; min-height:18px; text-shadow:0 1px 8px rgba(0,0,0,.8); }
+  #boonPick .bp-waiting { padding:26px 10px; font-size:15px; font-weight:700; color:#9fb0d6; text-align:center; }
   #shareBtn { background:#232a44; color:#e8ebf7; font-weight:700; }
   #shareBtn:hover { background:#2d3656; }
   /* 공유 결과 안내 토스트 */
@@ -430,8 +441,8 @@
           <button type="button" data-lang="ja">日本語</button>
         </div>
       </div>
-      <button id="rankBtn" class="iconbtn" data-i18n-title="btn_rank" aria-label="ranking">🏆</button>
-      <button id="galleryBtn" class="iconbtn" data-i18n-title="btn_gallery" aria-label="collection">📖<span id="galleryCount" class="gcount"></span></button>
+      <button id="rankBtn" class="iconbtn" data-i18n-title="btn_rank" aria-label="ranking"><span data-i18n="btn_rank"></span></button>
+      <button id="galleryBtn" class="iconbtn" data-i18n-title="btn_gallery" aria-label="collection"><span data-i18n="btn_gallery"></span><span id="galleryCount" class="gcount"></span></button>
       <button id="loginBtn" class="iconbtn" aria-label="account">🔑</button>
     </div>
 
@@ -512,6 +523,8 @@
     <div id="rankList" class="rlist"></div>
   </div>
   <canvas id="c" width="512" height="768"></canvas>
+  <!-- 보스 맵 파괴 시 3D 돌 파편(shatter3d) 오버레이 — 매 프레임 #c 사각형에 겹쳐 표시 -->
+  <canvas id="fx3dShatter"></canvas>
   <div id="help">
     <span data-i18n-html="instr_html"></span>
     <div style="margin-top:6px">
@@ -544,9 +557,13 @@
   <!-- 로그라이트 버프 선택: 클리어 화면에서 3택 (updateOverlays 가 카드 채움) -->
   <div id="boonPick" class="hidden">
     <div class="bp-title" data-i18n="boon_title"></div>
+    <div id="boonStatus" class="bp-status"></div>
     <div id="boonCards" class="bp-cards"></div>
     <div id="boonCur" class="bp-cur"></div>
   </div>
+
+  <!-- 사운드 음소거 토글 (배경음악·효과음). 항상 표시. -->
+  <button id="muteBtn" title="sound" aria-label="sound">🔊</button>
 
   <!-- 데일리 챌린지 랭킹 모달: 그날 같은 보드의 점수 순위 -->
   <div id="dailyBoard" class="hidden">
@@ -612,7 +629,8 @@
 <script type="module">
 import { Client } from "https://esm.sh/colyseus.js@0.15.0";
 import { showCountdown3D, hideCountdown3D, renderCountdown3D } from "./countdown3d.js";
-import { initAudio, sfxCapture, sfxClear, sfxGameover, sfxItem } from "./sfx.js";
+import { spawnShatter, spawnDeathShards, spawnReveal, updateBoss3D, renderShatter, clearShatter } from "./shatter3d.js";
+import { initAudio, sfxCapture, sfxClear, sfxGameover, sfxItem, sfxShatter, startBgm, stopBgm, setBgmMode, setMuted, isMuted } from "./sfx.js";
 import { onAuth, signIn, signUp, signOut, getToken, dbGetCollection, dbGetRecord, dbDailyTop } from "./supabase.js";
 
 // ── 다국어(i18n): 한국어/English/日本語 ──────────────────────────────────────
@@ -644,12 +662,22 @@ const I18N = {
     go_hint_continue: "<b>GAME OVER</b><br><span class='go-big' style='color:#ffd54a'>🔄 이어하기 {0}회 남음</span><br><span style='opacity:.8'><b>Enter</b> ▶ 계속하기</span>",
     go_hint_restart: "<b>GAME OVER</b><br><span class='go-big' style='color:#ff6b8b'>이어하기 모두 소진</span><br><span style='opacity:.8'><b>Enter</b> ▶ 처음부터 다시</span>",
     sh_clear: "스테이지 {0} 클리어!", sh_score: "점수", sh_best: "최고", sh_stage: "스테이지", sh_over: "게임 오버",
-    boon_title: "버프 선택 — 하나 골라 다음 스테이지로", boon_cur: "현재",
+    boon_title: "스테이지 시작 — 버프 하나를 골라 출발!", boon_cur: "현재",
+    rar_common: "커먼", rar_rare: "레어", rar_unique: "유니크", rar_legendary: "전설",
+    boon_waiting: "다른 플레이어를 기다리는 중…", boon_timer: "{0}초", boon_progress: "{0}/{1} 선택 완료",
     boon_life_n: "생명력", boon_life_d: "매 스테이지 목숨 +1",
     boon_score_n: "점수광", boon_score_d: "이후 점수 +30%",
     boon_slow_n: "둔화", boon_slow_d: "적 이동속도 -15%",
     boon_speed_n: "신속", boon_speed_d: "내 이동속도 +12%",
     boon_stam_n: "지구력", boon_stam_d: "질주 지속·회복 강화",
+    boon_guard_n: "수호", boon_guard_d: "매 스테이지 죽음 1회 무효",
+    boon_quick_n: "속공", boon_quick_d: "클리어 목표 -4%p",
+    boon_luck_n: "행운", boon_luck_d: "아이템이 더 자주 등장",
+    boon_iron_n: "불굴", boon_iron_d: "스폰·부활 무적 +1.5초",
+    boon_reveal_n: "개척자", boon_reveal_d: "시작 안전지대 넓게",
+    boon_hunter_n: "사냥꾼", boon_hunter_d: "포획 점수 +50%",
+    boon_frost_n: "혹한", boon_frost_d: "스테이지 시작 시 적 정지",
+    guard_block: "🛡️ 막음!",
     revived: "부활!",
     btn_share: "🔗 공유", share_saved: "이미지를 저장했어요", share_copied: "결과를 복사했어요",
     share_normal: "한뼘더 스테이지 {0} · {1}점!", share_daily: "한뼘더 오늘의 챌린지 {1}점! (스테이지 {0})",
@@ -679,7 +707,7 @@ const I18N = {
     err_need_code: "방 코드를 입력하세요", connecting2: "접속 중…",
     err_room_notfound: "그 코드의 방을 찾을 수 없어요", err_conn_fail: "서버 연결 실패 — 잠시 후 다시 시도하세요",
     starting_in: "{0}초 후 시작!", waiting_players: "플레이어 대기 중 ({0} / 4)",
-    hud_progress: "진행 · Lv {0}", hud_goal: "목표 90%", me_suffix: " (나)", stam_title: "질주 스태미나",
+    hud_progress: "진행 · Lv {0}", hud_goal: "목표 {0}%", me_suffix: " (나)", stam_title: "질주 스태미나",
     capture_multi: "포획 x{0}! +{1}", capture_one: "포획! +{1}",
     item_missile: "미사일!", item_freeze: "프리즈!", item_life: "목숨 +1!", item_generic: "아이템!",
     boss_incoming: "보스 출현", restart_here: "Enter ▶ 이 방에서 재시작", stage_n: "스테이지 {0}",
@@ -711,12 +739,22 @@ const I18N = {
     go_hint_continue: "<b>GAME OVER</b><br><span class='go-big' style='color:#ffd54a'>🔄 Continue — {0} left</span><br><span style='opacity:.8'><b>Enter</b> ▶ Continue</span>",
     go_hint_restart: "<b>GAME OVER</b><br><span class='go-big' style='color:#ff6b8b'>No continues left</span><br><span style='opacity:.8'><b>Enter</b> ▶ Restart from stage 1</span>",
     sh_clear: "Stage {0} clear!", sh_score: "Score", sh_best: "Best", sh_stage: "Stage", sh_over: "Game Over",
-    boon_title: "Pick a boon — choose one to continue", boon_cur: "Active",
+    boon_title: "Stage start — pick a boon to begin!", boon_cur: "Active",
+    rar_common: "Common", rar_rare: "Rare", rar_unique: "Unique", rar_legendary: "Legendary",
+    boon_waiting: "Waiting for other players…", boon_timer: "{0}s", boon_progress: "{0}/{1} picked",
     boon_life_n: "Vitality", boon_life_d: "+1 life each stage",
     boon_score_n: "Scorer", boon_score_d: "+30% score gained",
     boon_slow_n: "Slow", boon_slow_d: "Enemies -15% speed",
     boon_speed_n: "Swift", boon_speed_d: "You move +12% faster",
     boon_stam_n: "Stamina", boon_stam_d: "Sprint lasts & recovers more",
+    boon_guard_n: "Guardian", boon_guard_d: "Negate 1 death each stage",
+    boon_quick_n: "Quick clear", boon_quick_d: "Clear goal -4%p",
+    boon_luck_n: "Lucky", boon_luck_d: "Items appear more often",
+    boon_iron_n: "Ironclad", boon_iron_d: "Spawn/revive invuln +1.5s",
+    boon_reveal_n: "Pioneer", boon_reveal_d: "Bigger starting safe zone",
+    boon_hunter_n: "Hunter", boon_hunter_d: "+50% capture score",
+    boon_frost_n: "Frost", boon_frost_d: "Enemies freeze at stage start",
+    guard_block: "🛡️ Blocked!",
     revived: "Revived!",
     btn_share: "🔗 Share", share_saved: "Image saved", share_copied: "Result copied",
     share_normal: "One More Inch stage {0} · {1} pts!", share_daily: "One More Inch daily challenge · {1} pts! (stage {0})",
@@ -746,7 +784,7 @@ const I18N = {
     err_need_code: "Enter a room code", connecting2: "Connecting…",
     err_room_notfound: "No room with that code", err_conn_fail: "Connection failed — try again shortly",
     starting_in: "Starting in {0}s!", waiting_players: "Waiting for players ({0} / 4)",
-    hud_progress: "Progress · Lv {0}", hud_goal: "Goal 90%", me_suffix: " (you)", stam_title: "Sprint stamina",
+    hud_progress: "Progress · Lv {0}", hud_goal: "Goal {0}%", me_suffix: " (you)", stam_title: "Sprint stamina",
     capture_multi: "Capture x{0}! +{1}", capture_one: "Capture! +{1}",
     item_missile: "Missile!", item_freeze: "Freeze!", item_life: "Life +1!", item_generic: "Item!",
     boss_incoming: "BOSS INCOMING", restart_here: "Enter ▶ Restart in this room", stage_n: "Stage {0}",
@@ -778,12 +816,22 @@ const I18N = {
     go_hint_continue: "<b>GAME OVER</b><br><span class='go-big' style='color:#ffd54a'>🔄 コンティニュー 残り{0}回</span><br><span style='opacity:.8'><b>Enter</b> ▶ つづける</span>",
     go_hint_restart: "<b>GAME OVER</b><br><span class='go-big' style='color:#ff6b8b'>コンティニュー切れ</span><br><span style='opacity:.8'><b>Enter</b> ▶ 最初から</span>",
     sh_clear: "ステージ{0}クリア！", sh_score: "スコア", sh_best: "ベスト", sh_stage: "ステージ", sh_over: "ゲームオーバー",
-    boon_title: "バフ選択 — 1つ選んで次のステージへ", boon_cur: "現在",
+    boon_title: "ステージ開始 — バフを1つ選んで出発！", boon_cur: "現在",
+    rar_common: "コモン", rar_rare: "レア", rar_unique: "ユニーク", rar_legendary: "レジェンド",
+    boon_waiting: "他のプレイヤーを待っています…", boon_timer: "{0}秒", boon_progress: "{0}/{1} 選択済み",
     boon_life_n: "生命力", boon_life_d: "毎ステージ ライフ+1",
     boon_score_n: "スコア", boon_score_d: "以降スコア +30%",
     boon_slow_n: "鈍化", boon_slow_d: "敵の移動 -15%",
     boon_speed_n: "俊足", boon_speed_d: "自分の移動 +12%",
     boon_stam_n: "スタミナ", boon_stam_d: "ダッシュ持続・回復強化",
+    boon_guard_n: "守護", boon_guard_d: "毎ステージ 死亡1回無効",
+    boon_quick_n: "速攻", boon_quick_d: "クリア目標 -4%p",
+    boon_luck_n: "幸運", boon_luck_d: "アイテムが出やすい",
+    boon_iron_n: "不屈", boon_iron_d: "出現・復活の無敵 +1.5秒",
+    boon_reveal_n: "開拓者", boon_reveal_d: "開始時の安全地帯を拡大",
+    boon_hunter_n: "ハンター", boon_hunter_d: "捕獲スコア +50%",
+    boon_frost_n: "極寒", boon_frost_d: "ステージ開始時に敵停止",
+    guard_block: "🛡️ 防いだ！",
     revived: "復活！",
     btn_share: "🔗 シェア", share_saved: "画像を保存しました", share_copied: "結果をコピーしました",
     share_normal: "One More Inch ステージ{0} · {1}点！", share_daily: "One More Inch 今日のチャレンジ {1}点！(ステージ{0})",
@@ -813,7 +861,7 @@ const I18N = {
     err_need_code: "部屋コードを入力してください", connecting2: "接続中…",
     err_room_notfound: "そのコードの部屋が見つかりません", err_conn_fail: "接続失敗 — しばらくして再試行してください",
     starting_in: "{0}秒後に開始！", waiting_players: "プレイヤー待機中 ({0} / 4)",
-    hud_progress: "進行 · Lv {0}", hud_goal: "目標 90%", me_suffix: "（あなた）", stam_title: "ダッシュスタミナ",
+    hud_progress: "進行 · Lv {0}", hud_goal: "目標 {0}%", me_suffix: "（あなた）", stam_title: "ダッシュスタミナ",
     capture_multi: "捕獲 x{0}! +{1}", capture_one: "捕獲！ +{1}",
     item_missile: "ミサイル！", item_freeze: "フリーズ！", item_life: "ライフ +1！", item_generic: "アイテム！",
     boss_incoming: "ボス出現", restart_here: "Enter ▶ この部屋でリスタート", stage_n: "ステージ {0}",
@@ -1094,6 +1142,48 @@ async function connect(name, level, mode = "quick", code = "") {
     addShake(0.22);
     try { sfxItem(); } catch {}
   });
+  // 영역 점유(맵 밝힘): 점유된 자리에 "검은 돌 껍질"이 벗겨지듯 3D 파편이 위로 터진다.
+  room.onMessage("reveal", (ev) => {
+    const n = ev.n | 0;
+    if (n < 4) return;                       // 아주 작은 조각은 생략(노이즈 방지)
+    try { sfxShatter(n); } catch {}          // 점유 크기에 따라 다른 "부서지는" 소리
+    if (n < 5) return;
+    const p = gridToScreen(ev.x, ev.y);
+    const cellPx = (camMap.cw || 3.2) * (camMap.camS || 1);
+    try { spawnReveal(p.x, p.y, n, cellPx); } catch {}
+  });
+  // 보스 맵 파괴: 부서진 자리에 3D 돌 파편이 터진다(+먼지·흔들림). 규모(n)가 클수록 크게.
+  room.onMessage("shatter", (ev) => {
+    const p = gridToScreen(ev.x, ev.y);
+    const cellPx = (camMap.cw || 3.2) * (camMap.camS || 1);   // 화면상 셀 크기 → 파편 크기 기준
+    try { spawnShatter(p.x, p.y, ev.n | 0, ev.kind, cellPx); } catch {}
+    spawnJuice(ev.x, ev.y, "#b9a48a", Math.min(18, 6 + (ev.n | 0) * 0.3), 1.4);   // 흙먼지(2D)
+    addShake(Math.min(0.4, 0.1 + (ev.n | 0) * 0.004));
+  });
+  // 플레이어 사망: 마커가 자기 색 3D 파편으로 산산조각 + 충격파 링. 내 마커면 화면 전체
+  // 데미지 연출(붉은 비네트 + 프리즈-프레임 히트스톱 + 강한 흔들림), 동료 사망이면 파편만.
+  room.onMessage("death", (ev) => {
+    const p = gridToScreen(ev.x, ev.y);
+    const cellPx = (camMap.cw || 3.2) * (camMap.camS || 1);
+    const col = playerColor(ev.owner);
+    try { spawnDeathShards(p.x, p.y, col, Math.max(6, cellPx * 1.6)); } catch {}
+    spawnJuice(ev.x, ev.y, col, 22, 2.1);
+    deathRings.push({ x: p.x, y: p.y, t0: performance.now(), col });
+    let mine = false;
+    if (room && state) state.players.forEach((q) => { if (q.id === room.sessionId && q.owner === ev.owner) mine = true; });
+    if (mine) {
+      freezeUntil = performance.now() + HITSTOP_MS;   // 짧은 프리즈-프레임
+      deathVigT = DEATH_VIG_DUR;                        // 붉은 비네트
+      addShake(0.5);
+    } else addShake(0.22);
+  });
+  // 수호 버프 발동: 죽을 뻔한 자리에 방패 팝업 + 파티클(목숨은 보존됨)
+  room.onMessage("guard", (ev) => {
+    flashes.push({ x: ev.x, y: ev.y, color: "#7dd3fc", life: 1.4, ttl: 1.4, text: t("guard_block") });
+    spawnJuice(ev.x + 0.5, ev.y + 0.5, "#7dd3fc", 24, 1.7);
+    addShake(0.2);
+    try { sfxItem(); } catch {}
+  });
   // 블랙홀 예고: 그 자리에 블랙홀을 띄워 회피를 유도(예고가 끝나면 서버가 맵을 지우고 보스 등장)
   room.onMessage("warp", (ev) => {
     warps.push({ x: ev.x, y: ev.y, t0: performance.now(), burst: false });
@@ -1332,7 +1422,7 @@ function updateLoginUI(user) {
   if (!login) return;
   // 상단 아이콘 버튼: 로그인 전 🔑 / 로그인 후 👤 (툴팁으로 상태 표시). 회원가입은 로그인 모달에서 전환.
   login.dataset.in = user ? "1" : "";
-  login.textContent = user ? "👤" : "🔑";
+  login.textContent = user ? ("👤 " + t("logout")) : t("btn_login");   // 아이콘 + 텍스트 라벨
   login.title = user ? t("logout") : t("btn_login");
 }
 document.getElementById("loginBtn").addEventListener("click", async () => {
@@ -1480,6 +1570,7 @@ function updateOverlays() {
     if (!lobby.classList.contains("hidden")) lobby.classList.add("hidden");
     if (!gameShown) {
       gameShown = true;
+      startBgm();                                                    // 인게임 배경음악 시작(음소거면 조용)
       if (!IS_TOUCH) chatPanel.classList.remove("hidden");           // 모바일에선 채팅 로그 숨김
       if (IS_TOUCH && touchEl) touchEl.classList.remove("hidden");   // 모바일 터치 컨트롤 노출
       document.body.classList.add("ingame");                         // 인게임: 제목 숨김 + 모바일 스크롤 잠금
@@ -1546,9 +1637,16 @@ function updateOverlays() {
       // 패배: 그림 리빌이 없으므로 상단 패널을 그대로 보여준다.
       scoreHud.classList.toggle("hidden", state.phase === "won");
       document.body.classList.add("result");
-      // 로그라이트 버프 3택: 클리어 + 서버가 후보를 제시했을 때만
-      if (state.phase === "won" && state.boonOffers) renderBoons(state.boonOffers, state.boons);
-      else hideBoonPick();
+      hideBoonPick();   // 버프 선택은 클리어 화면이 아니라 다음 스테이지 "시작"(pick) 화면에서
+    } else if (state.phase === "pick") {
+      // 다음 스테이지 시작 화면: 각자 자기 3택에서 고른다(코옵은 5초 제한 + 진행 상황 표시).
+      scoreHud.classList.add("hidden");
+      document.body.classList.remove("result");
+      let mine = null, picked = 0, total = 0;
+      state.players.forEach((p) => { total++; if (p.boonPicked) picked++; if (room && p.id === room.sessionId) mine = p; });
+      const myOffers = mine ? mine.boonOffers : "";
+      const iPicked = (mine && mine.boonPicked) || pickSent;
+      renderBoons(myOffers, state.boons, iPicked, state.pickEndsIn, picked, total);
     } else {
       scoreHud.classList.add("hidden");
       document.body.classList.remove("result");
@@ -1599,6 +1697,9 @@ function returnToTitle() {
   try { room?.leave(); } catch {}
   room = null; state = null; gameShown = false; lostSince = 0; lastLobbyKey = "";
   bubbles.clear(); pmove.clear(); prevMarker.clear(); flashes.length = 0; warps.length = 0; particles.length = 0;
+  try { clearShatter(); } catch {}
+  try { stopBgm(); } catch {}
+  deathRings = []; deathVigT = 0; freezeUntil = 0;
   prevCells = null; lastClaimed = -1; gridBuilt = false; gridDirty = true; gridScan = 0;   // force a full grid repaint on the next game
   lobby.classList.add("hidden");
   chatPanel.classList.add("hidden");
@@ -1665,10 +1766,10 @@ window.addEventListener("keydown", (e) => {
   if (typingInField()) return;   // 입력창/셀렉트에 타이핑 중이면 게임 입력으로 가로채지 않음
   if (CODE_DIR[e.code] != null || e.code === "Enter") e.preventDefault();
   if (e.repeat) return;                       // ignore OS key auto-repeat
-  // 클리어 화면 버프 선택: 1/2/3 로 해당 버프, Enter 로 첫 번째 버프
-  if (state && state.phase === "won" && state.boonOffers) {
+  // 스테이지 시작 화면 버프 선택: 1/2/3 로 해당 버프, Enter 로 첫 번째 버프 (내 후보에서, 아직 안 골랐을 때만)
+  if (state && state.phase === "pick" && !pickSent && boonOfferList.length) {
     const di = { Digit1: 0, Numpad1: 0, Digit2: 1, Numpad2: 1, Digit3: 2, Numpad3: 2 }[e.code];
-    if (di != null) { pickBoon(boonOfferList[di]); return; }
+    if (di != null && boonOfferList[di]) { pickBoon(boonOfferList[di]); return; }
     if (e.code === "Enter") { pickBoon(boonOfferList[0]); return; }
   }
   if (e.code === "Enter") {
@@ -1724,47 +1825,100 @@ function advanceWithAd(sendFn) {
 }
 function restartOrNextStage() {
   if (!room) return;
-  if (state && state.phase === "won" && state.boonOffers) return;   // 버프를 골라야 진행(버프 카드에서 선택)
+  if (state && state.phase === "pick") return;   // 시작 화면에선 버프 카드로만 진행(카드 클릭/숫자키)
   advanceWithAd(() => room.send("restart"));
 }
 restartBtn.onclick = () => restartOrNextStage();
 
+// 사운드 음소거 토글: 배경음악+효과음을 함께 끈다/켠다(localStorage 유지). 해제 시 오디오·BGM 재개.
+const muteBtn = document.getElementById("muteBtn");
+function updateMuteBtn() { if (muteBtn) muteBtn.textContent = isMuted() ? "🔇" : "🔊"; }
+updateMuteBtn();
+if (muteBtn) muteBtn.addEventListener("click", () => {
+  const m = !isMuted(); setMuted(m); updateMuteBtn();
+  if (!m) { try { initAudio(); } catch {} if (gameShown) { try { startBgm(); } catch {} } }
+});
+
+// 상황별 배경음악 전환: 보스 등장=긴장(boss), 클리어=축하(win), 그 외 플레이=평소(play), 게임오버/로비=끔.
+function syncBgm() {
+  if (!gameShown || !state) return;
+  let mode = "off", ph = state.phase;
+  if (ph === "playing") {
+    let boss = false;
+    if (state.enemies) state.enemies.forEach((e) => { if (e.shape && e.shape.indexOf("boss_") === 0) boss = true; });
+    mode = boss ? "boss" : "play";
+  } else if (ph === "pick") mode = "play";
+  else if (ph === "won") mode = "win";
+  try { setBgmMode(mode); } catch {}
+}
+
 // ── 로그라이트 버프 3택 ──
+// rar(등급)은 서버 constants.BOON_RARITY 와 반드시 일치시켜야 한다(가중 추첨은 서버, 색/표시는 여기).
 const BOON_META = {
-  life:  { ico: "❤️", n: "boon_life_n",  d: "boon_life_d" },
-  score: { ico: "✨", n: "boon_score_n", d: "boon_score_d" },
-  slow:  { ico: "🐢", n: "boon_slow_n",  d: "boon_slow_d" },
-  speed: { ico: "⚡", n: "boon_speed_n", d: "boon_speed_d" },
-  stam:  { ico: "🏃", n: "boon_stam_n",  d: "boon_stam_d" },
+  slow:  { ico: "🐢", n: "boon_slow_n",   d: "boon_slow_d",   rar: "common" },
+  stam:  { ico: "🏃", n: "boon_stam_n",   d: "boon_stam_d",   rar: "common" },
+  luck:  { ico: "🍀", n: "boon_luck_n",   d: "boon_luck_d",   rar: "common" },
+  speed: { ico: "⚡", n: "boon_speed_n",  d: "boon_speed_d",  rar: "rare" },
+  score: { ico: "✨", n: "boon_score_n",  d: "boon_score_d",  rar: "rare" },
+  reveal:{ ico: "🗺️", n: "boon_reveal_n", d: "boon_reveal_d", rar: "rare" },
+  frost: { ico: "❄️", n: "boon_frost_n",  d: "boon_frost_d",  rar: "rare" },
+  quick: { ico: "🏁", n: "boon_quick_n",  d: "boon_quick_d",  rar: "unique" },
+  hunter:{ ico: "🎯", n: "boon_hunter_n", d: "boon_hunter_d", rar: "unique" },
+  iron:  { ico: "✝️", n: "boon_iron_n",   d: "boon_iron_d",   rar: "unique" },
+  life:  { ico: "❤️", n: "boon_life_n",   d: "boon_life_d",   rar: "legendary" },
+  guard: { ico: "🛡️", n: "boon_guard_n",  d: "boon_guard_d",  rar: "legendary" },
 };
+// 등급별 색(흰/파랑/노랑/주황)과 카드 글로우. n 은 등급 이름 i18n 키.
+const RARITY = {
+  common:    { col: "#cbd5e1", glow: "rgba(203,213,225,.35)", n: "rar_common" },
+  rare:      { col: "#60a5fa", glow: "rgba(96,165,250,.55)",  n: "rar_rare" },
+  unique:    { col: "#facc15", glow: "rgba(250,204,21,.55)",  n: "rar_unique" },
+  legendary: { col: "#fb923c", glow: "rgba(251,146,60,.65)",  n: "rar_legendary" },
+};
+const rarOf = (id) => RARITY[(BOON_META[id] || {}).rar] || RARITY.common;
 const boonPickEl = document.getElementById("boonPick");
 const boonCardsEl = document.getElementById("boonCards");
 const boonCurEl = document.getElementById("boonCur");
-let lastBoonOffers = "";
+const boonStatusEl = document.getElementById("boonStatus");
+let lastBoonKey = "";
 let boonOfferList = [];
-function renderBoons(offersStr, boonsStr) {
-  if (offersStr !== lastBoonOffers) {   // 후보가 바뀔 때만 카드 재생성
-    lastBoonOffers = offersStr;
-    boonOfferList = offersStr.split(",").filter(Boolean);
-    boonCardsEl.innerHTML = boonOfferList.map((id, i) => {
-      const m = BOON_META[id]; if (!m) return "";
-      return `<div class="bp-card" data-boon="${id}"><div class="bp-ico">${m.ico}</div>`
-           + `<div class="bp-name">${t(m.n)}</div><div class="bp-desc">${t(m.d)}</div>`
-           + `<div class="bp-key">${i + 1}</div></div>`;
-    }).join("");
-    boonCardsEl.querySelectorAll(".bp-card").forEach((el) => el.addEventListener("click", () => pickBoon(el.dataset.boon)));
+let pickSent = false;   // 내가 이번 스테이지 선택을 보냈는지(서버 확인 전에도 즉시 "대기중" 표시)
+// myOffers: 내 3택(콤마), iPicked: 내가 골랐는지, endsIn: 제한시간(초, <0 없음), pickedCount/total: 코옵 진행.
+function renderBoons(myOffers, boonsStr, iPicked, endsIn, pickedCount, total) {
+  const key = (myOffers || "") + "|" + (iPicked ? 1 : 0);
+  if (key !== lastBoonKey) {   // 내 후보/선택 상태가 바뀔 때만 카드(또는 대기 화면) 재생성
+    lastBoonKey = key;
+    boonOfferList = (myOffers || "").split(",").filter(Boolean);
+    if (iPicked || boonOfferList.length === 0) {
+      boonCardsEl.innerHTML = `<div class="bp-waiting">${t("boon_waiting")}</div>`;   // 이미 고름 → 대기
+    } else {
+      boonCardsEl.innerHTML = boonOfferList.map((id, i) => {
+        const m = BOON_META[id]; if (!m) return "";
+        const r = rarOf(id);   // 등급 색/글로우를 카드에 입힌다(흰/파랑/노랑/주황)
+        return `<div class="bp-card" data-boon="${id}" style="--rc:${r.col};--rg:${r.glow}">`
+             + `<div class="bp-rar">${t(r.n)}</div><div class="bp-ico">${m.ico}</div>`
+             + `<div class="bp-name">${t(m.n)}</div><div class="bp-desc">${t(m.d)}</div>`
+             + `<div class="bp-key">${i + 1}</div></div>`;
+      }).join("");
+      boonCardsEl.querySelectorAll(".bp-card").forEach((el) => el.addEventListener("click", () => pickBoon(el.dataset.boon)));
+    }
     const cur = (boonsStr || "").split(",").filter(Boolean).map((kv) => {
       const [k, c] = kv.split(":"); const m = BOON_META[k]; return m ? `${m.ico}×${c}` : "";
     }).filter(Boolean).join("  ");
     boonCurEl.textContent = cur ? `${t("boon_cur")}: ${cur}` : "";
   }
+  // 상태/카운트다운은 매 프레임 갱신(가볍게). 코옵일 때만 진행 상황 표시.
+  let s = "";
+  if (typeof endsIn === "number" && endsIn >= 0) s = "⏳ " + t("boon_timer", Math.ceil(endsIn));
+  if (total > 1) s += (s ? " · " : "") + t("boon_progress", pickedCount, total);
+  boonStatusEl.textContent = s;
   boonPickEl.classList.remove("hidden");
 }
-function hideBoonPick() { boonPickEl.classList.add("hidden"); lastBoonOffers = ""; boonOfferList = []; }
+function hideBoonPick() { boonPickEl.classList.add("hidden"); lastBoonKey = ""; boonOfferList = []; pickSent = false; }
 function pickBoon(id) {
-  if (!room || !boonOfferList.includes(id)) return;
-  hideBoonPick();
-  advanceWithAd(() => room.send("boon", { id }));   // 광고 후(있으면) 서버에 선택 전송 → 다음 스테이지
+  if (!room || pickSent || !boonOfferList.includes(id)) return;
+  pickSent = true; lastBoonKey = "";   // 즉시 "대기중"으로 전환(다음 렌더에서 반영)
+  room.send("boon", { id });           // 서버가 이 버프를 적용(코옵은 전원 선택/시간초과 후 스테이지 시작)
 }
 
 // HUD 버프 아이콘: 마우스 올리거나 터치하면 능력 이름·설명 툴팁을 2.5초 표시.
@@ -2026,6 +2180,50 @@ const SHAKE_DUR = 0.5;         // 흔들림 지속(초)
 const particles = [];
 const MAX_PARTICLES = 320;     // 성능 안전상 총량 제한
 function addShake(sec) { shakeT = Math.min(SHAKE_DUR, Math.max(shakeT, sec)); }   // 더 센 흔들림으로 갱신
+// 렌더 카메라(팔로우/줌/흔들림) 스냅샷 — 그리드좌표→화면좌표(512x768) 매핑용. render() 가 매 프레임 채운다.
+let camMap = { camX: 0, camY: 0, camS: 1, cw: 1, ch: 1, shX: 0, shY: 0 };
+function gridToScreen(gx, gy) {
+  const wpx = gx * camMap.cw, wpy = gy * camMap.ch;   // 셀→월드픽셀(512x768) → 카메라 반영 화면좌표
+  return { x: (wpx - camMap.camX) * camMap.camS + camMap.shX, y: (wpy - camMap.camY) * camMap.camS + camMap.shY, s: camMap.camS };
+}
+// ── 사망 연출: 마커 산산조각(3D) + 데미지 비네트 + 히트스톱(짧은 프리즈-프레임) + 충격파 링 ──
+const HITSTOP_MS = 70;         // 내 마커 사망 시 화면을 아주 잠깐 얼린다(타격감)
+const DEATH_VIG_DUR = 0.55;    // 붉은 비네트 지속(초)
+let freezeUntil = 0;           // performance.now() 기준 프리즈 종료 시각
+let deathVigT = 0;             // 붉은 비네트 남은 시간(초)
+let deathRings = [];           // 충격파 링: { x, y (화면px), t0, col }
+// 사망 순간(내 마커) 짧은 프리즈-프레임 + 화면 전체 흰 섬광. 파편(shatter3d)은 계속 날아간다.
+function drawHitstopFlash() {
+  const now = performance.now();
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = "rgba(255,255,255," + (0.5 * Math.max(0, (freezeUntil - now) / HITSTOP_MS)) + ")";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+}
+// 붉은 데미지 비네트(화면 가장자리) + 충격파 링. 카메라 변환 밖(스크린 공간)에서 그린다.
+function drawDeathFx(dt) {
+  const W = canvas.width, H = canvas.height, now = performance.now();
+  if (deathRings.length) {
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (let i = deathRings.length - 1; i >= 0; i--) {
+      const r = deathRings[i], age = (now - r.t0) / 1000, k = age / 0.5;   // 0.5s 동안 퍼짐
+      if (k >= 1) { deathRings.splice(i, 1); continue; }
+      ctx.globalAlpha = (1 - k) * 0.9; ctx.strokeStyle = r.col; ctx.lineWidth = 3 * (1 - k) + 1;
+      ctx.beginPath(); ctx.arc(r.x, r.y, 8 + k * 90, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (deathVigT > 0) {
+    deathVigT = Math.max(0, deathVigT - dt);
+    const a = deathVigT / DEATH_VIG_DUR;                 // 1→0
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.32, W / 2, H / 2, Math.max(W, H) * 0.72);
+    g.addColorStop(0, "rgba(255,40,40,0)");
+    g.addColorStop(1, "rgba(220,20,30," + (0.6 * a) + ")");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+}
 function spawnJuice(gx, gy, color, n, power) {
   for (let k = 0; k < n && particles.length < MAX_PARTICLES; k++) {
     const a = Math.random() * Math.PI * 2, sp = (0.6 + Math.random() * 1.9) * power;
@@ -2563,7 +2761,15 @@ function render() {
   const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
   updateOverlays();   // 대기실(로비) 표시/갱신 + 게임 시작 시 화면 전환
   syncChatBox();   // dock the side chat panel to the image and fill the right space
+  syncBgm();       // 상황별 배경음악(보스/클리어/평소) 전환
   const W = canvas.width, H = canvas.height;
+  // 히트스톱: 내 마커 사망 직후 아주 잠깐 마지막 프레임을 그대로 유지(안 지움) + 흰 섬광. 파편은 계속 날아간다.
+  if (state && performance.now() < freezeUntil) {
+    drawHitstopFlash();
+    try { renderShatter(dt); } catch {}
+    requestAnimationFrame(render);
+    return;
+  }
   ctx.clearRect(0, 0, W, H);
   if (state && state.cells.length) {
     const cw = W / GW, ch = H / GH;
@@ -2616,6 +2822,7 @@ function render() {
       shX = (Math.random() - 0.5) * amp; shY = (Math.random() - 0.5) * amp;
     }
     ctx.translate(-camX*camS + shX, -camY*camS + shY); ctx.scale(camS, camS);
+    camMap = { camX, camY, camS, cw, ch, shX, shY };   // 3D 파편 등 오버레이가 쓸 카메라 스냅샷
 
     if (gridBuilt) ctx.drawImage(gridCanvas, 0, 0);   // one blit instead of GW*GH draws
     // 거미줄(감속 필드) — 그 위에선 플레이어가 느려진다. 연결된 셀 덩어리마다 오브 웹(방사실+
@@ -2659,15 +2866,37 @@ function render() {
         ctx.globalAlpha = 0.6 + 0.3 * Math.sin(now/55);   // 중심 점선
         ctx.lineWidth = Math.max(1, cw*0.8); ctx.setLineDash([cw*2.2, cw*1.6]);
         ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-      } else {       // 발사: 글로우 + 본체 + 흰 코어
-        ctx.strokeStyle = "rgba(255,70,70,0.4)"; ctx.lineWidth = band*1.2;
-        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-        ctx.strokeStyle = "#ff5a5a"; ctx.lineWidth = band;
-        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-        ctx.strokeStyle = "#ffdada"; ctx.lineWidth = band*0.6;
-        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-        ctx.strokeStyle = "#fff"; ctx.lineWidth = Math.max(1, band*0.25);
-        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      } else {       // 발사: 입체 에너지 튜브 — 단면 그라디언트(원통 음영) + 가산 글로우 + 흐르는 에너지
+        const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len, ny = dx / len;            // 빔에 수직인 단위벡터
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, hw = band / 2;   // 중점·반폭(단면 그라디언트 축)
+        ctx.globalCompositeOperation = "lighter";       // 이하 빛은 가산 합성 → 겹칠수록 밝게(블룸)
+        // 1) 외곽 글로우(넓고 옅게) — 빛이 공기 중으로 번지는 느낌
+        ctx.strokeStyle = "rgba(255,42,42,0.28)"; ctx.lineWidth = band * 2.1;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        ctx.globalCompositeOperation = "source-over";
+        // 2) 튜브 본체 — 폭을 가로지르는 그라디언트(가장자리 어둡고 코어 흰빛)로 원통 입체감
+        const g = ctx.createLinearGradient(mx - nx * hw, my - ny * hw, mx + nx * hw, my + ny * hw);
+        g.addColorStop(0.00, "rgba(120,6,6,0.12)");
+        g.addColorStop(0.26, "rgba(255,58,58,0.95)");
+        g.addColorStop(0.50, "rgba(255,238,238,1)");
+        g.addColorStop(0.74, "rgba(255,58,58,0.95)");
+        g.addColorStop(1.00, "rgba(120,6,6,0.12)");
+        ctx.strokeStyle = g; ctx.lineWidth = band;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        ctx.globalCompositeOperation = "lighter";
+        // 3) 흰 코어 — 가늘고 강하게(폭이 살짝 맥동해 살아있는 느낌)
+        ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = Math.max(1, band * 0.22 * (0.82 + 0.18 * Math.sin(now / 40)));
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        // 4) 흐르는 에너지 — 밝은 마디가 빔을 따라 흐른다(대시 오프셋 애니메이션)
+        ctx.strokeStyle = "rgba(255,214,214,0.85)"; ctx.lineWidth = Math.max(1, band * 0.34);
+        ctx.setLineDash([cw * 1.6, cw * 3.2]); ctx.lineDashOffset = -(now / 1000) * cw * 42;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        ctx.setLineDash([]);
+        // 5) 총구(보스쪽 끝)의 뜨거운 발광점
+        ctx.fillStyle = "rgba(255,190,190,0.9)";
+        ctx.beginPath(); ctx.arc(x1, y1, band * 0.55, 0, Math.PI * 2); ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
       }
       ctx.restore();
     });
@@ -2697,12 +2926,25 @@ function render() {
       const v = enemyPos(br, e, e);
       let R = (e.r || 1) * cw;
       // 보스는 블랙홀 위에서 갓 튀어나올 때 작게 시작해 커진다.
-      if (e.shape && e.shape.indexOf("boss_") === 0) {
+      const isBoss = e.shape && e.shape.indexOf("boss_") === 0;
+      if (isBoss) {
         // 보스는 예고가 끝나는 순간(WARP_TELE_MS) 서버가 스폰 → 그때부터 커지며 튀어나온다.
         const wp = activeWarpNear(v.x, v.y, now);
         if (wp) {
           const popA = (now - wp.t0 - WARP_TELE_MS) / WARP_POP_MS;
           if (popA >= 0 && popA <= 1) R *= 0.18 + 0.82 * easeOut(popA);
+        }
+      }
+      // 보스는 3D 메시(shatter3d 오버레이)로 그린다 — 위압적인 가시 구체. 3D 미지원이면 2D 로 폴백.
+      if (isBoss) {
+        const sp = gridToScreen(v.x, v.y);
+        let handled = false;
+        try { handled = updateBoss3D(e.id, sp.x, sp.y, R * camS, e.enr | 0, KIND_COLOR[e.kind] || "#ff3b5c", e.shape, e.aim || 0); } catch {}
+        if (handled) {
+          if (e.sh) { ctx.save(); ctx.translate(v.x*cw, v.y*ch);   // 보호막 링만 2D 로 덧그림
+            ctx.globalAlpha = 0.55 + 0.35 * Math.sin(spin * 3); ctx.strokeStyle = "#7dd3fc"; ctx.lineWidth = Math.max(1.5, R * 0.2);
+            ctx.beginPath(); ctx.arc(0, 0, R * 1.4, 0, 7); ctx.stroke(); ctx.restore(); }
+          return;   // 2D 보스 바디는 그리지 않음
         }
       }
       drawEnemy(v.x*cw, v.y*ch, e, R, spin);
@@ -2882,6 +3124,8 @@ function render() {
       }
     }
   }
+  if (state) drawDeathFx(dt);           // 사망 데미지 비네트 + 충격파 링(스크린 공간)
+  try { renderShatter(dt); } catch {}   // 보스 맵 파괴/사망 3D 파편(별도 오버레이 캔버스) — 유휴 시 자동 숨김
   requestAnimationFrame(render);
 }
 
@@ -3002,14 +3246,15 @@ function drawHud() {
     // 내 배너에 활성 로그라이크 버프 아이콘(hover/터치하면 툴팁). 버프는 런 공유라 내 칩에만 표시.
     const boonsRow = (me && state.boons) ? `<div class="boons">` + state.boons.split(",").filter(Boolean).map((kv) => {
       const [k, c] = kv.split(":"); const m = BOON_META[k]; if (!m) return "";
-      return `<span class="bicon" data-boon="${k}">${m.ico}${(+c > 1) ? `<span class="bx">×${c}</span>` : ""}</span>`;
+      const rc = rarOf(k).col;   // 등급 색으로 아이콘에 은은한 테두리 글로우
+      return `<span class="bicon" data-boon="${k}" style="text-shadow:0 0 6px ${rc},0 0 2px ${rc}">${m.ico}${(+c > 1) ? `<span class="bx">×${c}</span>` : ""}</span>`;
     }).join("") + `</div>` : "";
     html += `<div class="chip ${p.out ? "dead" : ""} ${me ? "me" : ""}">
       <div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}${me?t("me_suffix"):""}</div>
       <div class="meta"><span style="color:#ffd54a">⭐${score}</span><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div>${stamBar}${boonsRow}</div>`;
   });
   html += `<div class="chip"><div class="top">${t("hud_progress", state.level)}</div>
-    <div class="meta"><span>${ratio}%</span><span>${t("hud_goal")}</span></div></div>`;
+    <div class="meta"><span>${ratio}%</span><span>${t("hud_goal", state.clearPct || 90)}</span></div></div>`;
   hud.innerHTML = html;
 
   // 좌측 포획 랭킹: 포획 점수(⭐) 내림차순, 동점이면 포획 수(🕸)로. 로비에선 숨김.

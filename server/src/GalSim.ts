@@ -1,4 +1,4 @@
-import { GRID_W, GRID_H, BORDER as B, CLEAR_RATIO, MOVE_MS, START_LIVES, BOOST_MULT, STAMINA_MAX, STAMINA_DRAIN, STAMINA_RECOVER, START_REVEAL_RATIO, REVIVE_RADIUS, REVIVE_SEC, REVIVE_LIVES } from "./constants";
+import { GRID_W, GRID_H, BORDER as B, CLEAR_RATIO, BOON_QUICK_FLOOR, freshMods, MOVE_MS, START_LIVES, BOOST_MULT, STAMINA_MAX, STAMINA_DRAIN, STAMINA_RECOVER, START_REVEAL_RATIO, REVIVE_RADIUS, REVIVE_SEC, REVIVE_LIVES } from "./constants";
 
 const COLS = GRID_W, ROWS = GRID_H, N = COLS * ROWS;
 const EMPTY = 0, CLAIMED = 1;
@@ -232,8 +232,19 @@ export class GalSim {
   over: null | "won" | "lost" = null;
   enemySpeed = 8;
   // 로그라이트 버프 배율(런 내내 유지, resetRound 로는 초기화 안 함 — 룸이 새 런 시작 때 리셋).
-  // enemy: 적 속도 배율, move: 이동 간격 배율(작을수록 빠름), stamina: 스태미나 지속/회복 배율.
-  mods = { enemy: 1, move: 1, stamina: 1 };
+  // 키별 의미는 constants.freshMods 주석 참고(둔화/신속/지구력/속공/불굴/행운/개척자/사냥꾼/혹한/수호).
+  mods = freshMods();
+  guardLeft = 0;                        // 수호: 이번 스테이지 남은 죽음 무효 횟수(resetRound 에서 mods.guard 로 리필)
+  guardEvents: { x: number; y: number; owner: number }[] = [];   // 수호 발동 연출(룸이 drain → "guard")
+  // 보스가 맵(점유지)을 부술 때마다 그 자리·규모를 싣는다 → 클라가 3D 돌 파편(shatter3d) 연출.
+  shatterEvents: { x: number; y: number; n: number; kind: string }[] = [];   // kind: warp|shock|laser|devour
+  // 플레이어 사망(목숨 1 감소)마다 자리·소유자·완전탈락 여부 → 클라가 사망 연출(마커 산산조각+비네트).
+  deathEvents: { x: number; y: number; owner: number; out: number }[] = [];
+  // 영역 점유(맵 밝힘)마다 중심·규모 → 클라가 "검은 돌이 터지며 그림이 드러나는" 3D 파편 연출.
+  revealEvents: { x: number; y: number; n: number }[] = [];
+  // 속공: 클리어에 필요한 점유율(하한 보장). 스폰/부활 무적: 불굴 버프만큼 늘린다.
+  get clearTarget() { return Math.max(BOON_QUICK_FLOOR, CLEAR_RATIO - this.mods.clearRatio); }
+  private spawnInvuln() { return INVULN_SEC + this.mods.invuln; }
   spawnThresholds: number[] = [];
 
   // seeded RNG: one game seed (the only real randomness), re-seeded per round from
@@ -268,7 +279,9 @@ export class GalSim {
     this.claimedInterior = 0;
     this.projectiles = [];
     this.captureEvents = [];
-    this.items = []; this.missiles = []; this.freezeT = 0; this.itemEvents = [];
+    this.items = []; this.missiles = []; this.itemEvents = []; this.shatterEvents = []; this.deathEvents = []; this.revealEvents = [];
+    this.freezeT = this.mods.frost;    // 혹한: 스테이지 시작 시 적이 잠깐 멈춰 있는다(초반 여유)
+    this.guardLeft = this.mods.guard; this.guardEvents = [];   // 수호: 스테이지마다 무효 횟수 리필
     this.warpEvents = [];
     this.pendingWarps = [];
     this.beams = [];
@@ -292,7 +305,7 @@ export class GalSim {
       p.boost = false; p.boosting = false; p.exhausted = false; p.stamina = STAMINA_MAX;
       p.claimed = 0; p.traps = 0; p.bonus = 0; p.acc = 0; p.idle = 0;
       p.drawOriginX = sx; p.drawOriginY = sy; p.trailCells.length = 0;
-      p.invuln = INVULN_SEC;   // 라운드 시작 직후 잠시 무적
+      p.invuln = this.spawnInvuln();   // 라운드 시작 직후 잠시 무적(불굴 버프만큼 연장)
     }
 
     this.enemies = [];
@@ -306,7 +319,8 @@ export class GalSim {
       this.enemies.push(this.makeEnemy(ex, ey));
     }
     // 아이템은 라운드 내내 랜덤 간격으로 하나씩 등장한다. 시작 직후 첫 아이템까지 약간의 딜레이.
-    this.itemSpawnT = 2 + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN);
+    // 행운 버프(itemRate<1)면 간격이 줄어 더 자주 나온다.
+    this.itemSpawnT = (2 + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) * this.mods.itemRate;
   }
 
   // 맵 위 빈 셀에 아이템 하나를 놓는다(동시 존재 상한 이하일 때만). 점유하며 획득한다.
@@ -324,7 +338,7 @@ export class GalSim {
     const iw = COLS - 2 * B, ih = ROWS - 2 * B;
     // 크기(넓이)도 랜덤, 형태(가로세로 비율)도 랜덤. 넓이는 내부의 약 3%~7.5% 사이에서
     // 무작위로 정하고, 비율은 0.35~2.8로 넓게 잡아 길쭉한 직사각형도 나오게 한다.
-    const ratio = START_REVEAL_RATIO * (0.6 + this.rng() * 0.9);   // ~3% ~ 7.5%
+    const ratio = START_REVEAL_RATIO * (0.6 + this.rng() * 0.9) * this.mods.reveal;   // ~3%~7.5% ×개척자
     const area = this.totalInterior * ratio;
     const aspect = 0.35 + this.rng() * 2.45;                       // 0.35 ~ 2.8 (길쭉한 형태 허용)
     let w = Math.round(Math.sqrt(area * aspect));
@@ -455,7 +469,7 @@ export class GalSim {
     if (e.abilT > 0) return;
     switch (e.special) {
       case "web":                                            // weaver: 지나간 자리에 거미줄
-        e.abilT = 1.1; this.layWeb(e.x, e.y, 2); break;
+        e.abilT = 1.1; this.layWeb(e.x, e.y, 6); break;       // 반경 2→6 (넓이 약 10배: 요청)
       case "blink": {                                        // blinker: 순간이동
         e.abilT = 3 + this.rng() * 3;
         const [bx, by] = this.randomEmptySpot(); e.x = bx; e.y = by; break;
@@ -582,6 +596,7 @@ export class GalSim {
     }
     if (this.claimedInterior < 0) this.claimedInterior = 0;
     this.reduceClaimCredit(erased);   // 플레이어별 점유(%)도 지운 만큼 재계산
+    if (erased) this.shatterEvents.push({ x, y, n: erased, kind: "warp" });   // 돌 파편 연출
     for (const p of this.players) {
       if (p.out) continue;
       const ddx = p.x - x, ddy = p.y - y;
@@ -792,8 +807,8 @@ export class GalSim {
         e.subT = 0.45;
         for (let k = -1; k <= 1; k++) this.fireBullet(e, (e.aim || 0) + k * 0.25, BOSS_BULLET_SPEED * 0.8, true);
         break;
-      case "web":   // 이동하며 거미줄을 깐다
-        e.subT = 0.2; this.layWeb(e.x, e.y, 4); break;
+      case "web":   // 이동하며 거미줄을 깐다 — 패치를 더 크게(4→7), 대신 간격을 살짝 늘려 과도한 도배 방지
+        e.subT = 0.32; this.layWeb(e.x, e.y, 7); break;
       case "corruption":   // 이동하며 점유지를 조금씩 되돌린다(킬 없음)
         e.subT = 0.1; this.carveDisc(e.x, e.y, 3); break;
     }
@@ -822,6 +837,7 @@ export class GalSim {
     }
     if (this.claimedInterior < 0) this.claimedInterior = 0;
     this.reduceClaimCredit(erased);
+    if (erased) this.shatterEvents.push({ x, y, n: erased, kind: "shock" });   // 돌 파편 연출
   }
 
   // 보스 주변 빈 셀에 일반 적 한 마리 소환.
@@ -870,7 +886,8 @@ export class GalSim {
       if (this.distToSeg(p.x, p.y, ax, ay, bx, by) <= b.w + 0.6) this.killPlayer(p);
     }
     if (!doCarve) return;
-    let erased = 0; const steps = Math.ceil(Math.hypot(bx - ax, by - ay)), w = Math.ceil(b.w), w2 = (b.w + 0.5) * (b.w + 0.5);
+    let erased = 0, sx = 0, sy = 0;   // sx/sy: 부순 셀들의 합 → 중심점(파편 연출 위치)
+    const steps = Math.ceil(Math.hypot(bx - ax, by - ay)), w = Math.ceil(b.w), w2 = (b.w + 0.5) * (b.w + 0.5);
     for (let s = 0; s <= steps; s++) {
       const t = s / steps, px = ax + (bx - ax) * t, py = ay + (by - ay) * t;
       const cxi = Math.floor(px), cyi = Math.floor(py);
@@ -879,11 +896,12 @@ export class GalSim {
         const gx = cxi + dx, gy = cyi + dy;
         if (gx < B || gy < B || gx >= COLS - B || gy >= ROWS - B) continue;
         const idxc = idx(gx, gy);
-        if (this.grid[idxc] === CLAIMED) { this.setGrid(idxc, EMPTY); this.claimedInterior--; erased++; }
+        if (this.grid[idxc] === CLAIMED) { this.setGrid(idxc, EMPTY); this.claimedInterior--; erased++; sx += gx; sy += gy; }
       }
     }
     if (this.claimedInterior < 0) this.claimedInterior = 0;
     this.reduceClaimCredit(erased);
+    if (erased) this.shatterEvents.push({ x: sx / erased, y: sy / erased, n: erased, kind: "laser" });   // 돌 파편 연출
   }
 
   // 거미줄 수명 감소/소멸.
@@ -914,6 +932,7 @@ export class GalSim {
     }
     if (this.claimedInterior < 0) this.claimedInterior = 0;
     this.reduceClaimCredit(erased);   // 플레이어별 점유(%)도 파먹은 만큼 재계산
+    if (erased) this.shatterEvents.push({ x: e.x, y: e.y, n: erased, kind: "devour" });   // 돌 파편 연출
     for (const p of this.players) {
       if (p.out) continue;
       const ddx = p.x - e.x, ddy = p.y - e.y;
@@ -978,7 +997,7 @@ export class GalSim {
       sessionId, owner, x: sx, y: sy, spawnX: sx, spawnY: sy,
       heldDir: null, boost: false, boosting: false, exhausted: false, stamina: STAMINA_MAX, drawing: false, retreating: false, lives: START_LIVES,
       claimed: 0, traps: 0, bonus: 0, out: false, revT: 0, acc: 0, idle: 0,
-      drawOriginX: sx, drawOriginY: sy, trailCells: [], invuln: INVULN_SEC,
+      drawOriginX: sx, drawOriginY: sy, trailCells: [], invuln: this.spawnInvuln(),
     };
     this.players.push(p);
     return p;
@@ -1127,13 +1146,15 @@ export class GalSim {
         }
       }
     }
+    let revSX = 0, revSY = 0;   // 새로 점유된 셀들의 합 → 중심점(맵 밝힘 연출 위치)
     for (let i = 0; i < N; i++)
-      if (this.grid[i] === EMPTY && comp[i] >= 0 && claimIt[comp[i]]) { this.setGrid(i, CLAIMED); gained++; }
+      if (this.grid[i] === EMPTY && comp[i] >= 0 && claimIt[comp[i]]) { this.setGrid(i, CLAIMED); gained++; revSX += i % COLS; revSY += (i / COLS) | 0; }
+    if (gained > 0) this.revealEvents.push({ x: revSX / gained, y: revSY / gained, n: gained });   // 점유 시 검은 돌 파편(맵 밝힘)
 
     if (trapCount > 0) {
       // 등급별 점수: 잡힌 각 적의 아키타입 점수를 합산
       let bonus = 0;
-      for (const e of trapped) bonus += CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT;
+      for (const e of trapped) bonus += (CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT) * this.mods.trap;   // 사냥꾼: 포획 점수 배율
       this.enemies = this.enemies.filter(e => !trapped.has(e));
       // splitter: 잡히면 작은 2마리로 분열. 점유된 자리 대신 가장 가까운 열린 칸으로 내보내
       // 자식이 갇히지 않게 한다.
@@ -1176,11 +1197,12 @@ export class GalSim {
       this.spawnThresholds.shift();
       this.spawnEnemy();
     }
-    if (this.ratio >= CLEAR_RATIO) this.over = "won";
+    if (this.ratio >= this.clearTarget) this.over = "won";   // 속공 버프면 목표 점유율이 낮아진다
   }
 
   private killPlayer(p: SimPlayer) {
     if (p.invuln > 0) return;   // 무적 중엔 죽지 않음 (모든 사망 판정을 여기서 한 번에 차단)
+    const deathX = p.x, deathY = p.y;   // 발동 위치(수호 연출용) — 재생성 전에 기억
     for (const i of p.trailCells) this.setTrail(i, 0);
     p.trailCells.length = 0;
     p.drawing = false; p.retreating = false;
@@ -1188,12 +1210,20 @@ export class GalSim {
     const [sx, sy] = this.pickSafeSpawn(this.revealX, this.revealY);
     p.x = sx; p.y = sy; p.spawnX = sx; p.spawnY = sy;
     p.drawOriginX = sx; p.drawOriginY = sy; p.acc = 0; p.idle = 0;
-    p.invuln = INVULN_SEC;      // 부활 직후 잠시 무적
+    p.invuln = this.spawnInvuln();      // 부활 직후 잠시 무적(불굴 버프만큼 연장)
+    // 수호: 이번 스테이지 무효 횟수가 남아 있으면 목숨을 잃지 않는다(선은 잃고 안전지대로 튕겨나가지만 죽진 않음).
+    if (this.guardLeft > 0) {
+      this.guardLeft--;
+      this.guardEvents.push({ x: deathX, y: deathY, owner: p.owner });
+      return;
+    }
     p.lives--;
-    if (p.lives <= 0) {
+    const out = p.lives <= 0;
+    if (out) {
       p.out = true; p.revT = 0;   // 쓰러짐(부활 대기). 동료가 다가오면 revT 가 차오른다.
       if (this.players.length && this.players.every(q => q.out)) this.over = "lost";
     }
+    this.deathEvents.push({ x: deathX, y: deathY, owner: p.owner, out: out ? 1 : 0 });   // 사망 연출
   }
 
   // 코옵 부활: 쓰러진 동료 근처에 살아있는 동료가 있으면 진행, 없으면 서서히 감소.
@@ -1211,7 +1241,7 @@ export class GalSim {
       if (helper) {
         p.revT += dtSec;
         if (p.revT >= REVIVE_SEC) {   // 부활!
-          p.out = false; p.revT = 0; p.lives = REVIVE_LIVES; p.invuln = INVULN_SEC;
+          p.out = false; p.revT = 0; p.lives = REVIVE_LIVES; p.invuln = this.spawnInvuln();
           p.drawing = false; p.retreating = false; p.acc = 0; p.idle = 0;
           this.reviveEvents.push({ x: p.x, y: p.y, owner: p.owner });
         }
@@ -1285,7 +1315,7 @@ export class GalSim {
     this.itemSpawnT -= dtSec;
     if (this.itemSpawnT <= 0) {
       this.spawnOneItem();
-      this.itemSpawnT = ITEM_SPAWN_MIN + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN);
+      this.itemSpawnT = (ITEM_SPAWN_MIN + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) * this.mods.itemRate;
     }
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i]!;
@@ -1430,7 +1460,7 @@ export class GalSim {
       }
       if (hit >= 0) {
         const e = this.enemies[hit];
-        const bonus = CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT;
+        const bonus = (CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT) * this.mods.trap;   // 사냥꾼: 미사일 포획도 점수 배율
         const p = this.players.find(q => q.owner === m.owner);
         if (p) { p.bonus += bonus; p.traps += 1; }
         this.enemies.splice(hit, 1);

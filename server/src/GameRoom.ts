@@ -6,11 +6,13 @@ import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, QUICK_START_S
          SCORE_LEVEL, SCORE_COVER, SCORE_TRAP, SCORE_SPEED_BASE, SCORE_SPEED_DROP,
          CONTINUE_LIVES, CONTINUE_SCORE_KEEP, MAX_CONTINUES,
          BOON_IDS, BOON_OFFER_COUNT, BOON_SCORE_ADD, BOON_SLOW_MULT, BOON_SPEED_MULT, BOON_STAM_MULT,
-         REVIVE_SEC } from "./constants";
+         BOON_GUARD_ADD, BOON_QUICK_SUB, BOON_LUCK_MULT, BOON_IRON_ADD, BOON_REVEAL_MULT, BOON_HUNTER_MULT, BOON_FROST_ADD,
+         BOON_RARITY, BOON_WEIGHT, freshMods, REVIVE_SEC } from "./constants";
 import { verifyToken, recordUnlock, recordBest, submitDaily } from "./supa";
 import { dailyKey, dailySeed } from "./daily";
 
 const COLORS = ["#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
+const PICK_SECS = 5;   // 코옵 버프 선택 제한시간(초): 이 시간이 지나면 미선택자는 자동 선택된다.
 
 // dev 서버(로컬 npm start)일 때만 클라이언트가 보낸 시작 레벨을 신뢰한다. 프로덕션에서는
 // 항상 레벨 1로 시작한다 (임의 레벨 점프 차단).
@@ -24,6 +26,7 @@ export class GameRoom extends Room<GameState> {
   private runScore = 0;      // 이번 런 누적 점수(스테이지 합산, 이어하기 시 일부 차감)
   private roundStartMs = 0;  // 현재 스테이지 시작 시각(클리어 시간 측정용)
   private continues = 0;     // 이번 런에서 이어하기한 횟수
+  private pickEndsAt = 0;     // 코옵 버프 선택 마감 시각(ms). 0 이면 타이머 없음(솔로). Date.now() 기준.
   private imageSeq: string[] = [];   // 스테이지별 배경 이미지 순서(랜덤 셔플, 한 바퀴 동안 비중복)
   private enemySeq = 0;              // 적 스폰 id 카운터(라운드 넘어가도 재사용 안 함 → 전역 유일)
   private userIds = new Map<string, string>();   // sessionId → Supabase user id (토큰 검증됨). 도감 기록용.
@@ -81,7 +84,7 @@ export class GameRoom extends Room<GameState> {
       // can admire the picture as long as they like). On a loss, Enter restarts: prod from
       // level 1, dev from the room's chosen start level so testing stays put.
       // 클리어 화면: 버프를 아직 안 골랐으면(=선택창이 떠 있으면) restart 로는 진행하지 않는다.
-      if (this.state.phase === "won" && !this.state.boonOffers) this.startRound(this.sim.level + 1);
+      if (this.state.phase === "won") this.beginStagePick();   // 클리어 → 다음 스테이지 시작(버프 선택) 화면
       // 이어하기(현재 스테이지 재도전). 데일리는 공정성을 위해 이어하기 없음(1회 시도).
       // 이어하기(현재 스테이지 재도전)는 MAX_CONTINUES 회까지. 초과하면 처음 스테이지부터 새 런.
       else if (this.state.phase === "lost" && !this.isDaily) {
@@ -90,15 +93,18 @@ export class GameRoom extends Room<GameState> {
       }
     });
 
-    // 로그라이트 버프 선택: 클리어 화면에서 제시된 3택 중 하나를 고르면 적용하고 다음 스테이지로.
+    // 로그라이트 버프 선택: 스테이지 "시작 화면"(phase="pick")에서 각자 자기 3택 중 하나를 고른다.
+    // 코옵에선 사람마다 다르게 고를 수 있고(각 선택이 팀 런에 누적 적용), 5초 제한 뒤엔 미선택자 자동 선택.
+    // 전원 선택 완료(또는 제한시간 종료)되면 버프가 적용된 채 다음 스테이지가 생성된다(resolveStagePick).
     this.onMessage("boon", (client, msg: { id?: string }) => {
-      if (this.state.phase !== "won" || !this.state.boonOffers) return;   // 클리어+선택창 있을 때만
-      const offers = this.state.boonOffers.split(",");
+      if (this.state.phase !== "pick") return;
+      const p = this.state.players.get(client.sessionId);
+      if (!p || p.boonPicked || !p.boonOffers) return;                    // 아직 안 고른 사람만
       const id = String(msg?.id ?? "");
-      if (!offers.includes(id)) return;                                   // 제시된 후보만 유효
+      if (!p.boonOffers.split(",").includes(id)) return;                  // 자기 후보만 유효
       this.applyBoon(id);
-      this.state.boonOffers = "";                                         // 선택 소진(중복 방지)
-      this.startRound(this.sim.level + 1);                               // 다음 스테이지로
+      p.boonPicked = 1; p.boonOffers = "";                                // 이 플레이어 선택 완료
+      if (this.everyonePicked()) this.resolveStagePick();                 // 전원 완료 시 즉시 진행
     });
 
     // dev 전용: 클라이언트의 "보스 소환" 버튼 → 10초 카운트다운 후 보스 등장 (4종 순환).
@@ -176,10 +182,12 @@ export class GameRoom extends Room<GameState> {
     this.state.frozen = 0;
 
     this.state.level = level;
+    this.state.clearPct = Math.round(this.sim.clearTarget * 100);   // 속공 버프 반영된 목표 점유율(HUD 표시)
     this.state.claimedInterior = 0;
     this.state.imageId = this.imageAt(level);   // 랜덤·비중복 배정
     this.state.phase = "playing";
     this.state.nextIn = 0;
+    this.state.pickEndsIn = -1;                  // 플레이 중엔 버프 선택 카운트다운 없음
     this.roundStartMs = Date.now();             // 클리어 시간 측정 시작
     this.state.stageScore = 0;
     this.state.clearMs = 0;
@@ -203,17 +211,47 @@ export class GameRoom extends Room<GameState> {
   private beginGame() {
     this.state.startIn = -1;
     this.runScore = 0; this.continues = 0; this.state.continues = 0;   // 새 런 시작 → 누적 점수·이어하기 초기화
-    this.scoreMult = 1; this.bonusLives = 0; this.boonStacks = {}; this.sim.mods = { enemy: 1, move: 1, stamina: 1 };  // 버프 초기화
+    this.scoreMult = 1; this.bonusLives = 0; this.boonStacks = {}; this.sim.mods = freshMods();  // 버프 초기화
     this.state.boons = ""; this.state.boonOffers = "";
     this.startRound(this.startLevel);   // phase 를 "playing" 으로 전환
     this.lock();                        // 이후 새 플레이어 입장 차단
   }
 
-  // 클리어 시 제시할 버프 후보 N개를 무작위(비중복)로 뽑아 상태에 싣는다.
+  // 버프 후보 N개를 등급 가중치대로(비중복) 뽑아 콤마 문자열로 반환. 흔한 건 자주, 전설은 드물게(BOON_WEIGHT).
+  private rollOffer(): string {
+    const pool = [...BOON_IDS] as string[];
+    const picks: string[] = [];
+    const n = Math.min(BOON_OFFER_COUNT, pool.length);
+    while (picks.length < n && pool.length) {
+      const total = pool.reduce((s, id) => s + BOON_WEIGHT[BOON_RARITY[id] ?? "common"], 0);
+      let r = Math.random() * total, idx = 0;
+      for (; idx < pool.length - 1; idx++) { r -= BOON_WEIGHT[BOON_RARITY[pool[idx]] ?? "common"]; if (r <= 0) break; }
+      picks.push(pool[idx]);
+      pool.splice(idx, 1);   // 비중복: 뽑힌 후보는 이번 3택 풀에서 제거
+    }
+    return picks.join(",");
+  }
+
+  // 플레이어마다 "자기만의" 3택을 뽑아 싣는다(코옵은 사람마다 다르게 고를 수 있게). 선택 상태 초기화.
   private offerBoons() {
-    const pool = [...BOON_IDS];
-    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-    this.state.boonOffers = pool.slice(0, Math.min(BOON_OFFER_COUNT, pool.length)).join(",");
+    this.state.players.forEach((p) => { p.boonOffers = this.rollOffer(); p.boonPicked = 0; });
+    this.state.boonOffers = "";   // 구(舊) 공용 필드는 사용 안 함
+  }
+
+  // 코옵(2인 이상)에서 아직 안 고른 사람에게 자동 선택시키고 다음 스테이지로. 전원 완료 시에도 호출.
+  private resolveStagePick() {
+    this.state.players.forEach((p) => {
+      if (!p.boonPicked && p.boonOffers) { this.applyBoon(p.boonOffers.split(",")[0]); p.boonPicked = 1; p.boonOffers = ""; }
+    });
+    this.state.pickEndsIn = -1; this.pickEndsAt = 0;
+    this.startRound(this.sim.level + 1);   // 모든 선택이 적용된 채 다음 스테이지 생성 → phase="playing"
+  }
+
+  // 아직 선택 안 한(후보가 남은) 플레이어가 없으면 true.
+  private everyonePicked(): boolean {
+    let pending = false;
+    this.state.players.forEach((p) => { if (!p.boonPicked && p.boonOffers) pending = true; });
+    return !pending;
   }
 
   // 고른 버프를 런에 누적 적용(서버 권위). 시뮬 배율/점수배수/목숨에 반영하고 스택 표시를 갱신.
@@ -224,6 +262,13 @@ export class GameRoom extends Room<GameState> {
       case "slow":  this.sim.mods.enemy *= BOON_SLOW_MULT; break;                // 적 둔화
       case "speed": this.sim.mods.move *= BOON_SPEED_MULT; break;                // 이동 빨라짐
       case "stam":  this.sim.mods.stamina *= BOON_STAM_MULT; break;             // 스태미나 강화
+      case "guard": this.sim.mods.guard += BOON_GUARD_ADD; break;               // 매 스테이지 죽음 무효 +1
+      case "quick": this.sim.mods.clearRatio += BOON_QUICK_SUB; break;          // 클리어 목표 점유율↓
+      case "luck":  this.sim.mods.itemRate *= BOON_LUCK_MULT; break;            // 아이템 더 자주
+      case "iron":  this.sim.mods.invuln += BOON_IRON_ADD; break;               // 스폰/부활 무적↑
+      case "reveal":this.sim.mods.reveal *= BOON_REVEAL_MULT; break;            // 시작 안전지대↑
+      case "hunter":this.sim.mods.trap *= BOON_HUNTER_MULT; break;              // 포획 점수↑
+      case "frost": this.sim.mods.frost += BOON_FROST_ADD; break;               // 시작 시 적 정지↑
       default: return;
     }
     this.boonStacks[id] = (this.boonStacks[id] || 0) + 1;
@@ -244,7 +289,7 @@ export class GameRoom extends Room<GameState> {
   private restartFromStart() {
     this.runScore = 0; this.continues = 0; this.state.continues = 0;
     this.scoreMult = 1; this.bonusLives = 0; this.boonStacks = {};
-    this.sim.mods = { enemy: 1, move: 1, stamina: 1 };
+    this.sim.mods = freshMods();
     this.state.boons = ""; this.state.boonOffers = "";
     this.startRound(this.startLevel);
   }
@@ -266,6 +311,14 @@ export class GameRoom extends Room<GameState> {
         }
       }
       return;
+    }
+    // 버프 선택 화면(코옵): 5초 제한을 카운트다운하고, 시간이 다 되면 미선택자를 자동 선택시키고 진행한다.
+    if (this.state.phase === "pick") {
+      if (this.pickEndsAt > 0) {
+        this.state.pickEndsIn = Math.max(0, (this.pickEndsAt - Date.now()) / 1000);
+        if (Date.now() >= this.pickEndsAt) this.resolveStagePick();
+      }
+      return;   // 선택 중엔 시뮬 정지
     }
     // Stage cleared: stay on the celebration/reveal screen indefinitely so players can
     // enjoy the picture. No auto-advance — a player presses Enter to go on (see "restart").
@@ -370,6 +423,26 @@ export class GameRoom extends Room<GameState> {
       for (const ev of this.sim.reviveEvents) this.broadcast("revive", ev);
       this.sim.reviveEvents.length = 0;
     }
+    // 수호 버프 발동 연출(죽음 무효)
+    if (this.sim.guardEvents.length) {
+      for (const ev of this.sim.guardEvents) this.broadcast("guard", ev);
+      this.sim.guardEvents.length = 0;
+    }
+    // 보스 맵 파괴 → 3D 돌 파편 연출(클라 shatter3d)
+    if (this.sim.shatterEvents.length) {
+      for (const ev of this.sim.shatterEvents) this.broadcast("shatter", ev);
+      this.sim.shatterEvents.length = 0;
+    }
+    // 플레이어 사망 → 마커 산산조각 + 데미지 비네트/히트스톱(클라)
+    if (this.sim.deathEvents.length) {
+      for (const ev of this.sim.deathEvents) this.broadcast("death", ev);
+      this.sim.deathEvents.length = 0;
+    }
+    // 영역 점유(맵 밝힘) → 검은 돌 파편(클라 shatter3d, 검은색)
+    if (this.sim.revealEvents.length) {
+      for (const ev of this.sim.revealEvents) this.broadcast("reveal", ev);
+      this.sim.revealEvents.length = 0;
+    }
 
     // 블랙홀 예고 이벤트 → 클라이언트가 그 자리에 블랙홀을 띄워 회피를 유도
     if (this.sim.warpEvents.length) {
@@ -406,7 +479,17 @@ export class GameRoom extends Room<GameState> {
     // 계정 최고기록: 이 스테이지 클리어 시간(최소)·도달 스테이지(최대)·런 점수(최대)
     this.recordBests({ timeMs: clearMs, stage: this.sim.level, score: this.runScore });
     this.submitDailyScores();   // 데일리면 매 클리어마다 현재 점수(최고만 반영) 제출
-    this.offerBoons();          // 다음 스테이지로 가기 전 버프 3택 제시(선택해야 진행)
+    // 버프 선택은 이 클리어 화면이 아니라 "다음 스테이지 시작 화면"에서 한다(beginStagePick).
+  }
+
+  // 클리어 화면에서 Enter → 다음 스테이지의 "시작 화면": 각자 버프를 고르면(선택이 스테이지에
+  // 적용된 채로) 스테이지가 생성된다. phase="pick" 동안 tick 은 시뮬을 돌리지 않아 화면이 멈춘다.
+  // 코옵(2인 이상)은 5초 제한을 걸어(한 명이 오래 끌지 않게) 시간이 다 되면 미선택자를 자동 선택시킨다.
+  private beginStagePick() {
+    this.state.phase = "pick";
+    this.offerBoons();
+    if (this.state.players.size >= 2) { this.pickEndsAt = Date.now() + PICK_SECS * 1000; this.state.pickEndsIn = PICK_SECS; }
+    else { this.pickEndsAt = 0; this.state.pickEndsIn = -1; }   // 솔로는 제한 없음(느긋하게)
   }
 
   // 데일리 챌린지 랭킹 제출: 방의 로그인 플레이어들의 현재 런 점수를 그날 보드로 제출(최고만 반영).

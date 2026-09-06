@@ -21,6 +21,9 @@ export class Player extends Schema {
   @type("number") out: number = 0;      // 0/1 — eliminated this round (쓰러짐: 동료가 부활 가능)
   @type("number") revP: number = 0;     // 0..1 — 부활 진행도(쓰러진 마커에 링으로 표시)
   @type("number") inv: number = 0;      // 0/1 — invincible (spawn/respawn grace) → client draws marker faint
+  // 로그라이트 버프 선택(스테이지 시작 화면): 각자 자기 후보 3개(콤마 구분)에서 하나를 고른다.
+  @type("string") boonOffers: string = "";   // 이 플레이어의 3택 후보(비면 선택 안 함/이미 완료)
+  @type("number") boonPicked: number = 0;    // 0/1 — 이번 스테이지 선택 완료
 }
 
 // An enemy marker. Position + aim sync; archetype look (kind/shape/size) too.
@@ -81,6 +84,8 @@ export class GameState extends Schema {
   @type("number") claimedInterior: number = 0;
   @type("number") totalInterior: number = 0;
   @type("number") level: number = 1;
+  // 이 스테이지 클리어에 필요한 점유율(%). 기본 90, "속공" 버프면 낮아진다(HUD 목표 표시용).
+  @type("number") clearPct: number = 90;
 
   // 점수(코옵은 한 런을 공유): stageScore/clearMs 는 직전 클리어한 스테이지 결과,
   // runScore 는 이번 런 누적 총점(스테이지 합산, 이어하기 시 일부 차감).
@@ -114,6 +119,8 @@ export class GameState extends Schema {
   // boons: 이번 런에 적용된 버프 누적("id:count" 콤마 구분) — 클라가 현재 스택 표시용.
   @type("string") boonOffers: string = "";
   @type("string") boons: string = "";
+  // 코옵 버프 선택 제한시간(초). >=0 이면 카운트다운 진행(0 이 되면 미선택자는 자동 선택). -1 = 제한 없음(솔로).
+  @type("number") pickEndsIn: number = -1;
 
   // Public id of the current image (client fetches a BLURRED version only).
   @type("string") imageId: string = "";

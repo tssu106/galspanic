@@ -74,12 +74,52 @@ export const MAX_CONTINUES = 2;         // 한 런에서 이어하기 가능 횟
 // ── 로그라이트 버프(boons) ──────────────────────────────────────
 // 스테이지 클리어마다 이 중 3개를 무작위로 제시하고, 하나를 골라 런 내내 누적 적용한다.
 // 효과 크기는 여기서 관리(서버 권위). 이름/설명 문구는 클라 i18n(boon_*).
-export const BOON_IDS = ["life", "score", "slow", "speed", "stam"] as const;
+// 풀이 작으면 매번 비슷한 3택이 나와 "고르는 맛"이 없어 종류를 12종으로 늘렸다.
+export const BOON_IDS = ["life", "score", "slow", "speed", "stam",
+                         "guard", "quick", "luck", "iron", "reveal", "hunter", "frost"] as const;
 export const BOON_OFFER_COUNT = 3;      // 매 클리어에 제시하는 후보 수
 export const BOON_SCORE_ADD = 0.3;      // "점수" 1스택당 런 점수 배수 +0.3
 export const BOON_SLOW_MULT = 0.85;     // "둔화" 1스택당 적 속도 ×0.85
 export const BOON_SPEED_MULT = 0.88;    // "신속" 1스택당 이동 간격 ×0.88 (=더 빠름)
 export const BOON_STAM_MULT = 1.4;      // "지구력" 1스택당 스태미나 지속·회복 ×1.4
+// 아래는 새로 추가한 7종 (효과 크기는 여기서 관리, 이름/설명 문구는 클라 i18n boon_*).
+export const BOON_GUARD_ADD = 1;        // "수호" 1스택당 매 스테이지 죽음 무효 +1회 (스테이지마다 리필)
+export const BOON_QUICK_SUB = 0.04;     // "속공" 1스택당 클리어 필요 점유율 -0.04(=4%p)
+export const BOON_QUICK_FLOOR = 0.70;   // 속공 하한: 목표 점유율은 70% 밑으로 내려가지 않음
+export const BOON_LUCK_MULT = 0.78;     // "행운" 1스택당 아이템 등장 간격 ×0.78 (=더 자주)
+export const BOON_IRON_ADD = 1.5;       // "불굴" 1스택당 스폰·부활 무적 +1.5초
+export const BOON_REVEAL_MULT = 1.5;    // "개척자" 1스택당 시작 안전지대 넓이 ×1.5
+export const BOON_HUNTER_MULT = 1.5;    // "사냥꾼" 1스택당 몬스터 포획 점수 ×1.5
+export const BOON_FROST_ADD = 2.5;      // "혹한" 1스택당 스테이지 시작 시 적 정지 +2.5초
+
+// 버프 배율의 기본값 팩토리. GalSim.mods 초기값과 룸의 런 리셋(beginGame/restartFromStart)이 공유해
+// 한 곳에서만 정의되게 한다. resetRound(스테이지 넘김)에서는 초기화하지 않고 런 내내 누적 유지한다.
+export const freshMods = () => ({
+  enemy: 1,        // 둔화: 적 속도 배율
+  move: 1,         // 신속: 이동 간격 배율(작을수록 빠름)
+  stamina: 1,      // 지구력: 스태미나 지속/회복 배율
+  clearRatio: 0,   // 속공: CLEAR_RATIO 에서 뺄 값(누적)
+  invuln: 0,       // 불굴: 스폰/부활 무적에 더할 초(누적)
+  itemRate: 1,     // 행운: 아이템 등장 간격 배율(작을수록 자주)
+  reveal: 1,       // 개척자: 시작 안전지대 넓이 배율
+  trap: 1,         // 사냥꾼: 포획 점수 배율
+  frost: 0,        // 혹한: 스테이지 시작 시 적 정지 초
+  guard: 0,        // 수호: 스테이지당 죽음 무효 횟수(스테이지마다 리필)
+});
+
+// ── 버프 등급 & 가중치 ───────────────────────────────────────────
+// 등급별로 등장 확률(가중치)을 달리해 매 스테이지 3택이 더 다양하게 느껴지게 한다.
+// 흔한(common)은 자주, 전설(legendary)은 드물게. 색/이름 표기는 클라 RARITY 맵과 반드시 일치.
+export type BoonRarity = "common" | "rare" | "unique" | "legendary";
+export const BOON_RARITY: Record<string, BoonRarity> = {
+  slow: "common", stam: "common", luck: "common",                 // 흰색
+  speed: "rare", score: "rare", reveal: "rare", frost: "rare",    // 파란색
+  quick: "unique", hunter: "unique", iron: "unique",              // 노란색
+  life: "legendary", guard: "legendary",                          // 주황색
+};
+export const BOON_WEIGHT: Record<BoonRarity, number> = {
+  common: 100, rare: 45, unique: 18, legendary: 7,
+};
 
 // ── 코옵 부활 ──: 쓰러진 동료 위치에 살아있는 동료가 다가가 잠시 있으면 되살린다(솔로는 동료가 없어 무효).
 export const REVIVE_RADIUS = 4;   // 부활 인정 거리(셀)

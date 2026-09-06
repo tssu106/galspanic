@@ -240,6 +240,8 @@ const looseCurve = (tt) => {
   const z = 0.06 * Math.sin(t * 2);
   return new THREE.Vector3(x, y, z);
 };
+// 원(링) 형태 — 밧줄을 둥글게 만 상태(형태 순환에 추가).
+const circleCurve = (tt) => { const t = tt * Math.PI * 2, R = 0.6; return new THREE.Vector3(R * Math.cos(t), R * Math.sin(t), 0); };
 
 // 린넨(천) 질감 텍스처 — 캔버스로 직조(가로·세로 실) 패턴 + 노이즈. 색맵 겸 범프맵으로 쓴다.
 function fabricTex() {
@@ -310,8 +312,11 @@ function makeBossGroup(kind, colorCss) {
     geo.setAttribute("position", new THREE.BufferAttribute(tubePositions(knotCurve, tr, T, Rr), 3));
     geo.setAttribute("uv", new THREE.BufferAttribute(iuv.uv, 2));
     geo.setIndex(iuv.index);
-    geo.morphAttributes.position = [new THREE.BufferAttribute(tubePositions(looseCurve, tr, T, Rr), 3)];   // 0=꼬임, 1=풀림
-    const knot = new THREE.Mesh(geo, coreMat); knot.morphTargetInfluences = [0];
+    geo.morphAttributes.position = [
+      new THREE.BufferAttribute(tubePositions(looseCurve, tr, T, Rr), 3),    // 0 = 긴 밧줄
+      new THREE.BufferAttribute(tubePositions(circleCurve, tr, T, Rr), 3),   // 1 = 원(링)
+    ];
+    const knot = new THREE.Mesh(geo, coreMat); knot.morphTargetInfluences = [0, 0];   // 기본 = 매듭
     spinner.add(knot); b.knot = knot;
     b.baseR = 0.85;
   } else if (kind === "boss_spread") {        // 다크 크롬 화살촉 + 뒷날개. (사이트 라인·레티클 제거 — 요청)
@@ -408,7 +413,7 @@ export function renderShatter(dt) {
       if (b.firing) {
         sp.rotation.z += dt * 3.4;                                          // 고속 회전
         ox = Math.cos(b.t * 1.1) * sz * 0.16; oy = Math.sin(b.t * 1.1) * sz * 0.16;
-        if (b.knot && b.knot.morphTargetInfluences) b.knot.morphTargetInfluences[0] = 0.5 - 0.5 * Math.cos(b.t * 15);   // 빠른 조임↔풀림
+        if (b.knot && b.knot.morphTargetInfluences) { b.knot.morphTargetInfluences[0] = 0.5 - 0.5 * Math.cos(b.t * 15); b.knot.morphTargetInfluences[1] = 0; }   // 빠른 조임↔풀림
       } else {
         sp.rotation.x += dt * (0.7 + fast * 0.5);                           // 다축 텀블(공중에서 뒹구는 매듭)
         sp.rotation.y += dt * (0.95 + fast * 0.6);
@@ -416,9 +421,14 @@ export function renderShatter(dt) {
         ox = Math.sin(b.t * 0.85) * sz * 0.24;                              // 8자(리사주): x 1배 · y 2배 주기
         oy = Math.sin(b.t * 1.7) * sz * 0.15;
         if (b.knot && b.knot.morphTargetInfluences) {
-          const cyc = (b.t * 0.28) % 1;                                     // 천천히 묶였다 풀렸다(양끝 dwell + 이징)
-          let m = cyc < 0.4 ? cyc / 0.4 : cyc < 0.5 ? 1 : cyc < 0.9 ? 1 - (cyc - 0.5) / 0.4 : 0;
-          b.knot.morphTargetInfluences[0] = m * m * (3 - 2 * m);
+          // 매듭(0,0) → 긴 밧줄(1,0) → 원/링(0,1) → 매듭 순환 (각 형태를 잠깐 유지)
+          const seg = (b.t * 0.16) % 3;
+          const dw = (f) => { const e = f < 0.25 ? 0 : f > 0.75 ? 1 : (f - 0.25) / 0.5; return e * e * (3 - 2 * e); };
+          let m0 = 0, m1 = 0;
+          if (seg < 1) { m0 = dw(seg); }                                   // 매듭 → 밧줄
+          else if (seg < 2) { const f = seg - 1; m0 = dw(1 - f); m1 = dw(f); }   // 밧줄 → 원
+          else { const f = seg - 2; m1 = dw(1 - f); }                      // 원 → 매듭
+          b.knot.morphTargetInfluences[0] = m0; b.knot.morphTargetInfluences[1] = m1;
         }
       }
     } else if (b.kind === "boss_spread") {        // 조준 방향을 노려보다 확 돌진(런지) — 포식자 외눈

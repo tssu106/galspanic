@@ -54,6 +54,7 @@ export class GameRoom extends Room<GameState> {
       this.dailyDay = dailyKey();
       this.sim.gameSeed = dailySeed(this.dailyDay);
       this.state.daily = 1;
+      this.sim.dailyBoss = true;   // 데일리: 시작부터 체력 있는 보스 1마리 (미사일로 처치)
     }
     this.state.seed = this.sim.gameSeed;   // deterministic seed clients can replay
     this.initGridSchema();
@@ -351,6 +352,7 @@ export class GameRoom extends Room<GameState> {
       p.lives = sp.lives; p.claimed = sp.claimed; p.out = sp.out ? 1 : 0;
       p.traps = sp.traps; p.bonus = sp.bonus; p.stamina = sp.stamina;
       p.inv = sp.invuln > 0 ? 1 : 0;   // 무적 표시(마커 희미하게)
+      p.shield = sp.shield;            // 방패 보유 수(마커 보호막 링)
       p.revP = sp.out && sp.revT > 0 ? Math.min(1, sp.revT / REVIVE_SEC) : 0;   // 부활 진행 링
     });
 
@@ -369,6 +371,8 @@ export class GameRoom extends Room<GameState> {
       es.enr = (se.boss && se.mode && se.mode !== "normal") ? (se.mode === "devour" ? 2 : 1) : 0;
       es.sh = se.shieldOn ? 1 : 0;   // shielder 무적 표시
       es.st = se.hidden ? 1 : 0;     // phantom 은신 표시
+      es.hp = se.hp ?? 0; es.mhp = se.maxHp ?? 0;   // 데일리 보스 체력바
+
       if (es.kind !== se.kind) { es.kind = se.kind; es.shape = se.shape; }
     }
 
@@ -442,6 +446,11 @@ export class GameRoom extends Room<GameState> {
     if (this.sim.revealEvents.length) {
       for (const ev of this.sim.revealEvents) this.broadcast("reveal", ev);
       this.sim.revealEvents.length = 0;
+    }
+    // 데일리 보스 처치 → 대폭발 + 슬로우모 + 점수 샤워(클라)
+    if (this.sim.bossDefeatEvents.length) {
+      for (const ev of this.sim.bossDefeatEvents) this.broadcast("bossDefeat", ev);
+      this.sim.bossDefeatEvents.length = 0;
     }
 
     // 블랙홀 예고 이벤트 → 클라이언트가 그 자리에 블랙홀을 띄워 회피를 유도

@@ -21,6 +21,7 @@ export class Player extends Schema {
   @type("number") out: number = 0;      // 0/1 — eliminated this round (쓰러짐: 동료가 부활 가능)
   @type("number") revP: number = 0;     // 0..1 — 부활 진행도(쓰러진 마커에 링으로 표시)
   @type("number") inv: number = 0;      // 0/1 — invincible (spawn/respawn grace) → client draws marker faint
+  @type("number") shield: number = 0;   // 방패 아이템 보유 수 → 클라가 마커에 보호막 링 표시
   // 로그라이트 버프 선택(스테이지 시작 화면): 각자 자기 후보 3개(콤마 구분)에서 하나를 고른다.
   @type("string") boonOffers: string = "";   // 이 플레이어의 3택 후보(비면 선택 안 함/이미 완료)
   @type("number") boonPicked: number = 0;    // 0/1 — 이번 스테이지 선택 완료
@@ -40,6 +41,8 @@ export class Enemy extends Schema {
   @type("number") enr: number = 0;         // 0/1 — boss enraged (chase/rush/burst) → client red aura
   @type("number") sh: number = 0;          // 1 — shielder invincible now (client draws a shield ring)
   @type("number") st: number = 0;          // 1 — phantom hidden now (client draws it faint)
+  @type("number") hp: number = 0;          // 데일리 보스 현재 체력(>0 이면 클라가 체력바 표시)
+  @type("number") mhp: number = 0;         // 데일리 보스 최대 체력
 }
 
 // A gunner's bullet (position only; it ignores walls and kills even on safe zone).

@@ -630,7 +630,7 @@
 import { Client } from "https://esm.sh/colyseus.js@0.15.0";
 import { showCountdown3D, hideCountdown3D, renderCountdown3D } from "./countdown3d.js";
 import { spawnShatter, spawnDeathShards, spawnReveal, updateBoss3D, renderShatter, clearShatter } from "./shatter3d.js";
-import { initAudio, sfxCapture, sfxClear, sfxGameover, sfxItem, sfxShatter, startBgm, stopBgm, setBgmMode, setMuted, isMuted } from "./sfx.js";
+import { initAudio, sfxCapture, sfxCombo, sfxClear, sfxGameover, sfxItem, sfxShatter, startBgm, stopBgm, setBgmMode, setMuted, isMuted } from "./sfx.js";
 import { onAuth, signIn, signUp, signOut, getToken, dbGetCollection, dbGetRecord, dbDailyTop } from "./supabase.js";
 
 // ── 다국어(i18n): 한국어/English/日本語 ──────────────────────────────────────
@@ -710,6 +710,7 @@ const I18N = {
     hud_progress: "진행 · Lv {0}", hud_goal: "목표 {0}%", me_suffix: " (나)", stam_title: "질주 스태미나",
     capture_multi: "포획 x{0}! +{1}", capture_one: "포획! +{1}",
     item_missile: "미사일!", item_freeze: "프리즈!", item_life: "목숨 +1!", item_generic: "아이템!",
+    item_bomb: "폭탄!", item_shield: "방패!", item_sweep: "스윕!", item_magnet: "자석!",
     boss_incoming: "보스 출현", restart_here: "Enter ▶ 이 방에서 재시작", stage_n: "스테이지 {0}",
     level_clear: "레벨 {0} 클리어!", next_stage: "Enter ▶ 다음 스테이지", next_stage_touch: "탭하여 다음 스테이지 ▶",
     dev_boss: "🕳 보스 소환", dev_laser: "⚡ 레이저 보스", dev_lose: "💀 게임오버", dev_win: "🏆 스테이지 완료", dev_clear: "🧹 몬스터 모두 제거",
@@ -787,6 +788,7 @@ const I18N = {
     hud_progress: "Progress · Lv {0}", hud_goal: "Goal {0}%", me_suffix: " (you)", stam_title: "Sprint stamina",
     capture_multi: "Capture x{0}! +{1}", capture_one: "Capture! +{1}",
     item_missile: "Missile!", item_freeze: "Freeze!", item_life: "Life +1!", item_generic: "Item!",
+    item_bomb: "Bomb!", item_shield: "Shield!", item_sweep: "Sweep!", item_magnet: "Magnet!",
     boss_incoming: "BOSS INCOMING", restart_here: "Enter ▶ Restart in this room", stage_n: "Stage {0}",
     level_clear: "LEVEL {0} CLEAR!", next_stage: "Enter ▶ Next stage", next_stage_touch: "Tap for next stage ▶",
     dev_boss: "🕳 Summon Boss", dev_laser: "⚡ Laser Boss", dev_lose: "💀 Game Over", dev_win: "🏆 Stage Clear", dev_clear: "🧹 Clear Monsters",
@@ -864,6 +866,7 @@ const I18N = {
     hud_progress: "進行 · Lv {0}", hud_goal: "目標 {0}%", me_suffix: "（あなた）", stam_title: "ダッシュスタミナ",
     capture_multi: "捕獲 x{0}! +{1}", capture_one: "捕獲！ +{1}",
     item_missile: "ミサイル！", item_freeze: "フリーズ！", item_life: "ライフ +1！", item_generic: "アイテム！",
+    item_bomb: "ボム！", item_shield: "シールド！", item_sweep: "スイープ！", item_magnet: "マグネット！",
     boss_incoming: "ボス出現", restart_here: "Enter ▶ この部屋でリスタート", stage_n: "ステージ {0}",
     level_clear: "レベル {0} クリア！", next_stage: "Enter ▶ 次のステージ", next_stage_touch: "タップで次のステージ ▶",
     dev_boss: "🕳 ボス召喚", dev_laser: "⚡ レーザーボス", dev_lose: "💀 ゲームオーバー", dev_win: "🏆 ステージクリア", dev_clear: "🧹 敵を全滅",
@@ -1124,6 +1127,14 @@ async function connect(name, level, mode = "quick", code = "") {
     sfxCapture(ev.count);   // 포획 효과음
     spawnJuice(ev.x + 0.5, ev.y + 0.5, playerColor(ev.owner), 10 + ev.count * 6, 1.2 + ev.count * 0.25);
     addShake(0.2 + Math.min(0.24, ev.count * 0.05));   // 포획 손맛(잡을수록 크게)
+    // 콤보: 2연속부터 "COMBO x N" 팝업(단계 오를수록 크고·뜨겁게) + 상승 효과음
+    const cb = ev.combo | 0;
+    if (cb >= 2) {
+      const col = cb >= 12 ? "#ff3b6b" : cb >= 7 ? "#ff8a3b" : cb >= 4 ? "#ffd23a" : "#ffffff";
+      flashes.push({ x: ev.x, y: ev.y - 1.4, color: col, life: 1.1, ttl: 1.1, size: Math.min(40, 20 + cb * 1.6), rise: 32, text: "COMBO ×" + cb });
+      try { sfxCombo(cb); } catch {}
+      addShake(Math.min(0.35, 0.12 + cb * 0.02));
+    }
   });
   // 아이템 획득: 점유한 칸의 아이템을 먹으면 서버가 종류/위치를 알려준다 → 이름 팝업 + 효과음
   room.onMessage("item", (ev) => {
@@ -1142,6 +1153,18 @@ async function connect(name, level, mode = "quick", code = "") {
     addShake(0.22);
     try { sfxItem(); } catch {}
   });
+  // 데일리 보스 처치: 대폭발(3D 파편 대량) + 금빛 파티클 + 프리즈-프레임 + 점수 샤워 + 사운드
+  room.onMessage("bossDefeat", (ev) => {
+    const p = gridToScreen(ev.x, ev.y);
+    const cellPx = (camMap.cw || 3.2) * (camMap.camS || 1);
+    try { spawnShatter(p.x, p.y, 2200, "warp", Math.max(8, cellPx * 1.6)); } catch {}
+    spawnJuice(ev.x, ev.y, "#ffd23a", 70, 3.2);
+    for (let k = 0; k < 5; k++) spawnJuice(ev.x + (Math.random()-0.5)*8, ev.y + (Math.random()-0.5)*8, k%2?"#ff8a3b":"#fff2c0", 24, 2.4);
+    flashes.push({ x: ev.x, y: ev.y - 1.5, color: "#ffd23a", life: 1.8, ttl: 1.8, size: 34, rise: 44, text: "BOSS DOWN!  +" + ev.score });
+    addShake(0.55);
+    freezeUntil = performance.now() + 150;   // 극적인 정지(슬로우모 느낌)
+    try { sfxClear(); sfxCombo(22); } catch {}
+  });
   // 영역 점유(맵 밝힘): 점유된 자리에 "검은 돌 껍질"이 벗겨지듯 3D 파편이 위로 터진다.
   room.onMessage("reveal", (ev) => {
     const n = ev.n | 0;
@@ -1151,6 +1174,7 @@ async function connect(name, level, mode = "quick", code = "") {
     const p = gridToScreen(ev.x, ev.y);
     const cellPx = (camMap.cw || 3.2) * (camMap.camS || 1);
     try { spawnReveal(p.x, p.y, n, cellPx); } catch {}
+    if (n >= 30) revealPulses.push({ x: ev.x, y: ev.y, r: Math.min(60, Math.sqrt(n) * 1.4), t0: performance.now() });   // 큰 점유: 밝은 확산 링(스윕 손맛)
   });
   // 보스 맵 파괴: 부서진 자리에 3D 돌 파편이 터진다(+먼지·흔들림). 규모(n)가 클수록 크게.
   room.onMessage("shatter", (ev) => {
@@ -1696,7 +1720,7 @@ function renderScore(s, b) {
 function returnToTitle() {
   try { room?.leave(); } catch {}
   room = null; state = null; gameShown = false; lostSince = 0; lastLobbyKey = "";
-  bubbles.clear(); pmove.clear(); prevMarker.clear(); flashes.length = 0; warps.length = 0; particles.length = 0;
+  bubbles.clear(); pmove.clear(); prevMarker.clear(); flashes.length = 0; warps.length = 0; particles.length = 0; revealPulses.length = 0;
   try { clearShatter(); } catch {}
   try { stopBgm(); } catch {}
   deathRings = []; deathVigT = 0; freezeUntil = 0;
@@ -2113,8 +2137,8 @@ const SHAPE_ALIAS = {
   shielder:"star", blinker:"ghost", phantom:"ghost", patrol:"triangle",
 };
 // 맵 아이템(파워업) 아이콘(팝업 이모지)·색·이름
-const ITEM_ICON = { missile:"🚀", freeze:"❄", life:"❤" };
-const ITEM_COLOR = { missile:"#f97316", freeze:"#67e8f9", life:"#ff5db1" };
+const ITEM_ICON = { missile:"🚀", freeze:"❄", life:"❤", bomb:"💣", shield:"🛡", sweep:"🧹", magnet:"🧲" };
+const ITEM_COLOR = { missile:"#f97316", freeze:"#67e8f9", life:"#ff5db1", bomb:"#f43f5e", shield:"#7dd3fc", sweep:"#a3e635", magnet:"#c084fc" };
 const ITEM_NAME = { missile:"미사일!", freeze:"프리즈!", life:"목숨 +1!" };
 // 맵 위 아이템을 종류별 벡터 아이콘으로 그린다. (x,y)=중심, s=아이콘 반지름(캔버스 단위).
 // 벡터라 카메라 줌/팬에 항상 선명하게 정렬된다.
@@ -2158,12 +2182,34 @@ function drawItemIcon(kind, x, y, s) {
     ctx.bezierCurveTo(-s * 1.12, -s * 0.12, -s * 0.5, -s, 0, -s * 0.34);
     ctx.bezierCurveTo(s * 0.5, -s, s * 1.12, -s * 0.12, 0, s * 0.82);
     ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (kind === "bomb") {                        // 폭탄: 몸통 + 도화선 + 불꽃
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, s * 0.22, s * 0.72, 0, 7); ctx.fill();
+    ctx.strokeStyle = "#c9a227"; ctx.lineWidth = Math.max(0.6, s * 0.16); ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(s * 0.34, -s * 0.34); ctx.quadraticCurveTo(s * 0.75, -s * 0.62, s * 0.5, -s * 0.92); ctx.stroke();
+    ctx.fillStyle = "#ffd23a"; ctx.beginPath(); ctx.arc(s * 0.5, -s * 0.92, s * 0.18, 0, 7); ctx.fill();
+  } else if (kind === "shield") {                      // 방패
+    ctx.fillStyle = col; ctx.strokeStyle = "rgba(255,255,255,.92)"; ctx.lineWidth = Math.max(0.6, s * 0.12); ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(0, -s); ctx.lineTo(s * 0.82, -s * 0.5); ctx.lineTo(s * 0.82, s * 0.12);
+    ctx.quadraticCurveTo(s * 0.6, s * 0.9, 0, s); ctx.quadraticCurveTo(-s * 0.6, s * 0.9, -s * 0.82, s * 0.12);
+    ctx.lineTo(-s * 0.82, -s * 0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (kind === "sweep") {                       // 빗자루(스윕)
+    ctx.strokeStyle = "#caa15a"; ctx.lineWidth = Math.max(0.6, s * 0.2); ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(s * 0.55, -s * 0.8); ctx.lineTo(-s * 0.15, s * 0.15); ctx.stroke();   // 자루
+    ctx.fillStyle = col; ctx.beginPath();                                                              // 솔
+    ctx.moveTo(-s * 0.55, s * 0.25); ctx.lineTo(s * 0.05, -s * 0.25); ctx.lineTo(s * 0.45, s * 0.15); ctx.lineTo(-s * 0.15, s * 0.85); ctx.closePath(); ctx.fill();
+  } else if (kind === "magnet") {                      // 말굽 자석
+    ctx.strokeStyle = col; ctx.lineWidth = s * 0.4; ctx.lineCap = "butt";
+    ctx.beginPath(); ctx.arc(0, -s * 0.05, s * 0.52, Math.PI, 0); ctx.stroke();                        // 아치
+    ctx.beginPath(); ctx.moveTo(-s * 0.52, -s * 0.05); ctx.lineTo(-s * 0.52, s * 0.62); ctx.moveTo(s * 0.52, -s * 0.05); ctx.lineTo(s * 0.52, s * 0.62); ctx.stroke();  // 다리
+    ctx.strokeStyle = "#e8edf5"; ctx.beginPath(); ctx.moveTo(-s * 0.52, s * 0.5); ctx.lineTo(-s * 0.52, s * 0.62); ctx.moveTo(s * 0.52, s * 0.5); ctx.lineTo(s * 0.52, s * 0.62); ctx.stroke();  // 극(밝은 끝)
   } else {
     ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, s * 0.7, 0, 7); ctx.fill();
   }
   ctx.restore();
 }
 const flashes = [];   // capture popups {x,y,text,color,life,ttl}, fed by the "trap" broadcast
+const revealPulses = [];   // 큰 점유 시 밝은 확산 링 {x,y,r,t0} — 그림이 드러나는 손맛
 
 // ── 보스 연출 상태 ──────────────────────────────────────────────────────────
 const warps = [];              // 블랙홀 연출 {x,y,t0,burst}, "warp" 브로드캐스트로 추가
@@ -2871,17 +2917,17 @@ function render() {
         const nx = -dy / len, ny = dx / len;            // 빔에 수직인 단위벡터
         const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, hw = band / 2;   // 중점·반폭(단면 그라디언트 축)
         ctx.globalCompositeOperation = "lighter";       // 이하 빛은 가산 합성 → 겹칠수록 밝게(블룸)
-        // 1) 외곽 글로우(넓고 옅게) — 빛이 공기 중으로 번지는 느낌
-        ctx.strokeStyle = "rgba(255,42,42,0.28)"; ctx.lineWidth = band * 2.1;
+        // 1) 외곽 글로우(살짝만 번지게 — 예고 폭보다 크게 벗어나지 않도록 좁힘)
+        ctx.strokeStyle = "rgba(255,42,42,0.22)"; ctx.lineWidth = band * 1.35;
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
         ctx.globalCompositeOperation = "source-over";
-        // 2) 튜브 본체 — 폭을 가로지르는 그라디언트(가장자리 어둡고 코어 흰빛)로 원통 입체감
+        // 2) 튜브 본체 — 밴드(예고=판정 폭)를 꽉 채우도록 가장자리도 진하게. 코어만 흰빛으로 입체감.
         const g = ctx.createLinearGradient(mx - nx * hw, my - ny * hw, mx + nx * hw, my + ny * hw);
-        g.addColorStop(0.00, "rgba(120,6,6,0.12)");
-        g.addColorStop(0.26, "rgba(255,58,58,0.95)");
-        g.addColorStop(0.50, "rgba(255,238,238,1)");
-        g.addColorStop(0.74, "rgba(255,58,58,0.95)");
-        g.addColorStop(1.00, "rgba(120,6,6,0.12)");
+        g.addColorStop(0.00, "rgba(255,60,60,0.78)");
+        g.addColorStop(0.30, "rgba(255,92,92,0.98)");
+        g.addColorStop(0.50, "rgba(255,240,240,1)");
+        g.addColorStop(0.70, "rgba(255,92,92,0.98)");
+        g.addColorStop(1.00, "rgba(255,60,60,0.78)");
         ctx.strokeStyle = g; ctx.lineWidth = band;
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
         ctx.globalCompositeOperation = "lighter";
@@ -3033,7 +3079,33 @@ function render() {
         ctx.beginPath(); ctx.arc(cxp, cyp, mr + cw * 0.5 + 4 / camS, 0, 7); ctx.stroke();
         ctx.restore();
       }
+      // 방패 아이템 보유: 회전하는 육각 보호막(무적 링과 구분). 보유 수만큼 겹쳐 그린다.
+      if (p.shield > 0) {
+        ctx.save();
+        ctx.strokeStyle = "#7dd3fc"; ctx.globalAlpha = 0.85; ctx.lineWidth = 2.6 / camS; ctx.lineJoin = "round";
+        for (let s = 0; s < Math.min(3, p.shield); s++) {
+          const R = mr + cw * 0.8 + (5 + s * 4) / camS, rot = now / 900 + s * 0.4;
+          ctx.beginPath();
+          for (let k = 0; k <= 6; k++) { const a = rot + k * Math.PI / 3, x = cxp + Math.cos(a) * R, y = cyp + Math.sin(a) * R; k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
     });
+    // 점유 확산 링(스윕 손맛): 밝은 링이 빠르게 퍼지며 사라진다(월드 좌표).
+    if (revealPulses.length) {
+      for (let i = revealPulses.length - 1; i >= 0; i--) {
+        const pu = revealPulses[i], age = (now - pu.t0) / 1000, k = age / 0.5;
+        if (k >= 1) { revealPulses.splice(i, 1); continue; }
+        const rr = pu.r * (0.15 + k) * cw;
+        ctx.save();
+        ctx.globalAlpha = (1 - k) * 0.7; ctx.strokeStyle = "#fff2c0"; ctx.lineWidth = (2.5 + 3 * (1 - k)) / camS;
+        ctx.beginPath(); ctx.arc(pu.x * cw, pu.y * ch, rr, 0, 7); ctx.stroke();
+        ctx.globalAlpha = (1 - k) * 0.4; ctx.strokeStyle = "#ffd23a"; ctx.lineWidth = 1.5 / camS;
+        ctx.beginPath(); ctx.arc(pu.x * cw, pu.y * ch, rr * 0.7, 0, 7); ctx.stroke();
+        ctx.restore();
+      }
+    }
     // 파티클(점유·포획·아이템·리빌 시 튀는 조각) — 월드 좌표로 그려 맵과 함께 스크롤
     if (particles.length) {
       for (let i = particles.length - 1; i >= 0; i--) {
@@ -3052,12 +3124,14 @@ function render() {
     for (let i = flashes.length-1; i >= 0; i--) {
       const f = flashes[i]; f.life -= dt;
       if (f.life <= 0) { flashes.splice(i, 1); continue; }
-      const a = f.life / f.ttl;
+      const a = f.life / f.ttl, sz = f.size || 18;
       ctx.save();
       ctx.globalAlpha = a; ctx.textAlign = "center";
-      ctx.font = "bold 18px system-ui, sans-serif";
+      ctx.font = "bold " + sz + "px system-ui, sans-serif";
+      const yy = f.y*ch - (1-a)*(f.rise || 20);
+      if (f.size) { ctx.lineWidth = Math.max(2, sz*0.14); ctx.strokeStyle = "rgba(0,0,0,.8)"; ctx.strokeText(f.text, f.x*cw, yy); }   // 큰 팝업엔 외곽선
       ctx.fillStyle = f.color;
-      ctx.fillText(f.text, f.x*cw, f.y*ch - (1-a)*20);
+      ctx.fillText(f.text, f.x*cw, yy);
       ctx.restore();
     }
     ctx.restore();          // end camera transform (HUD/overlay stay in screen space)
@@ -3115,6 +3189,7 @@ function render() {
     } else { bossCountEnd = 0; }
 
     drawHud();
+    drawBossHp();   // 데일리 보스 체력바(상단)
     if (state.phase === "won") drawWinCelebration(now, dt);
     else {
       wonCelebActive = false;
@@ -3231,6 +3306,23 @@ function drawWinCelebration(now, dt) {
   ctx.textAlign = "left";
 }
 
+// 데일리 보스 체력바(상단, 스크린 공간). hp>0 인 적(=데일리 보스)이 있을 때만.
+function drawBossHp() {
+  if (!state || !state.daily || !state.enemies) return;
+  let boss = null; state.enemies.forEach((e) => { if (e.hp > 0 && e.mhp > 0) boss = e; });
+  if (!boss) return;
+  const W = canvas.width, bw = Math.min(400, W * 0.76), bh = 16, bx = (W - bw) / 2, by = 22;
+  const frac = Math.max(0, Math.min(1, boss.hp / boss.mhp));
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = "rgba(10,13,24,.82)"; ctx.fillRect(bx - 4, by - 4, bw + 8, bh + 8);   // 배경
+  ctx.fillStyle = "#1a0d12"; ctx.fillRect(bx, by, bw, bh);
+  const g = ctx.createLinearGradient(bx, 0, bx + bw, 0); g.addColorStop(0, "#ff3b3b"); g.addColorStop(1, "#ff8a3b");
+  ctx.fillStyle = g; ctx.fillRect(bx, by, bw * frac, bh);
+  ctx.strokeStyle = "#ff6b6b"; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, bh);
+  ctx.fillStyle = "#ffe0e0"; ctx.font = "bold 12px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  ctx.fillText("👹 BOSS   " + Math.ceil(boss.hp) + " / " + boss.mhp, W / 2, by - 8);
+  ctx.restore();
+}
 function drawHud() {
   const hud = document.getElementById("hud");
   const total = state.totalInterior || 1;

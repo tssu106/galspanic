@@ -39,6 +39,12 @@ export function sfxItem() {
   tone(660, 0, 0.09, "square", 0.12);
   tone(990, 0.06, 0.14, "triangle", 0.14);
 }
+// 콤보: 단계가 오를수록 반음씩 높아지는 상승 블립(짜릿한 콤보 손맛).
+export function sfxCombo(n) {
+  const base = 440 * Math.pow(2, Math.min(24, Math.max(0, n)) / 12);
+  tone(base, 0, 0.10, "square", 0.13);
+  tone(base * 1.5, 0.04, 0.12, "triangle", 0.09);
+}
 // 게임 오버: 하강 톤
 export function sfxGameover() {
   [440, 392, 330, 262].forEach((f, i) => tone(f, i * 0.16, 0.5, "sawtooth", 0.13));

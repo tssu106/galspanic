@@ -96,6 +96,9 @@ const FREEZE_SEC = 4;      // 프리즈: 적 정지 시간(초)
 const MISSILE_SPEED = 44;  // 유도 미사일 속도(셀/초) — 적보다 훨씬 빨라 반드시 따라잡는다
 const MISSILE_LIFE = 4;    // 미사일 수명(초) — 표적이 있는 한 소멸하지 않음(잡을 적이 없을 때만)
 const MISSILE_COUNT = 3;   // 미사일 아이템 1개당 발사 수
+const MISSILE_BOSS_DMG = 1;    // 미사일 1발이 보스 체력을 깎는 양(데일리)
+const BOSS_KILL_SCORE = 3000;  // 데일리 보스 처치 점수 보너스
+const DAILY_BOSS_HP = 18;      // 데일리 보스 최대 체력(미사일 1발당 1 감소 → 미사일 아이템 ~6개)
 // 맵 아이템 등장/소멸: 라운드 내내 랜덤 간격으로 가끔 하나씩 생겨 잠깐 유지되다 깜빡이며 사라진다.
 const ITEM_LIFE = 10;        // 맵에 유지되는 시간(초)
 const ITEM_BLINK_SEC = 2.2;  // 소멸 직전 깜빡이기 시작하는 남은 시간(초)
@@ -108,10 +111,11 @@ const WEB_LIFE = 9;        // 거미줄 지속(초)
 const WEB_R = 6;           // 한 번에 까는 반경(셀)
 // 레이저
 const BEAM_LEN = Math.hypot(GRID_W, GRID_H);   // 맵을 가로지르는 길이
+const LASER_W = (r: number) => Math.max(1.4, r * 0.35);   // 레이저 반폭: 보스 크기보다 훨씬 좁게(예고/판정/그림 일치)
 const BEAM_CARVE_EVERY = 0.1;                  // 카브(맵 삭제) 간격(초) — 매 틱 삭제 방지
 const LASER_COOLDOWN = 30;                     // 보스별 레이저 재사용 대기(초) — 30초에 한 번꼴
 // 보스 크기 변화: 시간이 갈수록 서서히 커지고(상한), 미사일에 맞으면 작아진다(하한).
-// 레이저 두께(w = e.r)도 크기에 비례하므로 함께 얇아지고 두꺼워진다.
+// 레이저 두께(w = LASER_W(e.r) = e.r×0.35, 하한 1.4)도 크기에 비례하므로 함께 얇아지고 두꺼워진다.
 const BOSS_GROW_RATE = 0.25;                   // 초당 baseR 증가량(셀)
 const BOSS_GROW_MAX = 1.8;                     // 최대 크기 = 스폰 크기 × 1.8
 const BOSS_SHRINK_HIT = 0.8;                   // 미사일 1발 명중 시 크기 배율(곱)
@@ -167,6 +171,7 @@ export interface SimPlayer {
   drawOriginX: number; drawOriginY: number;  // safe cell a line started from
   trailCells: number[];
   invuln: number;            // 무적 남은 시간(초). 시작/부활 직후 잠시 무적 (모든 사망 판정 무시)
+  shield: number;            // 방패 아이템 보유 수(피격 1회를 목숨 없이 막는다)
 }
 
 export interface SimEnemy {
@@ -176,6 +181,7 @@ export interface SimEnemy {
   spin: number; wanderT: number;
   gun: boolean; fireEvery: number; cooldown: number; aim: number;
   boss?: boolean; pattern?: BossPattern; bullets?: number; phase?: number;   // 보스 전용
+  hp?: number; maxHp?: number;   // 보스 체력(데일리): 미사일 명중마다 감소, 0이면 처치
   // 보스 행동/특수 패턴: 평상시("normal") ↔ 시그니처 특수를 번갈아 쓴다. mode=현재 특수명,
   // modeT=남은 시간, subT=하위 타이머(연속 발사/카브용).
   mode?: string; modeT?: number; subT?: number; baseSpeed?: number; fireEveryBase?: number; behaviorSaved?: Behavior; baseR?: number; baseR0?: number; rTarget?: number; forceLaser?: boolean; laserCd?: number;
@@ -191,7 +197,9 @@ export interface SimProjectile { x: number; y: number; vx: number; vy: number; l
 // 보스 레이저: (x1,y1)에서 각도 ang 방향으로 len 만큼. tele>0 이면 예고(경고선), 아니면 발사 중.
 // full=true 면 앵커를 중심으로 양방향으로 뻗어 맵 전체를 관통하는 일자 레이저.
 export interface SimBeam { x1: number; y1: number; ang: number; rot: number; len: number; w: number; t: number; tele: number; carve: boolean; carveT: number; full: boolean; }
-export interface CaptureEvent { x: number; y: number; count: number; bonus: number; owner: number; }
+export interface CaptureEvent { x: number; y: number; count: number; bonus: number; owner: number; combo: number; }
+const COMBO_WINDOW = 3.0;   // 콤보 유지 시간(초): 이 시간 안에 포획/점유가 이어지면 콤보가 쌓인다.
+const COMBO_BONUS = 0.12;   // 콤보 1단계당 포획 점수 +12% (콤보 N → ×(1+(N-1)*0.12))
 export interface BossEvent { x: number; y: number; kind: string; }   // 보스 출현 (클라 연출용)
 
 /**
@@ -210,9 +218,12 @@ export class GalSim {
   private webTimers = new Map<number, number>();   // 거미줄 셀 → 남은 수명(초)
   webDirty = new Set<number>();        // 변경된 거미줄 셀 (룸이 동기화)
   captureEvents: CaptureEvent[] = [];   // drained by the room, broadcast to clients
+  combo = 0;        // 연속 포획 콤보(포획/점유로 유지). 죽거나 시간초과 시 0.
+  comboT = 0;       // 콤보 남은 유지 시간(초)
   // 아이템(맵 위 파워업) / 미사일 / 프리즈
   items: { x: number; y: number; kind: string; life: number; blink: boolean }[] = [];
   private itemSpawnT = 0;               // 다음 아이템 스폰까지 남은 시간(초)
+  private magnetOwner: SimPlayer | null = null;   // 이번 틱에 자석을 먹은 플레이어(획득 루프 종료 후 흡수 처리)
   missiles: { x: number; y: number; vx: number; vy: number; life: number; owner: number; target: SimEnemy | null }[] = [];
   freezeT = 0;                          // >0 이면 적 정지(프리즈 아이템)
   itemEvents: { x: number; y: number; kind: string; owner: number }[] = [];   // 획득 연출용 (룸이 drain)
@@ -242,6 +253,8 @@ export class GalSim {
   deathEvents: { x: number; y: number; owner: number; out: number }[] = [];
   // 영역 점유(맵 밝힘)마다 중심·규모 → 클라가 "검은 돌이 터지며 그림이 드러나는" 3D 파편 연출.
   revealEvents: { x: number; y: number; n: number }[] = [];
+  dailyBoss = false;   // 데일리 챌린지: 스테이지 시작부터 체력 있는 보스 1마리(미사일로 처치)
+  bossDefeatEvents: { x: number; y: number; score: number }[] = [];   // 보스 처치 → 클라 대폭발/슬로우모 연출
   // 속공: 클리어에 필요한 점유율(하한 보장). 스폰/부활 무적: 불굴 버프만큼 늘린다.
   get clearTarget() { return Math.max(BOON_QUICK_FLOOR, CLEAR_RATIO - this.mods.clearRatio); }
   private spawnInvuln() { return INVULN_SEC + this.mods.invuln; }
@@ -279,6 +292,7 @@ export class GalSim {
     this.claimedInterior = 0;
     this.projectiles = [];
     this.captureEvents = [];
+    this.combo = 0; this.comboT = 0;   // 새 스테이지에서 콤보 초기화
     this.items = []; this.missiles = []; this.itemEvents = []; this.shatterEvents = []; this.deathEvents = []; this.revealEvents = [];
     this.freezeT = this.mods.frost;    // 혹한: 스테이지 시작 시 적이 잠깐 멈춰 있는다(초반 여유)
     this.guardLeft = this.mods.guard; this.guardEvents = [];   // 수호: 스테이지마다 무효 횟수 리필
@@ -306,6 +320,7 @@ export class GalSim {
       p.claimed = 0; p.traps = 0; p.bonus = 0; p.acc = 0; p.idle = 0;
       p.drawOriginX = sx; p.drawOriginY = sy; p.trailCells.length = 0;
       p.invuln = this.spawnInvuln();   // 라운드 시작 직후 잠시 무적(불굴 버프만큼 연장)
+      p.shield = 0;                    // 방패는 스테이지마다 초기화(픽업으로만 얻음)
     }
 
     this.enemies = [];
@@ -318,6 +333,14 @@ export class GalSim {
       const [ex, ey] = this.randomEmptySpot();
       this.enemies.push(this.makeEnemy(ex, ey));
     }
+    this.bossDefeatEvents = [];
+    if (this.dailyBoss) {   // 데일리: 시작부터 체력 있는 보스 1마리 (미사일로 처치)
+      const t = this.shuffledBosses()[0];
+      const [bx, by] = this.pickWarpSpot();
+      this.spawnBoss(t, bx, by);
+      const be = this.enemies[this.enemies.length - 1];
+      if (be) { be.hp = DAILY_BOSS_HP; be.maxHp = DAILY_BOSS_HP; }
+    }
     // 아이템은 라운드 내내 랜덤 간격으로 하나씩 등장한다. 시작 직후 첫 아이템까지 약간의 딜레이.
     // 행운 버프(itemRate<1)면 간격이 줄어 더 자주 나온다.
     this.itemSpawnT = (2 + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) * this.mods.itemRate;
@@ -326,7 +349,10 @@ export class GalSim {
   // 맵 위 빈 셀에 아이템 하나를 놓는다(동시 존재 상한 이하일 때만). 점유하며 획득한다.
   private spawnOneItem() {
     if (this.items.length >= ITEM_MAX_ON_MAP) return;
-    const KINDS = ["missile", "freeze", "life"];
+    // 데일리(보스전)에서는 미사일이 훨씬 자주 나오게 한다(보스 처치 핵심 수단).
+    const KINDS = this.dailyBoss
+      ? ["missile", "missile", "missile", "missile", "freeze", "life", "bomb", "shield", "sweep", "magnet"]
+      : ["missile", "freeze", "life", "bomb", "shield", "sweep", "magnet"];
     const [ex, ey] = this.randomEmptySpot();
     const kind = KINDS[Math.floor(this.rng() * KINDS.length)];
     this.items.push({ x: ex, y: ey, kind, life: ITEM_LIFE, blink: false });
@@ -487,16 +513,53 @@ export class GalSim {
       case "life":   p.lives += 1; break;                                 // 추가 목숨
       case "freeze": this.freezeT = Math.max(this.freezeT, FREEZE_SEC); break;  // 적 정지
       case "missile": this.fireMissiles(p); break;                        // 유도 미사일 발사
+      case "bomb":   this.bombItem(p); break;                             // 주변 적 일제 포획
+      case "shield": p.shield += 1; break;                                // 피격 1회 방어(목숨 보존)
+      case "sweep":  this.sweepItem(p); break;                            // 주변 영역 즉시 점유
+      case "magnet": this.magnetOwner = p; break;                         // 맵의 다른 아이템 흡수(획득 루프 종료 후 처리)
     }
   }
+
+  // 폭탄: 플레이어 주변 반경의 일반 적을 한 번에 포획(점수·콤보 반영). 보스는 제외.
+  private bombItem(p: SimPlayer) {
+    const R = 15, R2 = R * R;
+    const trapped = this.enemies.filter(e => !e.boss && (e.x - p.x) ** 2 + (e.y - p.y) ** 2 <= R2);
+    if (!trapped.length) return;
+    this.enemies = this.enemies.filter(e => !trapped.includes(e));
+    let bonus = 0; for (const e of trapped) bonus += (CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT) * this.mods.trap;
+    this.combo++; this.comboT = COMBO_WINDOW;
+    bonus = Math.round(bonus * (1 + (this.combo - 1) * COMBO_BONUS));
+    p.traps += trapped.length; p.bonus += bonus;
+    this.captureEvents.push({ x: p.x, y: p.y, count: trapped.length, bonus, owner: p.owner, combo: this.combo });
+  }
+
+  // 스윕: 플레이어 주변 원형 내부(EMPTY) 셀을 즉시 점유(맵 밝힘). 진행도·클리어 판정 반영.
+  private sweepItem(p: SimPlayer) {
+    const R = 13, cx = Math.floor(p.x), cy = Math.floor(p.y), R2 = (R + 0.5) * (R + 0.5);
+    let gained = 0, sx = 0, sy = 0;
+    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+      if (dx * dx + dy * dy > R2) continue;
+      const gx = cx + dx, gy = cy + dy;
+      if (gx < B || gy < B || gx >= COLS - B || gy >= ROWS - B) continue;
+      const i = idx(gx, gy);
+      if (this.grid[i] === EMPTY) { this.setGrid(i, CLAIMED); gained++; sx += gx; sy += gy; }
+    }
+    if (gained > 0) {
+      p.claimed += gained; this.claimedInterior += gained;
+      this.revealEvents.push({ x: sx / gained, y: sy / gained, n: gained });
+      if (this.ratio >= this.clearTarget) this.over = "won";
+    }
+  }
+
 
   // 플레이어 위치에서 유도 미사일 여러 발 발사. 발사 순간 가까운 적부터 서로 다른 표적을
   // 하나씩 배정 → 여러 마리를 동시에, 각 미사일이 반드시 한 마리를 명중·포획한다.
   private fireMissiles(p: SimPlayer) {
+    const boss = this.dailyBoss ? this.enemies.find(e => e.boss && e.hp != null) : null;   // 데일리: 미사일은 체력 보스를 조준
     const foes = this.enemies.filter(e => !e.boss).sort(
       (a, b) => ((a.x - p.x) ** 2 + (a.y - p.y) ** 2) - ((b.x - p.x) ** 2 + (b.y - p.y) ** 2));
     for (let i = 0; i < MISSILE_COUNT; i++) {
-      const target = foes.length ? foes[i % foes.length]! : null;
+      const target = boss || (foes.length ? foes[i % foes.length]! : null);
       // 표적 방향으로 발사(없으면 방사형). 살짝 흩뿌려 일제사격처럼 보이게 한 뒤 유도가 끌어당긴다.
       const a = target
         ? Math.atan2(target.y - p.y, target.x - p.x) + (this.rng() - 0.5) * 0.6
@@ -692,7 +755,7 @@ export class GalSim {
 
   // 보스 행동/특수 패턴 스케줄러: 평상시(기본 발사) ↔ 보스별 시그니처 특수를 번갈아 쓴다.
   private updateBossMode(e: SimEnemy, dtSec: number) {
-    // 시간이 갈수록 baseR 을 상한까지 서서히 키운다. 크기는 곧 레이저 두께(w=e.r)에도 반영된다.
+    // 시간이 갈수록 baseR 을 상한까지 서서히 키운다. 크기는 곧 레이저 두께(w=LASER_W(e.r))에도 반영된다.
     if (e.baseR != null && e.baseR0 != null) {
       const cap = e.baseR0 * BOSS_GROW_MAX;
       if (e.baseR < cap) e.baseR = Math.min(cap, e.baseR + BOSS_GROW_RATE * dtSec);
@@ -758,15 +821,15 @@ export class GalSim {
         e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 5.3;
         const tgt = this.nearestTarget(e);
         const ang = tgt ? Math.atan2(tgt.y - e.y, tgt.x - e.x) : this.rng() * TAU2;
-        // 단방향: 보스에서 조준 방향으로 한 줄, 맵 끝까지 관통. 두께 = 보스 지름(반폭 w = e.r).
-        this.beams.push({ x1: e.x, y1: e.y, ang, rot: 0, len: BEAM_LEN, w: e.r, t: 2.1, tele: 3.0, carve: true, carveT: 0, full: false });
+        // 단방향: 보스에서 조준 방향으로 한 줄, 맵 끝까지 관통. 폭은 보스 크기보다 훨씬 좁게(반폭).
+        this.beams.push({ x1: e.x, y1: e.y, ang, rot: 0, len: BEAM_LEN, w: LASER_W(e.r), t: 2.1, tele: 3.0, carve: true, carveT: 0, full: false });
         break;
       }
-      case "cross_laser":   // 십자(+) 레이저: 4방향 단방향 rays 로 맵을 절단 (두께 = 보스 지름)
+      case "cross_laser":   // 십자(+) 레이저: 4방향 단방향 rays 로 맵을 절단 (예고/폭이 너무 넓지 않게 좁힘)
         e.laserCd = LASER_COOLDOWN;   // 다음 레이저까지 30초 대기
         e.behaviorSaved = e.behavior; e.behavior = "turret"; e.vx = 0; e.vy = 0; e.modeT = 5.5;
         for (let k = 0; k < 4; k++)
-          this.beams.push({ x1: e.x, y1: e.y, ang: k * (Math.PI / 2), rot: 0, len: BEAM_LEN, w: e.r, t: 2.3, tele: 3.0, carve: true, carveT: 0, full: false });
+          this.beams.push({ x1: e.x, y1: e.y, ang: k * (Math.PI / 2), rot: 0, len: BEAM_LEN, w: LASER_W(e.r), t: 2.3, tele: 3.0, carve: true, carveT: 0, full: false });
         break;
       default: e.modeT = 1.5; break;
     }
@@ -997,7 +1060,7 @@ export class GalSim {
       sessionId, owner, x: sx, y: sy, spawnX: sx, spawnY: sy,
       heldDir: null, boost: false, boosting: false, exhausted: false, stamina: STAMINA_MAX, drawing: false, retreating: false, lives: START_LIVES,
       claimed: 0, traps: 0, bonus: 0, out: false, revT: 0, acc: 0, idle: 0,
-      drawOriginX: sx, drawOriginY: sy, trailCells: [], invuln: this.spawnInvuln(),
+      drawOriginX: sx, drawOriginY: sy, trailCells: [], invuln: this.spawnInvuln(), shield: 0,
     };
     this.players.push(p);
     return p;
@@ -1149,7 +1212,8 @@ export class GalSim {
     let revSX = 0, revSY = 0;   // 새로 점유된 셀들의 합 → 중심점(맵 밝힘 연출 위치)
     for (let i = 0; i < N; i++)
       if (this.grid[i] === EMPTY && comp[i] >= 0 && claimIt[comp[i]]) { this.setGrid(i, CLAIMED); gained++; revSX += i % COLS; revSY += (i / COLS) | 0; }
-    if (gained > 0) this.revealEvents.push({ x: revSX / gained, y: revSY / gained, n: gained });   // 점유 시 검은 돌 파편(맵 밝힘)
+    if (gained > 0) { this.revealEvents.push({ x: revSX / gained, y: revSY / gained, n: gained });   // 점유 시 검은 돌 파편(맵 밝힘)
+      if (this.combo > 0) this.comboT = COMBO_WINDOW; }   // 점유가 이어지면 콤보 유지
 
     if (trapCount > 0) {
       // 등급별 점수: 잡힌 각 적의 아키타입 점수를 합산
@@ -1171,11 +1235,13 @@ export class GalSim {
           this.projectiles.push({ x: bx, y: by, vx: Math.cos(a) * BULLET_SPEED, vy: Math.sin(a) * BULLET_SPEED, life: BULLET_LIFE, r: 0.9 });
         }
       }
+      this.combo++; this.comboT = COMBO_WINDOW;                          // 포획으로 콤보 상승
+      bonus = Math.round(bonus * (1 + (this.combo - 1) * COMBO_BONUS));  // 콤보 배수 적용
       p.traps += trapCount;
       p.bonus += bonus;
       this.captureEvents.push({
         x: trapSX / trapCount, y: trapSY / trapCount,
-        count: trapCount, bonus, owner: p.owner,
+        count: trapCount, bonus, owner: p.owner, combo: this.combo,
       });
     }
 
@@ -1189,6 +1255,12 @@ export class GalSim {
         } else remain.push(it);
       }
       this.items = remain;
+    }
+    // 자석: 이번 획득에서 자석을 먹었다면, 맵에 남은 다른 아이템을 전부 흡수한다(루프 종료 후 안전하게).
+    if (this.magnetOwner) {
+      const mp = this.magnetOwner, rem = this.items; this.items = []; this.magnetOwner = null;
+      for (const it of rem) { this.applyItem(mp, it.kind); this.itemEvents.push({ x: it.x, y: it.y, kind: it.kind, owner: mp.owner }); }
+      this.items = this.items.length ? this.items : [];   // magnet 재귀로 새로 채워지지 않았으면 빈 채로 유지
     }
 
     p.claimed += gained;
@@ -1217,6 +1289,12 @@ export class GalSim {
       this.guardEvents.push({ x: deathX, y: deathY, owner: p.owner });
       return;
     }
+    if (p.shield > 0) {                 // 방패 아이템: 피격 1회를 목숨 없이 막는다(수호와 동일 연출)
+      p.shield--;
+      this.guardEvents.push({ x: deathX, y: deathY, owner: p.owner });
+      return;
+    }
+    this.combo = 0; this.comboT = 0;   // 진짜 사망 → 콤보 끊김
     p.lives--;
     const out = p.lives <= 0;
     if (out) {
@@ -1253,6 +1331,9 @@ export class GalSim {
 
   update(dtSec: number) {
     if (this.over) return;
+
+    // 콤보: 유지 시간이 지나면 초기화(연속 포획/점유가 끊기면 리셋).
+    if (this.comboT > 0) { this.comboT -= dtSec; if (this.comboT <= 0) this.combo = 0; }
 
     // 보스 스케줄: 라운드 경과 시간이 임계치를 넘으면 대기열의 다음 보스를 등장시킨다.
     this.roundElapsed += dtSec;
@@ -1460,15 +1541,26 @@ export class GalSim {
       }
       if (hit >= 0) {
         const e = this.enemies[hit];
-        const bonus = (CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT) * this.mods.trap;   // 사냥꾼: 미사일 포획도 점수 배율
+        this.combo++; this.comboT = COMBO_WINDOW;
+        const bonus = Math.round((CAPTURE_SCORE[e.kind] ?? CAPTURE_SCORE_DEFAULT) * this.mods.trap * (1 + (this.combo - 1) * COMBO_BONUS));
         const p = this.players.find(q => q.owner === m.owner);
         if (p) { p.bonus += bonus; p.traps += 1; }
         this.enemies.splice(hit, 1);
-        this.captureEvents.push({ x: e.x, y: e.y, count: 1, bonus, owner: m.owner });   // 포획 연출 재사용
+        this.captureEvents.push({ x: e.x, y: e.y, count: 1, bonus, owner: m.owner, combo: this.combo });   // 포획 연출 재사용
         this.missiles.splice(k, 1); continue;
       }
-      if (bossHit >= 0) {   // 보스에 명중 → 크기 축소(포획 아님). 레이저 두께(w=e.r)도 함께 얇아진다.
-        this.shrinkBoss(this.enemies[bossHit]!);
+      if (bossHit >= 0) {   // 보스에 명중 → 크기 축소 + (데일리) 체력 감소, 0이면 처치.
+        const be = this.enemies[bossHit]!;
+        this.shrinkBoss(be);
+        if (be.hp != null) {
+          be.hp -= MISSILE_BOSS_DMG;
+          if (be.hp <= 0) {   // 보스 처치! 점수 보너스 + 대폭발 연출
+            const q = this.players.find(pp => pp.owner === m.owner);
+            if (q) q.bonus += BOSS_KILL_SCORE;
+            this.enemies.splice(bossHit, 1);
+            this.bossDefeatEvents.push({ x: be.x, y: be.y, score: BOSS_KILL_SCORE });
+          }
+        }
         this.missiles.splice(k, 1); continue;
       }
       // 잡을 적이 없을 때만(표적 없음) 수명 종료로 소멸. 표적이 있으면 끝까지 추적한다.

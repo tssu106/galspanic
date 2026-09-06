@@ -420,11 +420,19 @@ export function renderShatter(dt) {
       }
     } else if (b.kind === "boss_spread") {        // 조준 방향을 노려보다 확 돌진(런지) — 포식자 외눈
       sp.rotation.z = b.aim; sp.rotation.x = Math.sin(b.t * 7) * 0.12;
-      const lunge = Math.max(0, Math.sin(b.t * 2.2));
-      ox = Math.cos(b.aim) * lunge * sz * 0.55; oy = Math.sin(b.aim) * lunge * sz * 0.55;
-      if (b.spreadEye) {   // 외눈 깜빡임 + 돌진/발사 순간 붉게 번뜩임
-        const bp = b.t % 2.6; b.spreadEye.scale.y = bp < 0.14 ? Math.max(0.1, 1 - Math.sin(bp / 0.14 * Math.PI) * 0.9) : 1;
-        b.spreadEye.material.emissiveIntensity = 0.6 + lunge * 0.9 + (b.firing ? 0.6 : 0);
+      if (b.firing) {
+        // 발사: 조준 방향으로 빠르게 앞뒤로 떨며(반동) 찌르는 느낌 + 눈이 가늘어지고(슬릿) 붉게 확 타오름
+        const jab = 0.5 + 0.5 * Math.sin(b.t * 26);
+        const push = (0.32 + 0.28 * jab) * sz * 0.55;
+        ox = Math.cos(b.aim) * push; oy = Math.sin(b.aim) * push;
+        if (b.spreadEye) { b.spreadEye.scale.y = 0.32 + 0.16 * jab; b.spreadEye.material.emissiveIntensity = 1.6 + 0.9 * jab; }
+      } else {
+        const lunge = Math.max(0, Math.sin(b.t * 2.2));
+        ox = Math.cos(b.aim) * lunge * sz * 0.55; oy = Math.sin(b.aim) * lunge * sz * 0.55;
+        if (b.spreadEye) {   // 외눈 깜빡임 + 돌진 순간 붉게 번뜩임
+          const bp = b.t % 2.6; b.spreadEye.scale.y = bp < 0.14 ? Math.max(0.1, 1 - Math.sin(bp / 0.14 * Math.PI) * 0.9) : 1;
+          b.spreadEye.material.emissiveIntensity = 0.6 + lunge * 0.9;
+        }
       }
     } else {                                      // boss_cross: 90°씩 끊어 도는 계단 회전(좌우 랜덤, 느리게) · 발사 중 정지
       if (b.crossRot == null) { b.crossRot = 0; b.crossTarget = 0; b.crossWait = 0.6; }
@@ -440,9 +448,14 @@ export function renderShatter(dt) {
       sp.rotation.z = b.crossRot;
       const ap = 1 + 0.11 * Math.sin(b.t * 3.4); sp.scale.set(ap, ap, 1);
       if (b.crossGem) b.crossGem.rotation.set(b.t * 1.2, b.t * 1.6, 0);   // 중앙 코어 젬 회전
-      if (b.crossNodes) {   // 팔 끝 노드: 발사 중이면 밝게 충전(맥동), 평소엔 은은하게
+      if (b.crossNodes) {   // 팔 끝 노드: 발사 중 밝게 충전 + 바깥으로 튕겼다 돌아오는 반동(4방향 발사 킥백)
         const ch = b.firing ? 0.8 + 1.5 * (0.5 + 0.5 * Math.sin(b.t * 24)) : 0.5 + 0.14 * Math.sin(b.t * 2);
-        for (const nd of b.crossNodes) nd.material.emissiveIntensity = ch;
+        const recoil = b.firing ? 0.28 * (0.5 + 0.5 * Math.sin(b.t * 22)) : 0;
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        b.crossNodes.forEach((nd, i) => {
+          nd.material.emissiveIntensity = ch;
+          nd.position.set(dirs[i][0] * (1.28 + recoil), dirs[i][1] * (1.28 + recoil), 0);
+        });
       }
     }
     // 발사 이펙트(공통): 코어를 살짝 뜨겁게. 크기 펄스는 기어 링만(다른 보스는 각자 형태에 맞는 효과 사용).

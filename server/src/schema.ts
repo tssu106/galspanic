@@ -73,6 +73,11 @@ export class Missile extends Schema {
   @type("number") x: number = 0;
   @type("number") y: number = 0;
 }
+// webbed 모디파이어: 플레이어 근처로 날아가 착지하는 거미줄 발사체 (렌더용 위치만).
+export class WebShot extends Schema {
+  @type("number") x: number = 0;
+  @type("number") y: number = 0;
+}
 
 export class GameState extends Schema {
   @type("number") gridW: number = GRID_W;
@@ -115,6 +120,10 @@ export class GameState extends Schema {
   // 데일리 챌린지 방이면 1 (클라가 UI·랭킹 제출을 다르게 처리). 0 = 일반 방.
   @type("number") daily: number = 0;
 
+  // 이번 스테이지 모디파이어 id(swarm|blitz|bossrush|webbed|goldrush, "" = 없음).
+  // 클라가 스테이지 시작 배너 + HUD 칩으로 표시한다.
+  @type("string") stageMod: string = "";
+
   // 이어하기 사용 횟수(게임오버 화면에서 남은 횟수 안내에 사용). 상한 초과 시 처음부터 재시작.
   @type("number") continues: number = 0;
 
@@ -145,4 +154,5 @@ export class GameState extends Schema {
   @type([Beam]) beams = new ArraySchema<Beam>();
   @type([Item]) items = new ArraySchema<Item>();
   @type([Missile]) missiles = new ArraySchema<Missile>();
+  @type([WebShot]) webShots = new ArraySchema<WebShot>();
 }

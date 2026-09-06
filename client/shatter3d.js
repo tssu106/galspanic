@@ -335,7 +335,7 @@ function disposeBoss(b) {
 }
 
 // 매 프레임 보스마다 호출: 화면좌표·크기·격노(0/1/2)·색·종류(kind)·조준(aim)을 반영. 3D 미지원이면 false.
-export function updateBoss3D(id, sx, sy, sizePx, enr, colorCss, kind, aim) {
+export function updateBoss3D(id, sx, sy, sizePx, enr, colorCss, kind, aim, firing) {
   if (!initOnce()) return false;
   overlay.style.display = "block";
   let b = bosses.get(id);
@@ -343,7 +343,7 @@ export function updateBoss3D(id, sx, sy, sizePx, enr, colorCss, kind, aim) {
   b.baseX = sx; b.baseY = sy; b.sizePx = Math.max(6, sizePx);   // 움직임 패턴은 renderShatter가 이 기준점에 오프셋을 얹는다
   b.group.position.set(sx, sy, 0);
   b.group.scale.setScalar(b.sizePx / b.baseR);
-  b.seenAt = performance.now(); b.enr = enr | 0; b.aim = aim || 0;
+  b.seenAt = performance.now(); b.enr = enr | 0; b.aim = aim || 0; b.firing = !!firing;   // 레이저 발사(예고 포함) 중이면 십자 보스는 회전 정지
   // 격노 시엔 재질이 붉게 달아오르고, 평상시엔 재질 고유의 발광값(금빛 등)으로 되돌린다.
   if (enr >= 1) { b.coreMat.emissive.setHex(0xff2a2a); b.coreMat.emissiveIntensity = enr >= 2 ? 0.85 : 0.5; }
   else { b.coreMat.emissive.setHex(b.baseEmissive); b.coreMat.emissiveIntensity = b.baseEmInt; }
@@ -380,19 +380,28 @@ export function renderShatter(dt) {
       for (const tt of b.teeth) tt.rotateY(dt * (5 + fast * 3));          // 톱니는 궤도 없이 자기 축으로 회전
       sp.scale.setScalar(1 + 0.08 * Math.sin(b.t * 3.2));                 // 충전 맥동
       if (b.eye) { const bp = b.t % (fast ? 1.8 : 3.2); b.eye.scale.y = bp < 0.18 ? Math.max(0.07, 1 - Math.sin(bp / 0.18 * Math.PI) * 0.93) : 1; }   // 깜빡임(격노 시 자주)
-    } else if (b.kind === "boss_spiral") {        // 매듭: 작은 궤도 선회 + 뒤집힘 + "풀렸다 꼬였다" 모핑
-      sp.rotation.z += dt * (1.2 + fast); sp.rotation.x = Math.sin(b.t * 0.8) * 0.5;
-      ox = Math.cos(b.t * 1.7) * sz * 0.22; oy = Math.sin(b.t * 1.7) * sz * 0.22;
-      if (b.knot && b.knot.morphTargetInfluences) b.knot.morphTargetInfluences[0] = 0.5 - 0.5 * Math.cos(b.t * (0.7 + fast * 0.5));   // 0(꼬임)↔1(풀림)
+    } else if (b.kind === "boss_spiral") {        // 매듭: 천천히 선회 + "묶였다 풀렸다"(양끝에서 잠깐 멈춤 + 이징 → 자연스럽게)
+      sp.rotation.z += dt * (0.5 + fast * 0.7); sp.rotation.x = Math.sin(b.t * 0.5) * 0.4;
+      ox = Math.cos(b.t * 1.1) * sz * 0.16; oy = Math.sin(b.t * 1.1) * sz * 0.16;
+      if (b.knot && b.knot.morphTargetInfluences) {
+        const cyc = (b.t * (0.3 + fast * 0.3)) % 1;   // 한 사이클 ~3.3초(격노 시 빠름)
+        // 0~0.4 풀림(0→1) · 0.4~0.5 풀린 채 유지 · 0.5~0.9 다시 묶임(1→0) · 0.9~1 묶인 채 유지
+        let m = cyc < 0.4 ? cyc / 0.4 : cyc < 0.5 ? 1 : cyc < 0.9 ? 1 - (cyc - 0.5) / 0.4 : 0;
+        m = m * m * (3 - 2 * m);                       // smoothstep 이징(부드러운 가감속)
+        b.knot.morphTargetInfluences[0] = m;
+      }
     } else if (b.kind === "boss_spread") {        // 조준 방향을 향해 주기적으로 확 돌진(런지)
       sp.rotation.z = b.aim; sp.rotation.x = Math.sin(b.t * 7) * 0.12;
       const lunge = Math.max(0, Math.sin(b.t * 2.2));
       ox = Math.cos(b.aim) * lunge * sz * 0.55; oy = Math.sin(b.aim) * lunge * sz * 0.55;
-    } else {                                      // boss_cross: 90°씩 끊어 도는 계단 회전 + 팔 맥동
-      const phase = b.t * (0.9 + fast), seg = Math.floor(phase), frac = phase - seg;
-      const e = frac < 0.45 ? frac / 0.45 : 1, es = e * e * (3 - 2 * e);   // 앞 45%에 회전, 뒤 대기(기계적)
+    } else {                                      // boss_cross: 90°씩 끊어 도는 계단 회전(느리게) + 팔 맥동
+      if (b.crossPhase == null) b.crossPhase = 0;
+      // 레이저 발사(예고 포함) 중엔 회전을 멈춘다. 평소엔 천천히 진행(예전 0.9 → 0.4). 회전 뒤 오래 대기.
+      if (!b.firing) b.crossPhase += dt * (0.4 + fast * 0.5);
+      const seg = Math.floor(b.crossPhase), frac = b.crossPhase - seg;
+      const e = frac < 0.4 ? frac / 0.4 : 1, es = e * e * (3 - 2 * e);   // 앞 40%에만 회전, 뒤 60% 대기(기계적)
       sp.rotation.z = (seg + es) * (Math.PI / 2);
-      const ap = 1 + 0.14 * Math.sin(b.t * 4); sp.scale.set(ap, ap, 1);
+      const ap = 1 + 0.11 * Math.sin(b.t * 3.4); sp.scale.set(ap, ap, 1);
     }
     b.group.position.set(b.baseX + ox, b.baseY + oy, 0);
   }

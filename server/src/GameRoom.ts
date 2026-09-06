@@ -1,5 +1,5 @@
 import { Room, Client } from "@colyseus/core";
-import { GameState, Player, Enemy, Projectile, Beam, Item, Missile } from "./schema";
+import { GameState, Player, Enemy, Projectile, Beam, Item, Missile, WebShot } from "./schema";
 import { GalSim } from "./GalSim";
 import type { SimEnemy } from "./GalSim";
 import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, QUICK_START_SECS,
@@ -8,7 +8,7 @@ import { SIM_MS, PATCH_MS, MOVE_MS, MAX_PLAYERS, IMAGE_POOL, DIRS, QUICK_START_S
          BOON_IDS, BOON_OFFER_COUNT, BOON_SCORE_ADD, BOON_SLOW_MULT, BOON_SPEED_MULT, BOON_STAM_MULT,
          BOON_GUARD_ADD, BOON_QUICK_SUB, BOON_LUCK_MULT, BOON_IRON_ADD, BOON_REVEAL_MULT, BOON_HUNTER_MULT, BOON_FROST_ADD,
          BOON_RARITY, BOON_WEIGHT, freshMods, REVIVE_SEC } from "./constants";
-import { verifyToken, recordUnlock, recordBest, submitDaily } from "./supa";
+import { verifyToken, recordUnlock, recordBest, submitDaily, getUserBestStage } from "./supa";
 import { dailyKey, dailySeed } from "./daily";
 
 const COLORS = ["#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
@@ -23,6 +23,7 @@ export class GameRoom extends Room<GameState> {
   sim!: GalSim;
   private startLevel = 1;   // 이 방이 시작한 레벨 (loss 후 재시작도 이 레벨로 되돌린다)
   private isPrivate = false; // "방 만들기"(친구끼리)로 만든 비공개 방 → 빠른참가 자동 시작 대상 아님
+  private autoStartSolo = false;  // 로그인 이어하기 방(검증된 스테이지부터 솔로 즉시 시작)
   private runScore = 0;      // 이번 런 누적 점수(스테이지 합산, 이어하기 시 일부 차감)
   private roundStartMs = 0;  // 현재 스테이지 시작 시각(클리어 시간 측정용)
   private continues = 0;     // 이번 런에서 이어하기한 횟수
@@ -36,12 +37,29 @@ export class GameRoom extends Room<GameState> {
   private bonusLives = 0;     // 로그라이트 "생명" 버프 누적(매 스테이지 기본 목숨에 가산)
   private boonStacks: Record<string, number> = {};   // 적용된 버프 id → 스택 수(클라 표시용)
 
-  onCreate(options: { level?: number; private?: boolean; daily?: boolean } = {}) {
+  async onCreate(options: { level?: number; private?: boolean; daily?: boolean; token?: string; resume?: boolean } = {}) {
     this.isDaily = !!options.daily;
-    // dev 에서만 방을 만든 클라이언트가 고른 스테이지로 시작. 데일리·프로덕션은 항상 레벨 1.
-    this.startLevel = (DEV && !this.isDaily) ? this.clampLevel(options.level) : 1;
-    // "방 만들기"·데일리 방은 비공개 → 빠른 참가(joinOrCreate) 매칭에서 제외.
-    this.isPrivate = this.isDaily || !!options.private;
+    // 시작 레벨 결정:
+    //   데일리 → 항상 1
+    //   dev 서버 → 방을 만든 클라가 고른 스테이지(테스트용)
+    //   프로덕션 "이어하기"(resume) → 로그인 토큰을 검증하고, 고른 스테이지가 그 계정의 최고
+    //     도달 스테이지+1 이하일 때만 허용(랭킹 어뷰징 방지). 그 외에는 1.
+    this.startLevel = 1;
+    if (!this.isDaily) {
+      const want = this.clampLevel(options.level);
+      if (want > 1) {
+        if (DEV) this.startLevel = want;
+        else if (options.resume) {
+          const uid = await verifyToken(options.token);
+          if (uid) {
+            const best = await getUserBestStage(uid);
+            if (want <= best + 1) { this.startLevel = want; this.autoStartSolo = true; }
+          }
+        }
+      }
+    }
+    // "방 만들기"·데일리·이어하기 방은 비공개 → 빠른 참가(joinOrCreate) 매칭에서 제외.
+    this.isPrivate = this.isDaily || !!options.private || this.autoStartSolo;
     if (this.isPrivate) this.setPrivate(true);
     this.setState(new GameState());
     // Broadcast state patches at PATCH_MS (~30Hz). Decoupled from the 42Hz sim so the
@@ -178,12 +196,14 @@ export class GameRoom extends Room<GameState> {
     this.state.projectiles.splice(0, this.state.projectiles.length);
     this.state.beams.splice(0, this.state.beams.length);
     this.state.missiles.splice(0, this.state.missiles.length);
+    this.state.webShots.splice(0, this.state.webShots.length);
     this.state.items.splice(0, this.state.items.length);
     for (const it of this.sim.items) { const s = new Item(); s.x = it.x; s.y = it.y; s.kind = it.kind; this.state.items.push(s); }
     this.state.frozen = 0;
 
     this.state.level = level;
-    this.state.clearPct = Math.round(this.sim.clearTarget * 100);   // 속공 버프 반영된 목표 점유율(HUD 표시)
+    this.state.stageMod = this.sim.stageMod;   // 이번 스테이지 변주(클라 배너·HUD 표시)
+    this.state.clearPct = Math.round(this.sim.clearTarget * 100);   // 속공/변주 반영된 목표 점유율(HUD 표시)
     this.state.claimedInterior = 0;
     this.state.imageId = this.imageAt(level);   // 랜덤·비중복 배정
     this.state.phase = "playing";
@@ -410,6 +430,12 @@ export class GameRoom extends Room<GameState> {
     for (let i = 0; i < this.sim.missiles.length; i++) {
       const sm = this.sim.missiles[i]!, es = this.state.missiles[i]!; es.x = sm.x; es.y = sm.y;
     }
+    // webShots: match length + position (날아가는 거미줄 발사체)
+    while (this.state.webShots.length < this.sim.webShots.length) this.state.webShots.push(new WebShot());
+    while (this.state.webShots.length > this.sim.webShots.length) this.state.webShots.pop();
+    for (let i = 0; i < this.sim.webShots.length; i++) {
+      const sw = this.sim.webShots[i]!, es = this.state.webShots[i]!; es.x = sw.x; es.y = sw.y;
+    }
     this.state.frozen = this.sim.freezeT > 0 ? 1 : 0;
 
     // broadcast capture events for client popups/sound, then clear
@@ -457,6 +483,10 @@ export class GameRoom extends Room<GameState> {
     if (this.sim.warpEvents.length) {
       for (const ev of this.sim.warpEvents) this.broadcast("warp", ev);
       this.sim.warpEvents.length = 0;
+    }
+    if (this.sim.teleEvents.length) {   // 화살촉 보스 순간이동: 블랙홀(떠남)/화이트홀(도착)
+      for (const ev of this.sim.teleEvents) this.broadcast("tele", ev);
+      this.sim.teleEvents.length = 0;
     }
 
     this.state.claimedInterior = this.sim.claimedInterior;
@@ -517,7 +547,8 @@ export class GameRoom extends Room<GameState> {
     const ratio = this.sim.claimedInterior / Math.max(1, this.sim.totalInterior);
     const speed = Math.max(0, Math.round(SCORE_SPEED_BASE - (clearMs / 1000) * SCORE_SPEED_DROP));
     const base = this.sim.level * SCORE_LEVEL + ratio * SCORE_COVER + traps * SCORE_TRAP + bonus + speed;
-    return Math.round(base * this.scoreMult);   // 로그라이트 "점수" 버프 배수 적용
+    const modMul = this.sim.stageMod === "goldrush" ? 1.4 : 1;   // 노다지 변주: 이 스테이지 점수↑
+    return Math.round(base * this.scoreMult * modMul);   // 로그라이트 "점수" 버프 배수 + 변주 배수
   }
 
   // 로그인 플레이어들의 계정 최고기록 갱신(서버 권위). 값이 없거나 테이블(SQL) 미준비면 조용히 스킵.
@@ -583,8 +614,8 @@ export class GameRoom extends Room<GameState> {
       });
     }
 
-    // 데일리 챌린지: 솔로 즉시 시작(로비 대기 없음).
-    if (this.isDaily && this.state.phase === "lobby" && this.state.startIn < 0) {
+    // 데일리·이어하기(로그인): 솔로 즉시 시작(로비 대기 없음).
+    if ((this.isDaily || this.autoStartSolo) && this.state.phase === "lobby" && this.state.startIn < 0) {
       this.state.startIn = 1;
     }
     // 빠른 참가(공개) 방: 첫 입장부터 짧은 카운트다운으로 자동 시작 → 혼자여도 로비에서 멈추지 않는다.

@@ -70,6 +70,25 @@ export async function recordBest(
   }
 }
 
+// 계정의 최고 도달 스테이지 조회(이어하기 검증용). service_role 로 본인 행을 읽는다.
+// 실패·미설정·기록없음이면 0. (클라가 고른 이어하기 레벨이 best+1 이하인지 서버가 확인한다.)
+export async function getUserBestStage(userId: string): Promise<number> {
+  const S = service();
+  if (!S || !userId) return 0;
+  try {
+    const r = await fetch(
+      `${url()}/rest/v1/records?user_id=eq.${encodeURIComponent(userId)}&select=best_stage`,
+      { headers: { apikey: S, Authorization: `Bearer ${S}` } },
+    );
+    if (!r.ok) return 0;
+    const rows: any = await r.json();
+    const n = Array.isArray(rows) && rows[0] ? Number(rows[0].best_stage) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
 // 데일리 챌린지 점수 제출: 같은 날 더 높은 점수만 반영(submit_daily 가 병합). 로그인 유저만.
 // 테이블/함수(SQL) 미준비거나 SERVICE 없으면 조용히 스킵.
 export async function submitDaily(

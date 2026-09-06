@@ -299,6 +299,23 @@
   #guestNudge .gnIn:hover { background:#2f3a68; }
   #guestNudge .gnLater { background:none; border:0; color:#7b83a8; font-size:12.5px; cursor:pointer; margin-top:9px; }
   #guestNudge .gnLater:hover { color:#aab2d6; }
+  /* HUD 진행 칩의 스테이지 모디파이어 표시(색은 인라인) */
+  .chip .smod { font-size:11px; font-weight:800; margin-top:4px; letter-spacing:.2px; text-shadow:0 0 7px currentColor; }
+  /* 스테이지 시작 모디파이어 배너(상단 중앙, 잠깐 나타났다 사라짐) */
+  #stageBanner { position:fixed; left:50%; top:12%; transform:translateX(-50%) translateY(-14px); z-index:58;
+                 pointer-events:none; opacity:0; transition:opacity .3s ease, transform .3s ease;
+                 background:linear-gradient(180deg,rgba(20,24,46,.96),rgba(12,15,32,.96));
+                 border:1px solid #33407a; border-radius:14px; padding:11px 20px; text-align:center;
+                 box-shadow:0 14px 40px rgba(0,0,0,.55); max-width:90vw; }
+  #stageBanner.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  #stageBanner .sbTag { font-size:11px; font-weight:700; color:#8b93b5; letter-spacing:1.5px; text-transform:uppercase; }
+  #stageBanner .sbName { font-size:20px; font-weight:900; margin-top:2px; text-shadow:0 0 12px currentColor; }
+  #stageBanner .sbDesc { font-size:12.5px; color:#c9d0f0; margin-top:3px; }
+  /* 게스트 이어하기 안내(로그인 유도) */
+  #resumeHint { font-size:12.5px; color:#9fb0d6; text-align:center; cursor:pointer; line-height:1.5;
+                background:#161b2e; border:1px solid #2a3350; border-radius:10px; padding:9px 11px; }
+  #resumeHint b { color:#ffd54a; }
+  #resumeHint:hover { border-color:#3a4570; color:#c9d0f0; }
   /* 로그라이트 버프 3택 카드(클리어 화면 중앙) */
   #boonPick { position:fixed; left:50%; top:47%; transform:translate(-50%,-50%); z-index:55;
               display:flex; flex-direction:column; align-items:center; gap:12px; width:min(560px,94vw); pointer-events:none; }
@@ -472,9 +489,11 @@
       <input id="nameInput" maxlength="12" data-i18n-ph="ph_name" autocomplete="off" />
       <!-- (마커 스킨 선택 제거 — 추후 이미지 기반으로 재작업) -->
       <label id="devStage" class="dev-stage" hidden>
-        <span data-i18n="dev_stage"></span>
+        <span id="stagePickLabel" data-i18n="dev_stage"></span>
         <select id="stageSelect"></select>
       </label>
+      <!-- 게스트가 이 기기에서 도달한 스테이지 안내 → 로그인하면 이어서 시작 (클릭 시 로그인) -->
+      <div id="resumeHint" hidden></div>
       <!-- 주 액션: 빠른 시작 + 오늘의 챌린지 -->
       <button id="startBtn" class="go" data-i18n="btn_start"></button>
       <button id="dailyBtn" class="go-daily" data-i18n="btn_daily"></button>
@@ -582,6 +601,9 @@
     <button class="gnLater" id="gnLater" data-i18n="gn_later"></button>
   </div>
 
+  <!-- 스테이지 시작 시 이번 스테이지 모디파이어(변주) 안내 배너 -->
+  <div id="stageBanner"></div>
+
   <!-- HUD 버프 아이콘 툴팁 (hover/터치 시 잠깐 표시) -->
   <div id="boonTip"></div>
 
@@ -674,6 +696,8 @@ const I18N = {
     key_move: "이동", key_sprint: "질주", key_chat: "채팅",
     online_label: "접속자", online_unit: "명",
     ph_name: "플레이어 이름 (선택)", dev_stage: "🛠 스테이지 (dev)",
+    resume_stage: "▶ 이어서 시작 (스테이지)",
+    resume_hint_html: "🔒 이 기기에서 <b>스테이지 {0}</b>까지 왔어요 · <b>로그인</b>하면 이어서 시작해요",
     skin_label: "마커 스킨", skin_lock_stage: "스테이지 {0} 도달 시 언락", skin_lock_daily: "챌린지 클리어 시 언락",
     btn_start: "게임 시작", btn_create: "방 만들기 (친구끼리)", ph_code: "방 코드로 참가", btn_join: "참가",
     btn_daily: "🔥 오늘의 챌린지", btn_rank: "🏆 랭킹", daily_rank_title: "오늘의 랭킹",
@@ -744,6 +768,12 @@ const I18N = {
     err_room_notfound: "그 코드의 방을 찾을 수 없어요", err_conn_fail: "서버 연결 실패 — 잠시 후 다시 시도하세요",
     starting_in: "{0}초 후 시작!", waiting_players: "플레이어 대기 중 ({0} / 4)",
     hud_progress: "진행 · Lv {0}", hud_goal: "목표 {0}%", me_suffix: " (나)", stam_title: "질주 스태미나",
+    mod_tag: "이번 스테이지",
+    mod_swarm_n: "군집", mod_swarm_d: "적이 많지만 느려요",
+    mod_blitz_n: "속공", mod_blitz_d: "적이 빠름 · 목표 점유율↓",
+    mod_bossrush_n: "보스 러시", mod_bossrush_d: "보스가 자주 등장",
+    mod_webbed_n: "거미줄", mod_webbed_d: "거미줄이 주변에 떨어져 퍼져요",
+    mod_goldrush_n: "노다지", mod_goldrush_d: "아이템 자주 · 점수↑",
     capture_multi: "포획 x{0}! +{1}", capture_one: "포획! +{1}",
     item_missile: "미사일!", item_freeze: "프리즈!", item_life: "목숨 +1!", item_generic: "아이템!",
     item_bomb: "폭탄!", item_shield: "방패!", item_sweep: "스윕!", item_magnet: "자석!",
@@ -757,6 +787,8 @@ const I18N = {
     key_move: "Move", key_sprint: "Sprint", key_chat: "Chat",
     online_label: "Online", online_unit: "",
     ph_name: "Player name (optional)", dev_stage: "🛠 Stage (dev)",
+    resume_stage: "▶ Resume from (stage)",
+    resume_hint_html: "🔒 You reached <b>stage {0}</b> on this device · <b>log in</b> to resume",
     skin_label: "Marker skin", skin_lock_stage: "Unlocks at stage {0}", skin_lock_daily: "Unlocks by clearing the daily challenge",
     btn_start: "Start Game", btn_create: "Create Room (friends)", ph_code: "Join by room code", btn_join: "Join",
     btn_daily: "🔥 Daily Challenge", btn_rank: "🏆 Ranking", daily_rank_title: "Today's Ranking",
@@ -827,6 +859,12 @@ const I18N = {
     err_room_notfound: "No room with that code", err_conn_fail: "Connection failed — try again shortly",
     starting_in: "Starting in {0}s!", waiting_players: "Waiting for players ({0} / 4)",
     hud_progress: "Progress · Lv {0}", hud_goal: "Goal {0}%", me_suffix: " (you)", stam_title: "Sprint stamina",
+    mod_tag: "This stage",
+    mod_swarm_n: "Swarm", mod_swarm_d: "Many enemies, but slower",
+    mod_blitz_n: "Blitz", mod_blitz_d: "Fast enemies · lower goal",
+    mod_bossrush_n: "Boss Rush", mod_bossrush_d: "Bosses appear often",
+    mod_webbed_n: "Webbed", mod_webbed_d: "Webs rain down and spread around you",
+    mod_goldrush_n: "Gold Rush", mod_goldrush_d: "More items · more score",
     capture_multi: "Capture x{0}! +{1}", capture_one: "Capture! +{1}",
     item_missile: "Missile!", item_freeze: "Freeze!", item_life: "Life +1!", item_generic: "Item!",
     item_bomb: "Bomb!", item_shield: "Shield!", item_sweep: "Sweep!", item_magnet: "Magnet!",
@@ -840,6 +878,8 @@ const I18N = {
     key_move: "移動", key_sprint: "ダッシュ", key_chat: "チャット",
     online_label: "接続中", online_unit: "人",
     ph_name: "プレイヤー名（任意）", dev_stage: "🛠 ステージ (dev)",
+    resume_stage: "▶ 続きから (ステージ)",
+    resume_hint_html: "🔒 この端末で<b>ステージ{0}</b>まで到達 · <b>ログイン</b>で続きから",
     skin_label: "マーカースキン", skin_lock_stage: "ステージ{0}到達で解放", skin_lock_daily: "デイリー攻略で解放",
     btn_start: "ゲーム開始", btn_create: "部屋を作る（友達と）", ph_code: "部屋コードで参加", btn_join: "参加",
     btn_daily: "🔥 今日のチャレンジ", btn_rank: "🏆 ランキング", daily_rank_title: "今日のランキング",
@@ -910,6 +950,12 @@ const I18N = {
     err_room_notfound: "そのコードの部屋が見つかりません", err_conn_fail: "接続失敗 — しばらくして再試行してください",
     starting_in: "{0}秒後に開始！", waiting_players: "プレイヤー待機中 ({0} / 4)",
     hud_progress: "進行 · Lv {0}", hud_goal: "目標 {0}%", me_suffix: "（あなた）", stam_title: "ダッシュスタミナ",
+    mod_tag: "このステージ",
+    mod_swarm_n: "群れ", mod_swarm_d: "敵が多いが遅い",
+    mod_blitz_n: "スピード", mod_blitz_d: "敵が速い · 目標↓",
+    mod_bossrush_n: "ボスラッシュ", mod_bossrush_d: "ボスが頻繁に出現",
+    mod_webbed_n: "クモの巣", mod_webbed_d: "クモの巣が周囲に降ってくる",
+    mod_goldrush_n: "宝の山", mod_goldrush_d: "アイテム多め · スコア↑",
     capture_multi: "捕獲 x{0}! +{1}", capture_one: "捕獲！ +{1}",
     item_missile: "ミサイル！", item_freeze: "フリーズ！", item_life: "ライフ +1！", item_generic: "アイテム！",
     item_bomb: "ボム！", item_shield: "シールド！", item_sweep: "スイープ！", item_magnet: "マグネット！",
@@ -943,10 +989,7 @@ function applyI18n() {
   try { updateLoginUI(currentUser); } catch {}                  // 로그인/로그아웃 버튼
   try { updateGalleryCount(); } catch {}                        // 도감 카운트/로그인 필요 문구
   try { refreshGuestNudge(); } catch {}                         // 게스트 유도 카드 문구(표시 중이면)
-  try {                                                          // dev 스테이지 선택 항목
-    const ss = document.getElementById("stageSelect");
-    if (ss) [...ss.options].forEach((o) => { o.textContent = t("stage_n", o.value); });
-  } catch {}
+  try { refreshStagePicker(); } catch {}                        // 스테이지 선택기(옵션·라벨·게스트 힌트) 재현지화
   // 갤러리가 열려 있으면 다시 그린다(진행 텍스트·로그인 안내)
   try { if (galleryEl && !galleryEl.classList.contains("hidden")) openGallery(); } catch {}
 }
@@ -1153,9 +1196,14 @@ async function connect(name, level, mode = "quick", code = "") {
   const opts = { name };   // (마커 스킨 제거 — 서버 기본 "dot" 사용)
   if (level) opts.level = level;
   if (token) opts.token = token;
+  // 로그인 "이어서 시작": 고른 스테이지(>1)를 서버가 검증해 그 스테이지부터 솔로로 자동 시작할 전용 방을 만든다.
+  // (dev 서버는 기존대로 joinOrCreate 로 그 레벨을 신뢰한다.)
+  const resume = !devMode && mode === "quick" && (level | 0) > 1 && !!currentUser;
+  if (resume) opts.resume = true;
   if (mode === "daily") room = await client.create("game", { ...opts, daily: true });       // 데일리 챌린지(솔로·날짜 시드)
   else if (mode === "create") room = await client.create("game", { ...opts, private: true });   // 비공개 방
   else if (mode === "join") room = await client.joinById(code, { ...opts });                 // 코드로 특정 방
+  else if (resume) room = await client.create("game", opts);                                 // 이어하기 전용 방(그 스테이지부터 솔로 자동시작)
   else room = await client.joinOrCreate("game", opts);                                       // 빠른 참가(순차 입장)
   statusEl.textContent = t("connected_play");
   // Keep this handler TRIVIAL: just latch the latest state. The heavy per-update work
@@ -1260,6 +1308,12 @@ async function connect(name, level, mode = "quick", code = "") {
   room.onMessage("warp", (ev) => {
     warps.push({ x: ev.x, y: ev.y, t0: performance.now(), burst: false });
     shakeT = 0.22;   // 예고 시작 시 약한 흔들림 (버스트 때 크게)
+  });
+  // 화살촉 보스 순간이동: 떠나는 자리 블랙홀(black) / 나타나는 자리 화이트홀(white)
+  room.onMessage("tele", (ev) => {
+    teleFx.push({ x: ev.x, y: ev.y, hole: ev.hole, r: ev.r || 10, t0: performance.now() });
+    shakeT = Math.max(shakeT, 0.16);
+    try { spawnJuice(ev.x, ev.y, ev.hole === "white" ? "#cbeeff" : "#b478ff", 30, ev.hole === "white" ? 3.4 : 2.2); } catch {}
   });
   // chat: show a speech bubble over the sender's marker (~3s) AND log it in the side panel
   room.onMessage("chat", (ev) => {
@@ -1550,32 +1604,55 @@ onAuth(async (user) => {
   updateLoginUI(user);
   updateGalleryCount();
   if (user) { guestNudgeKey = null; try { hideGuestNudge(); } catch {} }   // 로그인 완료 → 유도 카드 닫기
+  try { const rec = user ? await dbGetRecord() : null; myBestStage = (rec && rec.best_stage) | 0; } catch { myBestStage = 0; }
+  try { refreshStagePicker(); } catch {}   // 로그인=이어서 시작 선택기 / 로그아웃=숨김
   if (!galleryEl.classList.contains("hidden")) openGallery();
 });
 
 updateGalleryCount();
 
-// dev 서버면 시작 화면에 스테이지 선택을 노출한다. 서버 /config 로 판별하며,
-// 프로덕션(dev=false)에선 선택 UI가 나타나지 않는다.
+// 시작 화면의 스테이지 선택기: dev 서버(테스트) 또는 로그인 사용자의 "이어서 시작"에 쓰인다.
+// 프로덕션 게스트에겐 숨기고, 이 기기 로컬 진행이 있으면 로그인 유도 힌트를 보여준다.
 let devMode = false;
+let myBestStage = 0;       // 로그인 계정의 최고 도달 스테이지(이어하기 선택 상한)
+let stagePickerMax = 0;    // 0 = 선택기 숨김. >0 = 1..max 선택 가능(그 스테이지부터 시작).
+const RESUME_CAP = 99;
+const resumeHintEl = document.getElementById("resumeHint");
+const stagePickLabel = document.getElementById("stagePickLabel");
+stageSelect.addEventListener("keydown", (e) => e.stopPropagation());   // 방향키가 게임 입력으로 새지 않게
+resumeHintEl.addEventListener("click", () => openLogin("in"));         // 게스트 힌트 클릭 → 로그인
+
+function refreshStagePicker() {
+  let max = 0, labelKey = "dev_stage", def = 1;
+  if (devMode) {                                   // dev 서버: 테스트용 1..12
+    max = 12; labelKey = "dev_stage";
+    try { def = parseInt(localStorage.getItem("galspanic:stage") || "1", 10) || 1; } catch {}
+  } else if (currentUser && myBestStage >= 1) {    // 로그인: 1..(최고 도달+1), 기본은 이어서(다음 스테이지)
+    max = Math.min(RESUME_CAP, myBestStage + 1); labelKey = "resume_stage"; def = max;
+  }
+  stagePickerMax = max;
+  // 선택기가 없을 때(프로덕션 게스트) — 이 기기 로컬 진행이 있으면 로그인 유도 힌트
+  const localBest = bestStageLocal();
+  if (max === 0 && !currentUser && localBest >= 1) {
+    resumeHintEl.innerHTML = t("resume_hint_html", localBest); resumeHintEl.hidden = false;
+  } else { resumeHintEl.hidden = true; }
+  if (max <= 0) { devStage.hidden = true; return; }
+  const keep = parseInt(stageSelect.value, 10) || 0;   // 언어 전환 등으로 다시 그릴 때 선택 유지
+  stageSelect.innerHTML = "";
+  for (let i = 1; i <= max; i++) { const o = document.createElement("option"); o.value = String(i); o.textContent = t("stage_n", i); stageSelect.appendChild(o); }
+  stageSelect.value = String(Math.min(max, Math.max(1, keep || def)));
+  stagePickLabel.setAttribute("data-i18n", labelKey);
+  stagePickLabel.textContent = t(labelKey);
+  devStage.hidden = false;
+}
+
 (async () => {
   try {
     const cfg = await fetch(`${HTTP_URL}/config`).then((r) => r.json());
     imageCount = cfg?.imageCount || 0; updateGalleryCount();
-    if (!cfg?.dev) return;
-    devMode = true;
-    const MAX_STAGE = 12;   // 선택 가능한 최대 스테이지 (포탑은 4스테이지+ 등장)
-    for (let i = 1; i <= MAX_STAGE; i++) {
-      const o = document.createElement("option");
-      o.value = String(i); o.textContent = t("stage_n", i);
-      stageSelect.appendChild(o);
-    }
-    let saved = 1;
-    try { saved = Math.min(MAX_STAGE, Math.max(1, parseInt(localStorage.getItem("galspanic:stage") || "1", 10) || 1)); } catch {}
-    stageSelect.value = String(saved);
-    stageSelect.addEventListener("keydown", (e) => e.stopPropagation());   // 방향키가 게임 입력으로 새지 않게
-    devStage.hidden = false;
-  } catch { /* dev 아님/서버 미응답 → 선택 UI 숨긴 채 진행 */ }
+    devMode = !!cfg?.dev;
+  } catch { /* 서버 미응답 → devMode=false 로 진행 */ }
+  refreshStagePicker();
 })();
 
 // 게임 진입: mode = "quick"(빠른 참가) | "create"(방 만들기) | "join"(코드로 참가).
@@ -1586,9 +1663,9 @@ async function enterGame(mode) {
   initAudio();   // 사용자 클릭 제스처로 오디오 활성화 (브라우저 정책)
   const name = accountName ? accountName.slice(0, 12) : "Guest";   // 로그인=계정 이름, 비로그인=Guest
   let level;
-  if (devMode) {
+  if (stagePickerMax > 0) {   // dev 선택기 또는 로그인 이어하기 선택기
     level = parseInt(stageSelect.value, 10) || 1;
-    try { localStorage.setItem("galspanic:stage", String(level)); } catch {}
+    if (devMode) { try { localStorage.setItem("galspanic:stage", String(level)); } catch {} }
   }
   const code = (codeInput.value || "").trim();
   if (mode === "join" && !code) { startErr.textContent = t("err_need_code"); return; }
@@ -1728,6 +1805,7 @@ function updateOverlays() {
     }
   }
   syncGuestNudge();   // 게스트면 결과화면(승리/게임오버)에서 로그인·회원가입 유도 카드 노출
+  syncStageBanner();  // 새 스테이지에 변주(모디파이어)가 있으면 시작 배너 1회
 }
 const gameoverEl = document.getElementById("gameover");
 const goNumEl = document.getElementById("goNum");
@@ -1763,6 +1841,27 @@ if (guestNudgeEl) {
   document.getElementById("gnUp").addEventListener("click", () => openLogin("up"));
   document.getElementById("gnIn").addEventListener("click", () => openLogin("in"));
   document.getElementById("gnLater").addEventListener("click", hideGuestNudge);
+}
+
+// ── 스테이지 모디파이어 배너 ─────────────────────────────────────
+// 새 스테이지가 변주(모디파이어)를 가지면 시작 시 상단에 잠깐 안내한다(레벨당 1회).
+const stageBannerEl = document.getElementById("stageBanner");
+let stageBannerKey = "";
+let stageBannerTimer = 0;
+function showStageBanner(mod) {
+  const m = STAGE_MOD_META[mod]; if (!m || !stageBannerEl) return;
+  stageBannerEl.innerHTML = `<div class="sbTag">${t("mod_tag")}</div>`
+    + `<div class="sbName" style="color:${m.col}">${m.ico} ${t("mod_" + mod + "_n")}</div>`
+    + `<div class="sbDesc">${t("mod_" + mod + "_d")}</div>`;
+  stageBannerEl.classList.add("show");
+  clearTimeout(stageBannerTimer);
+  stageBannerTimer = setTimeout(() => stageBannerEl.classList.remove("show"), 2800);
+}
+function hideStageBanner() { clearTimeout(stageBannerTimer); stageBannerEl?.classList.remove("show"); }
+function syncStageBanner() {
+  if (!state || state.phase !== "playing" || !state.stageMod) return;
+  const key = state.level + ":" + state.stageMod;
+  if (key !== stageBannerKey) { stageBannerKey = key; showStageBanner(state.stageMod); }
 }
 
 // ── 점수/최고기록 패널 ──────────────────────────────────────────
@@ -1803,7 +1902,7 @@ function renderScore(s, b) {
 function returnToTitle() {
   try { room?.leave(); } catch {}
   room = null; state = null; gameShown = false; lostSince = 0; lastLobbyKey = "";
-  bubbles.clear(); pmove.clear(); prevMarker.clear(); flashes.length = 0; warps.length = 0; particles.length = 0; revealPulses.length = 0;
+  bubbles.clear(); pmove.clear(); prevMarker.clear(); flashes.length = 0; warps.length = 0; teleFx.length = 0; particles.length = 0; revealPulses.length = 0;
   try { clearShatter(); } catch {}
   try { stopBgm(); } catch {}
   deathRings = []; deathVigT = 0; freezeUntil = 0;
@@ -1814,6 +1913,7 @@ function returnToTitle() {
   document.getElementById("gameover").classList.add("hidden"); hideCountdown3D();
   lastWonImageId = null;
   guestNudgeKey = null; hideGuestNudge();   // 결과화면 유도 카드 정리(다음 결과에서 다시 노출 가능)
+  stageBannerKey = ""; hideStageBanner();   // 스테이지 변주 배너 정리
   devBossBtn.classList.add("hidden"); devLaserBtn.classList.add("hidden"); devLoseBtn.classList.add("hidden"); devWinBtn.classList.add("hidden"); devClearBtn.classList.add("hidden");
   document.getElementById("touch")?.classList.add("hidden"); pressOrder.length = 0; resetTouch();   // 터치 컨트롤 숨김 + 상태 초기화
   document.body.classList.remove("ingame");   // 스크롤 잠금 해제 + (있다면) 제목 복원
@@ -1977,6 +2077,14 @@ const BOON_META = {
   iron:  { ico: "✝️", n: "boon_iron_n",   d: "boon_iron_d",   rar: "unique" },
   life:  { ico: "❤️", n: "boon_life_n",   d: "boon_life_d",   rar: "legendary" },
   guard: { ico: "🛡️", n: "boon_guard_n",  d: "boon_guard_d",  rar: "legendary" },
+};
+// 스테이지 모디파이어(서버 GalSim.STAGE_MODS 와 id 일치) → 아이콘/색. 이름·설명은 i18n(mod_<id>_n/_d).
+const STAGE_MOD_META = {
+  swarm:    { ico: "🐛", col: "#7cf07c" },
+  blitz:    { ico: "⚡", col: "#ff5db1" },
+  bossrush: { ico: "👹", col: "#ff6b6b" },
+  webbed:   { ico: "🕸️", col: "#c9d0f0" },
+  goldrush: { ico: "💰", col: "#ffd54a" },
 };
 // 등급별 색(흰/파랑/노랑/주황)과 카드 글로우. n 은 등급 이름 i18n 키.
 const RARITY = {
@@ -2299,6 +2407,7 @@ const revealPulses = [];   // 큰 점유 시 밝은 확산 링 {x,y,r,t0} — �
 
 // ── 보스 연출 상태 ──────────────────────────────────────────────────────────
 const warps = [];              // 블랙홀 연출 {x,y,t0,burst}, "warp" 브로드캐스트로 추가
+const teleFx = [];             // 화살촉 보스 순간이동 홀 {x,y,hole,t0} — "tele" 브로드캐스트로 추가
 let shakeT = 0;                // 화면 흔들림 남은 시간(초)
 let bossCountEnd = 0;          // 다음 보스 스폰 시각의 로컬 추정치(ms). 카운트다운을 부드럽게.
 const WARP_TELE_MS = 1800;     // 블랙홀 예고(회피 시간) — 서버 BOSS_WARP_SEC 와 일치
@@ -3070,8 +3179,16 @@ function render() {
       // 보스는 3D 메시(shatter3d 오버레이)로 그린다 — 위압적인 가시 구체. 3D 미지원이면 2D 로 폴백.
       if (isBoss) {
         const sp = gridToScreen(v.x, v.y);
+        // 이 보스가 지금 레이저(예고 포함)를 쏘는 중인지 — 빔 시작점이 보스 근처면 발사 중(십자 보스 회전 정지용)
+        let bossFiring = false;
+        if (state.beams && state.beams.length) {
+          for (let bi = 0; bi < state.beams.length; bi++) {
+            const bm = state.beams[bi], ddx = bm.x1 - v.x, ddy = bm.y1 - v.y;
+            if (ddx*ddx + ddy*ddy < 25) { bossFiring = true; break; }   // 5셀 이내
+          }
+        }
         let handled = false;
-        try { handled = updateBoss3D(e.id, sp.x, sp.y, R * camS * 2, e.enr | 0, KIND_COLOR[e.kind] || "#ff3b5c", e.shape, e.aim || 0); } catch {}
+        try { handled = updateBoss3D(e.id, sp.x, sp.y, R * camS * 2, e.enr | 0, KIND_COLOR[e.kind] || "#ff3b5c", e.shape, e.aim || 0, bossFiring); } catch {}
         if (handled) {
           if (e.sh) { ctx.save(); ctx.translate(v.x*cw, v.y*ch);   // 보호막 링만 2D 로 덧그림
             ctx.globalAlpha = 0.55 + 0.35 * Math.sin(spin * 3); ctx.strokeStyle = "#7dd3fc"; ctx.lineWidth = Math.max(1.5, R * 0.2);
@@ -3100,6 +3217,60 @@ function render() {
       ctx.fillStyle = "#e0fbff"; ctx.beginPath(); ctx.arc(x-R*0.28, y-R*0.28, R*0.4, 0, 7); ctx.fill();
       ctx.restore();
     });
+    // webbed 모디파이어: 날아오는 거미줄 발사체(착지하면 그 자리에서 크게 펼쳐진다) — 회전하는 웹 볼 + 낙하 꼬리
+    (state.webShots || []).forEach((s) => {
+      const x = s.x*cw, y = s.y*ch, R = cw*3.4;
+      ctx.save();
+      const tg = ctx.createLinearGradient(x, y - R*2.6, x, y);   // 위로 옅어지는 낙하 꼬리
+      tg.addColorStop(0, "rgba(210,222,255,0)"); tg.addColorStop(1, "rgba(210,222,255,0.42)");
+      ctx.strokeStyle = tg; ctx.lineWidth = cw*1.1;
+      ctx.beginPath(); ctx.moveTo(x, y - R*2.6); ctx.lineTo(x, y); ctx.stroke();
+      ctx.shadowColor = "rgba(200,214,255,0.95)"; ctx.shadowBlur = cw*3.5;   // 웹 볼 본체
+      ctx.fillStyle = "rgba(18,24,42,0.92)";
+      ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(220,230,255,0.92)"; ctx.lineWidth = Math.max(1, cw*0.45);
+      const spin = now/160 + x*0.1;
+      for (let k = 0; k < 8; k++) { const a = spin + k*Math.PI/4; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x+Math.cos(a)*R, y+Math.sin(a)*R); ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(x, y, R*0.55, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, R*0.85, 0, 7); ctx.stroke();
+      ctx.restore();
+    });
+    // 화살촉 보스 순간이동 홀: black=떠나는 자리(중심으로 수축) / white=도착 자리(바깥으로 확장)
+    for (let i = teleFx.length - 1; i >= 0; i--) {
+      const f = teleFx[i], age = now - f.t0, DUR = f.hole === "black" ? 1050 : 950;   // 천천히
+      if (age > DUR) { teleFx.splice(i, 1); continue; }
+      // 홀 크기를 보스 반경에 맞춰 크게 (보스를 감싸 빨아들이고/뱉는 느낌). r 은 셀 단위 보스 반경.
+      const k = age / DUR, x = (f.x+0.5)*cw, y = (f.y+0.5)*ch, Rmax = Math.max(cw*16, (f.r||10) * cw * 2.0);
+      const lw = (m) => Math.max(2, cw*m);   // 줌이 작아도 선이 안 사라지게 최소 두께 보장
+      ctx.save(); ctx.translate(x, y);
+      if (f.hole === "black") {                 // 빨려 들어감 — 큰 홀이 유지되며 보스가 중심으로 축소돼 빨려 들어간다
+        const rr = Rmax * Math.min(1, k/0.18);            // 빠르게 최대 크기로 열림
+        const al = Math.min(1, k/0.12, (1-k)/0.22);       // 페이드 인/아웃
+        const g = ctx.createRadialGradient(0,0,0, 0,0, rr);
+        g.addColorStop(0, `rgba(6,2,14,${0.98*al})`); g.addColorStop(0.5, `rgba(40,10,70,${0.9*al})`); g.addColorStop(0.82, `rgba(120,60,200,${0.6*al})`); g.addColorStop(1, "rgba(150,90,230,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0, rr, 0, 7); ctx.fill();
+        ctx.globalCompositeOperation = "lighter";
+        const rot = now/70;
+        ctx.strokeStyle = `rgba(190,130,255,${0.7*al})`; ctx.lineWidth = lw(1.2);   // 빨려드는 소용돌이 팔
+        for (let a=0;a<4;a++){ const a0=rot + a*1.571; ctx.beginPath(); ctx.arc(0,0, rr*0.62, a0, a0+1.5); ctx.stroke(); }
+        ctx.strokeStyle = `rgba(225,175,255,${0.95*al})`; ctx.lineWidth = lw(1.7);   // 밝은 강착 링
+        ctx.beginPath(); ctx.arc(0,0, rr*0.9, 0, 7); ctx.stroke();
+      } else {                                  // 튀어나옴 — 밝은 섬광 + 바깥으로 확장하는 링(보스가 커지며 나온다)
+        const rr = Rmax * (0.25 + k*0.85);
+        const al = Math.max(0, 1 - k*0.9);
+        ctx.globalCompositeOperation = "lighter";
+        const g = ctx.createRadialGradient(0,0,0, 0,0, rr*0.75);
+        g.addColorStop(0, `rgba(255,255,255,${0.98*al})`); g.addColorStop(0.4, `rgba(190,238,255,${0.75*al})`); g.addColorStop(1, "rgba(120,200,255,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0, rr*0.75, 0, 7); ctx.fill();
+        ctx.strokeStyle = `rgba(230,248,255,${0.95*al})`; ctx.lineWidth = lw(1.8*(1-k)+0.4);   // 확장 링
+        ctx.beginPath(); ctx.arc(0,0, rr, 0, 7); ctx.stroke();
+        const rays=12, rot=now/150;
+        ctx.strokeStyle = `rgba(210,240,255,${0.7*al})`; ctx.lineWidth = lw(0.9);
+        for (let a=0;a<rays;a++){ const ang=rot + a*0.5236; ctx.beginPath(); ctx.moveTo(Math.cos(ang)*rr*0.4, Math.sin(ang)*rr*0.4); ctx.lineTo(Math.cos(ang)*rr, Math.sin(ang)*rr); ctx.stroke(); }
+      }
+      ctx.restore();
+    }
     // players — every marker glides at constant velocity toward the latest server cell,
     // continuously tracking it for smooth motion. (Path prediction stays out: with a
     // server-owned trail it detaches the marker from its line on direction changes.)
@@ -3431,8 +3602,10 @@ function drawHud() {
       <div class="top"><span class="dot" style="color:${p.color};background:${p.color}"></span>${p.name}${me?t("me_suffix"):""}</div>
       <div class="meta"><span style="color:#ffd54a">⭐${score}</span><span>${pct}%</span><span>${traps}</span><span>${p.out?"OUT":"♥"+p.lives}</span></div>${stamBar}${boonsRow}</div>`;
   });
+  const smeta = state.stageMod && STAGE_MOD_META[state.stageMod];
+  const smodRow = smeta ? `<div class="smod" style="color:${smeta.col}">${smeta.ico} ${t("mod_" + state.stageMod + "_n")}</div>` : "";
   html += `<div class="chip"><div class="top">${t("hud_progress", state.level)}</div>
-    <div class="meta"><span>${ratio}%</span><span>${t("hud_goal", state.clearPct || 90)}</span></div></div>`;
+    <div class="meta"><span>${ratio}%</span><span>${t("hud_goal", state.clearPct || 90)}</span></div>${smodRow}</div>`;
   hud.innerHTML = html;
 
   // 좌측 포획 랭킹: 포획 점수(⭐) 내림차순, 동점이면 포획 수(🕸)로. 로비에선 숨김.

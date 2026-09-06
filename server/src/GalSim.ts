@@ -109,6 +109,16 @@ const ITEM_MAX_ON_MAP = 3;   // 동시에 존재 가능한 최대 아이템 수
 const WEB_SLOW = 2.0;      // 거미줄 위 이동 시간 배수(느려짐)
 const WEB_LIFE = 9;        // 거미줄 지속(초)
 const WEB_R = 6;           // 한 번에 까는 반경(셀)
+// webbed 모디파이어: 거미줄을 플레이어 근처로 "던져" 착지 지점에서 바깥으로 펼쳐지게 한다(크게).
+const WEBRAIN_R = 12;      // 펼쳐질 최대 반경(셀) — 기존(5~7)보다 크게
+const WEBRAIN_SPREAD = 22; // 착지 후 중심에서 바깥으로 퍼지는 속도(셀/초) → ~0.5초에 걸쳐 펼쳐짐
+const WEBRAIN_MIN = 2.2;   // 다음 투척까지 최소 간격(초)
+const WEBRAIN_MAX = 3.8;   // 최대 간격
+const WEBRAIN_NEAR_MIN = 3;  // 플레이어로부터 착지 거리(셀) 최소 — 바로 위가 아니라 "주변에" 떨어지게
+const WEBRAIN_NEAR_MAX = 10; // 최대(피할 여지를 준다)
+const WEBRAIN_FIRST = 2.2; // 스테이지 시작 후 첫 투척까지(초)
+const WEBSHOT_DROP = 30;   // 발사체가 착지 지점 위 몇 셀에서 떨어지기 시작하는지(쏘는/떨어지는 모습이 보이게)
+const WEBSHOT_DUR = 0.6;   // 발사체 비행(낙하) 시간(초) — 착지하면 그 자리에서 펼쳐진다
 // 레이저
 const BEAM_LEN = Math.hypot(GRID_W, GRID_H);   // 맵을 가로지르는 길이
 const LASER_W = (r: number) => Math.max(1.4, r * 0.35);   // 레이저 반폭: 보스 크기보다 훨씬 좁게(예고/판정/그림 일치)
@@ -121,6 +131,23 @@ const BOSS_GROW_MAX = 1.8;                     // 최대 크기 = 스폰 크기 
 const BOSS_SHRINK_HIT = 0.8;                   // 미사일 1발 명중 시 크기 배율(곱)
 const BOSS_SHRINK_MIN = 0.55;                  // 최소 크기 = 스폰 크기 × 0.55
 const isLaser = (name: string) => name === "laser_sweep" || name === "cross_laser";
+
+// 스테이지 모디파이어(로그라이트 변주): 스테이지마다 하나가 붙을 수 있다(레벨↑일수록 자주).
+// 효과는 resetRound(적 수·속도·거미줄·보스), clearTarget(목표 점유율), 룸의 점수 계산에 반영된다.
+//   swarm    군집   — 적 많고 느림
+//   blitz    속공   — 적 빠름 + 클리어 목표↓
+//   bossrush 보스러시 — 보스가 빨리·자주 등장
+//   webbed   거미줄 — 시작부터 맵 곳곳에 거미줄
+//   goldrush 노다지 — 아이템 자주 + 점수↑
+const STAGE_MODS = ["swarm", "blitz", "bossrush", "webbed", "goldrush"] as const;
+const STAGE_MOD_FROM = 3;       // 이 스테이지부터 변주가 붙기 시작(1~2는 깨끗하게)
+const STAGE_MOD_BASE = 0.25;    // STAGE_MOD_FROM 에서의 등장 확률
+const STAGE_MOD_STEP = 0.05;    // 레벨당 확률 증가
+const STAGE_MOD_MAX = 0.8;      // 등장 확률 상한
+const BLITZ_CLEAR_EASE = 0.08;  // 속공: 클리어 목표 점유율에서 뺄 값(빠른 대신 목표↓)
+// 화살촉 보스 순간이동(blink): 1단계=떠나는 자리에서 블랙홀로 빨려 사라짐, 2단계=도착 자리에서 화이트홀로 나타남.
+const BLINK_OUT = 0.95;         // 빨려 들어가는(축소) 단계 시간(초) — 천천히
+const BLINK_IN = 0.85;          // 튀어나오는(확대) 단계 시간(초) — 천천히
 
 type Behavior = "bounce" | "wander" | "hunt" | "turret";
 interface EnemyType {
@@ -190,7 +217,9 @@ export interface SimEnemy {
   gen?: number;          // splitter 세대(1이면 더 안 쪼개짐)
   abilT?: number;        // 능력 타이머(거미줄 배출/텔레포트/상태 전환 간격)
   shieldOn?: boolean;    // shielder: 현재 무적인지 (무적이면 포획 불가)
-  hidden?: boolean;      // phantom: 현재 은신(반투명)인지
+  hidden?: boolean;      // phantom: 현재 은신(반투명)인지. blink 전이 중에도 잠깐 사용(사라진 것처럼)
+  blinkX?: number;       // boss blink: 도착 예정 좌표(전이 1단계 동안 보관 → 2단계에 이동)
+  blinkY?: number;
 }
 
 export interface SimProjectile { x: number; y: number; vx: number; vy: number; life: number; r: number; homing?: boolean; }
@@ -216,6 +245,10 @@ export class GalSim {
   projectiles: SimProjectile[] = [];
   beams: SimBeam[] = [];               // 보스 레이저(예고/발사)
   private webTimers = new Map<number, number>();   // 거미줄 셀 → 남은 수명(초)
+  private webRainT = 0;                             // webbed: 다음 거미줄 투척까지 남은 시간(초)
+  private spreadingWebs: { x: number; y: number; r: number; grown: number }[] = [];  // 펼쳐지는 중인 거미줄
+  // 날아가는 거미줄 발사체(착지 전). 클라가 렌더 → 착지하면 spreadingWebs 로 전환돼 펼쳐진다.
+  webShots: { x: number; y: number; sx: number; sy: number; tx: number; ty: number; t: number }[] = [];
   webDirty = new Set<number>();        // 변경된 거미줄 셀 (룸이 동기화)
   captureEvents: CaptureEvent[] = [];   // drained by the room, broadcast to clients
   combo = 0;        // 연속 포획 콤보(포획/점유로 유지). 죽거나 시간초과 시 0.
@@ -229,11 +262,16 @@ export class GalSim {
   itemEvents: { x: number; y: number; kind: string; owner: number }[] = [];   // 획득 연출용 (룸이 drain)
   reviveEvents: { x: number; y: number; owner: number }[] = [];   // 동료 부활 연출용 (룸이 drain → "revive")
   warpEvents: BossEvent[] = [];         // 블랙홀 예고 시작 이벤트 (룸이 drain → "warp" 브로드캐스트)
+  // 화살촉 보스 순간이동 연출: 떠나는 자리(black)·나타나는 자리(white) + 보스 반경 r(홀 크기용)
+  teleEvents: { x: number; y: number; hole: string; r: number }[] = [];
   // 예고 중인 블랙홀들. 타이머가 끝나면 맵을 원형으로 지우고 플레이어를 죽인 뒤 보스를 생성한다.
   private pendingWarps: { x: number; y: number; type: BossType; t: number }[] = [];
   roundElapsed = 0;                     // 라운드 경과 시간(초)
   bossIn = -1;                          // 다음 보스까지 남은 시간(초). -1 = 더 없음 (클라 카운트다운용)
   private bossTimer = 0;                // 다음 보스까지 남은 시간(초)
+  stageMod = "";                        // 이번 스테이지 변주 id("" = 없음). resetRound 에서 굴림 → 룸이 클라에 전달.
+  private stageItemMul = 1;             // 노다지: 아이템 간격 배수(<1 = 더 자주)
+  private stageBossGapMul = 1;          // 보스 러시: 보스 간격 배수(<1 = 더 자주)
   private bossQueue: BossType[] = [];   // 이번 라운드에 아직 등장하지 않은 보스들
   private devBossIdx = 0;               // dev 즉시 소환 시 순환 인덱스
   level = 1;
@@ -256,7 +294,10 @@ export class GalSim {
   dailyBoss = false;   // 데일리 챌린지: 스테이지 시작부터 체력 있는 보스 1마리(미사일로 처치)
   bossDefeatEvents: { x: number; y: number; score: number }[] = [];   // 보스 처치 → 클라 대폭발/슬로우모 연출
   // 속공: 클리어에 필요한 점유율(하한 보장). 스폰/부활 무적: 불굴 버프만큼 늘린다.
-  get clearTarget() { return Math.max(BOON_QUICK_FLOOR, CLEAR_RATIO - this.mods.clearRatio); }
+  get clearTarget() {
+    const ease = this.stageMod === "blitz" ? BLITZ_CLEAR_EASE : 0;   // 속공: 대신 목표 점유율↓
+    return Math.max(BOON_QUICK_FLOOR, CLEAR_RATIO - this.mods.clearRatio - ease);
+  }
   private spawnInvuln() { return INVULN_SEC + this.mods.invuln; }
   spawnThresholds: number[] = [];
 
@@ -270,6 +311,15 @@ export class GalSim {
   trailDirty = new Set<number>();
 
   constructor(level = 1) { this.resetRound(level); }
+
+  // 스테이지 모디파이어 굴림: 초반은 없음, 레벨↑일수록 붙을 확률↑. this.rng(시드 기반) 사용 →
+  // 같은 방·같은 데일리는 항상 같은 변주가 나온다. resetRound 에서 rng 재시드 직후 호출한다.
+  private rollStageMod(level: number): string {
+    if (level < STAGE_MOD_FROM) return "";
+    const chance = Math.min(STAGE_MOD_MAX, STAGE_MOD_BASE + (level - STAGE_MOD_FROM) * STAGE_MOD_STEP);
+    if (this.rng() >= chance) return "";
+    return STAGE_MODS[Math.min(STAGE_MODS.length - 1, Math.floor(this.rng() * STAGE_MODS.length))];
+  }
 
   get ratio() { return this.claimedInterior / this.totalInterior; }
   get cellCount() { return N; }
@@ -288,6 +338,8 @@ export class GalSim {
     this.level = level;
     // re-seed deterministically from the game seed + level (before any this.rng() use)
     this.rng = mulberry32((this.gameSeed ^ Math.imul(level, 0x9E3779B1)) >>> 0);
+    this.stageMod = this.rollStageMod(level);   // 이번 스테이지 변주(시드 기반이라 코옵·데일리 일관)
+    this.stageItemMul = 1; this.stageBossGapMul = 1;
     this.over = null;
     this.claimedInterior = 0;
     this.projectiles = [];
@@ -297,12 +349,16 @@ export class GalSim {
     this.freezeT = this.mods.frost;    // 혹한: 스테이지 시작 시 적이 잠깐 멈춰 있는다(초반 여유)
     this.guardLeft = this.mods.guard; this.guardEvents = [];   // 수호: 스테이지마다 무효 횟수 리필
     this.warpEvents = [];
+    this.teleEvents = [];
     this.pendingWarps = [];
     this.beams = [];
     this.webTimers.clear();
+    this.spreadingWebs = []; this.webRainT = 0; this.webShots = [];
     // 보스 스케줄 초기화: 일정 시간 후 종류별로 한 마리씩 순차 등장 (순서는 라운드마다 랜덤)
     this.roundElapsed = 0;
-    this.bossTimer = BOSS_FIRST_SEC;
+    // 보스 러시: 첫 보스가 빨리 오고, 이후 간격도 짧아진다(stageBossGapMul).
+    if (this.stageMod === "bossrush") { this.bossTimer = 10; this.stageBossGapMul = 0.35; }
+    else this.bossTimer = BOSS_FIRST_SEC;
     this.bossQueue = this.shuffledBosses();
     for (let i = 0; i < N; i++) { this.setGrid(i, EMPTY); this.setTrail(i, 0); this.setWeb(i, 0); }
     for (let y = 0; y < ROWS; y++)
@@ -324,15 +380,24 @@ export class GalSim {
     }
 
     this.enemies = [];
-    this.enemySpeed = (18 + (level - 1) * 3.6) * this.mods.enemy;  // cells/s × 둔화 버프 배율
-    this.spawnThresholds = [0.20, 0.40, 0.60];
     const active = Math.max(1, this.players.length);
-    const count = 4 + active * 2 + (level - 1) * 2;   // more monsters to populate the larger map
+    // 난이도 곡선(완화): 선형·무제한 대신 sub-linear 로 완만히 상승 → 깊은 스테이지도 도달 가능
+    // (그래서 배경 219장을 더 많이 보게 된다). 급격한 변화는 스테이지 모디파이어가 담당한다.
+    const L = Math.max(0, level - 1);
+    let baseSpeed = 18 + 4.2 * Math.pow(L, 0.72);                 // 스테이지12 ≈ 41.5 (기존 선형은 57.6)
+    let baseCount = 4 + active * 2 + Math.min(24, Math.round(6 * Math.pow(L, 0.62)));   // 증가분 소프트캡(+24)
+    if (this.stageMod === "swarm") { baseCount = Math.round(baseCount * 1.5); baseSpeed *= 0.85; }  // 군집: 많고 느림
+    else if (this.stageMod === "blitz") { baseSpeed *= 1.28; }                                      // 속공: 빠름(+목표↓)
+    else if (this.stageMod === "goldrush") { this.stageItemMul = 0.5; }                             // 노다지: 아이템 자주
+    this.enemySpeed = baseSpeed * this.mods.enemy;   // cells/s × 둔화 버프 배율
+    this.spawnThresholds = [0.20, 0.40, 0.60];
+    const count = Math.max(1, baseCount);
     for (let i = 0; i < count; i++) {
       // spread across most of the interior; keep them off the just-revealed bright zone
       const [ex, ey] = this.randomEmptySpot();
       this.enemies.push(this.makeEnemy(ex, ey));
     }
+    if (this.stageMod === "webbed") this.webRainT = WEBRAIN_FIRST;   // 거미줄을 플레이어 근처로 던져 펼친다
     this.bossDefeatEvents = [];
     if (this.dailyBoss) {   // 데일리: 시작부터 체력 있는 보스 1마리 (미사일로 처치)
       const t = this.shuffledBosses()[0];
@@ -343,7 +408,7 @@ export class GalSim {
     }
     // 아이템은 라운드 내내 랜덤 간격으로 하나씩 등장한다. 시작 직후 첫 아이템까지 약간의 딜레이.
     // 행운 버프(itemRate<1)면 간격이 줄어 더 자주 나온다.
-    this.itemSpawnT = (2 + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) * this.mods.itemRate;
+    this.itemSpawnT = (2 + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) * this.mods.itemRate * this.stageItemMul;
   }
 
   // 맵 위 빈 셀에 아이템 하나를 놓는다(동시 존재 상한 이하일 때만). 점유하며 획득한다.
@@ -784,6 +849,12 @@ export class GalSim {
         }
         this.startSpecial(e, name);
       }
+    } else if (e.mode === "blink" && e.blinkX != null) {
+      // 순간이동 2단계: 도착 자리로 이동 + 화이트홀 → 보스가 아주 작게 시작해 점점 커지며 튀어나온다
+      e.x = e.blinkX; e.y = e.blinkY!; e.blinkX = undefined; e.blinkY = undefined;
+      this.teleEvents.push({ x: e.x, y: e.y, hole: "white", r: e.baseR ?? e.r });   // 도착 자리: 화이트홀
+      e.r = 0.4;   // 튀어나오기 직전엔 아주 작게
+      e.modeT = BLINK_IN;
     } else {
       this.endSpecial(e);
     }
@@ -809,9 +880,11 @@ export class GalSim {
       case "devour":
         e.behaviorSaved = e.behavior; e.behavior = "hunt"; e.speed = base * 2.0; e.rTarget = bigR; e.modeT = 4 + this.rng() * 2;
         this.renormVel(e); break;
-      case "blink": {   // 플레이어 근처 빈 곳으로 순간이동 (미니 블랙홀 연출)
-        const [nx, ny] = this.pickWarpSpot(); this.warpEvents.push({ x: nx, y: ny, kind: e.kind });
-        e.x = nx; e.y = ny; e.modeT = 0.15; break;
+      case "blink": {   // 순간이동 1단계: 떠나는 자리에 블랙홀 → 보스가 점점 작아지며 빨려 들어간다(도착은 2단계)
+        const [nx, ny] = this.pickWarpSpot();
+        this.teleEvents.push({ x: e.x, y: e.y, hole: "black", r: e.baseR ?? e.r });   // 떠나는 자리: 블랙홀
+        e.blinkX = nx; e.blinkY = ny;   // 도착 예정지(2단계에 이동)
+        e.vx = 0; e.vy = 0; e.modeT = BLINK_OUT; break;   // 그 자리에서 축소(runBlinkScale)
       }
       case "summon":   // 주변에 졸개 소환
         for (let k = 0; k < 4; k++) this.spawnEnemyNear(e.x, e.y);
@@ -846,8 +919,22 @@ export class GalSim {
     else this.renormVel(e);
   }
 
+  // 순간이동: 매 틱 보스 크기를 조절해 빨려 들어가고(축소) 튀어나오는(확대) 느낌을 준다.
+  private runBlinkScale(e: SimEnemy) {
+    const full = e.baseR ?? e.r;
+    if (e.blinkX != null) {   // 1단계: 블랙홀로 빨려 들어감 → 점점 작아짐
+      const p = Math.min(1, Math.max(0, 1 - (e.modeT ?? 0) / BLINK_OUT));
+      e.r = Math.max(0.4, full * (1 - p * 0.94));
+    } else {                  // 2단계: 화이트홀에서 튀어나옴 → 점점 커짐
+      const p = Math.min(1, Math.max(0, 1 - (e.modeT ?? 0) / BLINK_IN));
+      e.r = Math.max(0.4, full * (0.06 + p * 0.94));
+    }
+    e.rTarget = e.r;   // 크기 스무딩이 이 값을 되돌리지 않게
+  }
+
   // 활성 특수의 매 틱 효과 (연속 발사/까는 계열).
   private runBossSpecial(e: SimEnemy, dtSec: number) {
+    if (e.mode === "blink") { this.runBlinkScale(e); return; }   // 순간이동: 축소/확대(빨림/뱉음)
     e.subT = (e.subT ?? 0) - dtSec;
     if (e.subT > 0) return;
     const tgt = this.nearestTarget(e);
@@ -965,6 +1052,47 @@ export class GalSim {
     if (this.claimedInterior < 0) this.claimedInterior = 0;
     this.reduceClaimCredit(erased);
     if (erased) this.shatterEvents.push({ x: sx / erased, y: sy / erased, n: erased, kind: "laser" });   // 돌 파편 연출
+  }
+
+  // webbed 모디파이어: 살아있는 플레이어 한 명을 골라 그 "주변"(정확히 위가 아닌 오프셋) 지점으로
+  // 거미줄을 던진다. 착지 지점은 spreadingWebs 에 등록돼 매 틱 조금씩 커지며 펼쳐진다.
+  private launchWeb() {
+    const alive = this.players.filter((p) => !p.out);
+    if (!alive.length) return;
+    const p = alive[Math.floor(this.rng() * alive.length)]!;
+    const ang = this.rng() * Math.PI * 2;
+    const dist = WEBRAIN_NEAR_MIN + this.rng() * (WEBRAIN_NEAR_MAX - WEBRAIN_NEAR_MIN);
+    let tx = Math.round(p.x + Math.cos(ang) * dist);
+    let ty = Math.round(p.y + Math.sin(ang) * dist);
+    tx = Math.max(B, Math.min(COLS - B - 1, tx));
+    ty = Math.max(B, Math.min(ROWS - B - 1, ty));
+    const sy = Math.max(B, ty - WEBSHOT_DROP);   // 착지 지점 위에서 떨어지기 시작(쏘는/떨어지는 모습)
+    this.webShots.push({ x: tx, y: sy, sx: tx, sy, tx, ty, t: 0 });
+  }
+
+  // webbed: 주기적 투척 + 발사체 비행(낙하) + 착지한 거미줄이 중심에서 바깥으로 펼쳐지는(반경 성장) 처리.
+  private updateWebRain(dtSec: number) {
+    if (this.stageMod === "webbed") {
+      this.webRainT -= dtSec;
+      if (this.webRainT <= 0) {
+        this.webRainT = WEBRAIN_MIN + this.rng() * (WEBRAIN_MAX - WEBRAIN_MIN);
+        this.launchWeb();
+      }
+    }
+    for (let i = this.webShots.length - 1; i >= 0; i--) {   // 날아가는 발사체 → 착지하면 펼쳐지기 시작
+      const s = this.webShots[i]!;
+      s.t += dtSec;
+      const k = Math.min(1, s.t / WEBSHOT_DUR);
+      s.x = s.sx + (s.tx - s.sx) * k;
+      s.y = s.sy + (s.ty - s.sy) * (k * k);   // 낙하 가속(중력 느낌)
+      if (k >= 1) { this.spreadingWebs.push({ x: s.tx, y: s.ty, r: WEBRAIN_R, grown: 1 }); this.webShots.splice(i, 1); }
+    }
+    for (let i = this.spreadingWebs.length - 1; i >= 0; i--) {
+      const w = this.spreadingWebs[i]!;
+      w.grown += dtSec * WEBRAIN_SPREAD;
+      this.layWeb(w.x, w.y, Math.min(w.r, w.grown));   // 현재 반경까지 다시 깔면 = 바깥으로 펼쳐지는 연출
+      if (w.grown >= w.r) this.spreadingWebs.splice(i, 1);
+    }
   }
 
   // 거미줄 수명 감소/소멸.
@@ -1341,10 +1469,11 @@ export class GalSim {
     if (this.bossTimer <= 0) {
       if (this.bossQueue.length === 0) this.bossQueue = this.shuffledBosses();   // 4종 소진 시 재섞어 무한 순환
       this.spawnBossWave(this.bossQueue.shift()!);   // 블랙홀 예고를 건다 (4명이면 2개)
-      this.bossTimer = BOSS_INTERVAL_SEC;            // 이후 2분마다 반복
+      this.bossTimer = BOSS_INTERVAL_SEC * this.stageBossGapMul;   // 이후 반복(보스 러시면 짧게)
     }
     this.updatePendingWarps(dtSec);   // 예고가 끝난 블랙홀 → 맵 지우기 + 보스 등장
     this.updateBeams(dtSec);          // 보스 레이저 (회전/카브/킬)
+    this.updateWebRain(dtSec);        // webbed 모디파이어: 플레이어 근처로 거미줄 투척 + 펼쳐짐
     this.updateWeb(dtSec);            // 거미줄 수명
     // 다음 보스까지 남은 시간 — 보스는 계속 등장하므로 항상 카운트다운(클라가 ≤10s면 WARNING).
     this.bossIn = Math.max(0, this.bossTimer);
@@ -1396,7 +1525,7 @@ export class GalSim {
     this.itemSpawnT -= dtSec;
     if (this.itemSpawnT <= 0) {
       this.spawnOneItem();
-      this.itemSpawnT = (ITEM_SPAWN_MIN + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) * this.mods.itemRate;
+      this.itemSpawnT = (ITEM_SPAWN_MIN + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) * this.mods.itemRate * this.stageItemMul;
     }
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i]!;

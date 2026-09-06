@@ -700,7 +700,7 @@ const I18N = {
     resume_hint_html: "🔒 이 기기에서 <b>스테이지 {0}</b>까지 왔어요 · <b>로그인</b>하면 이어서 시작해요",
     skin_label: "마커 스킨", skin_lock_stage: "스테이지 {0} 도달 시 언락", skin_lock_daily: "챌린지 클리어 시 언락",
     btn_start: "게임 시작", btn_create: "방 만들기 (친구끼리)", ph_code: "방 코드로 참가", btn_join: "참가",
-    btn_daily: "🔥 오늘의 챌린지", btn_rank: "🏆 랭킹", daily_rank_title: "오늘의 랭킹",
+    btn_daily: "🔥 오늘의 챌린지", btn_daily_done: "🔥 오늘의 챌린지 · 완료됨", daily_done_today: "오늘의 챌린지는 이미 완료했어요 · 내일 다시!", btn_rank: "🏆 랭킹", daily_rank_title: "오늘의 랭킹",
     fold_friends: "친구와 플레이", fold_howto: "게임 방법",
     daily_empty: "아직 기록이 없어요 · 첫 도전자가 되어보세요!", daily_needlogin: "로그인하면 랭킹에 등록돼요.",
     btn_gallery: "📖 도감", btn_login: "🔑 로그인", btn_signup: "📝 회원가입", logout: "로그아웃",
@@ -791,7 +791,7 @@ const I18N = {
     resume_hint_html: "🔒 You reached <b>stage {0}</b> on this device · <b>log in</b> to resume",
     skin_label: "Marker skin", skin_lock_stage: "Unlocks at stage {0}", skin_lock_daily: "Unlocks by clearing the daily challenge",
     btn_start: "Start Game", btn_create: "Create Room (friends)", ph_code: "Join by room code", btn_join: "Join",
-    btn_daily: "🔥 Daily Challenge", btn_rank: "🏆 Ranking", daily_rank_title: "Today's Ranking",
+    btn_daily: "🔥 Daily Challenge", btn_daily_done: "🔥 Daily Challenge · Done", daily_done_today: "Today's challenge is done · come back tomorrow!", btn_rank: "🏆 Ranking", daily_rank_title: "Today's Ranking",
     fold_friends: "Play with friends", fold_howto: "How to play",
     daily_empty: "No scores yet · be the first!", daily_needlogin: "Log in to appear on the ranking.",
     btn_gallery: "📖 Collection", btn_login: "🔑 Log in", btn_signup: "📝 Sign up", logout: "Log out",
@@ -882,7 +882,7 @@ const I18N = {
     resume_hint_html: "🔒 この端末で<b>ステージ{0}</b>まで到達 · <b>ログイン</b>で続きから",
     skin_label: "マーカースキン", skin_lock_stage: "ステージ{0}到達で解放", skin_lock_daily: "デイリー攻略で解放",
     btn_start: "ゲーム開始", btn_create: "部屋を作る（友達と）", ph_code: "部屋コードで参加", btn_join: "参加",
-    btn_daily: "🔥 今日のチャレンジ", btn_rank: "🏆 ランキング", daily_rank_title: "今日のランキング",
+    btn_daily: "🔥 今日のチャレンジ", btn_daily_done: "🔥 今日のチャレンジ · 完了", daily_done_today: "本日のチャレンジは完了 · 明日また！", btn_rank: "🏆 ランキング", daily_rank_title: "今日のランキング",
     fold_friends: "友達とプレイ", fold_howto: "遊び方",
     daily_empty: "まだ記録がありません · 最初の挑戦者に！", daily_needlogin: "ログインするとランキングに登録されます。",
     btn_gallery: "📖 図鑑", btn_login: "🔑 ログイン", btn_signup: "📝 新規登録", logout: "ログアウト",
@@ -990,6 +990,7 @@ function applyI18n() {
   try { updateGalleryCount(); } catch {}                        // 도감 카운트/로그인 필요 문구
   try { refreshGuestNudge(); } catch {}                         // 게스트 유도 카드 문구(표시 중이면)
   try { refreshStagePicker(); } catch {}                        // 스테이지 선택기(옵션·라벨·게스트 힌트) 재현지화
+  try { updateDailyBtn(); } catch {}                            // 오늘의 챌린지 버튼(완료 상태 반영)
   // 갤러리가 열려 있으면 다시 그린다(진행 텍스트·로그인 안내)
   try { if (galleryEl && !galleryEl.classList.contains("hidden")) openGallery(); } catch {}
 }
@@ -1127,6 +1128,18 @@ let selectedSkin = "dot";
 try { const s = localStorage.getItem("galspanic:skin"); if (s && SKIN_BY_ID[s]) selectedSkin = s; } catch {}
 function bestStageLocal()   { try { return +(localStorage.getItem("galsBestStage") || 0) || 0; } catch { return 0; } }
 function dailyClearedLocal() { try { return localStorage.getItem("galspanic:dailyCleared") === "1"; } catch { return false; } }
+// 오늘의 챌린지: 하루 1회 · 얻은 버프는 그날 일반 플레이에 이월. 날짜 경계는 서버(daily.ts)와 같은 KST 자정.
+function kstDayKey() { try { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); } catch { return ""; } }
+function dailyDoneToday() { try { return localStorage.getItem("galspanic:dailyDoneDay") === kstDayKey(); } catch { return false; } }
+function markDailyDone() { try { localStorage.setItem("galspanic:dailyDoneDay", kstDayKey()); } catch {} }
+function saveDailyBoon(id) { try { localStorage.setItem("galspanic:dailyBoon", JSON.stringify({ id, day: kstDayKey() })); } catch {} }
+function getDailyBoonToday() { try { const o = JSON.parse(localStorage.getItem("galspanic:dailyBoon") || "null"); return (o && o.day === kstDayKey() && o.id) ? o.id : ""; } catch { return ""; } }
+function updateDailyBtn() {   // 오늘 이미 했으면 버튼을 "완료됨"으로 (클릭 시 랭킹만 보여줌)
+  const b = document.getElementById("dailyBtn"); if (!b) return;
+  const done = dailyDoneToday();
+  b.textContent = t(done ? "btn_daily_done" : "btn_daily");
+  b.classList.toggle("done", done);
+}
 function skinUnlocked(s) {
   const u = s.unlock;
   if (u.type === "free")  return true;
@@ -1200,6 +1213,7 @@ async function connect(name, level, mode = "quick", code = "") {
   // (dev 서버는 기존대로 joinOrCreate 로 그 레벨을 신뢰한다.)
   const resume = !devMode && mode === "quick" && (level | 0) > 1 && !!currentUser;
   if (resume) opts.resume = true;
+  if (mode !== "daily") { const db = getDailyBoonToday(); if (db) opts.dailyBoon = db; }   // 오늘의 데일리 버프 이월(일반 방)
   if (mode === "daily") room = await client.create("game", { ...opts, daily: true });       // 데일리 챌린지(솔로·날짜 시드)
   else if (mode === "create") room = await client.create("game", { ...opts, private: true });   // 비공개 방
   else if (mode === "join") room = await client.joinById(code, { ...opts });                 // 코드로 특정 방
@@ -1406,7 +1420,7 @@ async function openDailyBoard() {
     return `<div class="drow${me}"><span class="dpos">${i + 1}</span>`
          + `<span class="dname">${esc(r.name || "??")}</span>`
          + `<span class="dsc">${r.score | 0}</span>`
-         + `<span class="dst">${t("sh_stage")} ${r.stage | 0} · ${fmtRankTime(r.time_ms)}</span></div>`;
+         + `<span class="dst">${fmtRankTime(r.time_ms)}</span></div>`;   // 단일 스테이지라 스테이지 표시 없이 점수·시간만
   }).join("");
   dailyListEl.innerHTML = list + (currentUser ? "" : `<div class="dneedlogin">${t("daily_needlogin")}</div>`);
 }
@@ -1660,6 +1674,8 @@ function refreshStagePicker() {
 let gameShown = false;   // 게임 화면(캔버스)이 이미 드러났는지
 async function enterGame(mode) {
   if (startBtn.disabled) return;
+  // 오늘의 챌린지는 하루 1회. 이미 했으면 입장 대신 오늘의 랭킹을 보여준다.
+  if (mode === "daily" && dailyDoneToday()) { try { toast(t("daily_done_today")); } catch {} openDailyBoard(); return; }
   initAudio();   // 사용자 클릭 제스처로 오디오 활성화 (브라우저 정책)
   const name = accountName ? accountName.slice(0, 12) : "Guest";   // 로그인=계정 이름, 비로그인=Guest
   let level;
@@ -1720,6 +1736,7 @@ function updateOverlays() {
     if (!lobby.classList.contains("hidden")) lobby.classList.add("hidden");
     if (!gameShown) {
       gameShown = true;
+      if (state.daily) markDailyDone();                              // 오늘의 챌린지 입장 → 오늘 도전 1회 사용
       startBgm();                                                    // 인게임 배경음악 시작(음소거면 조용)
       if (!IS_TOUCH) chatPanel.classList.remove("hidden");           // 모바일에선 채팅 로그 숨김
       if (IS_TOUCH && touchEl) touchEl.classList.remove("hidden");   // 모바일 터치 컨트롤 노출
@@ -1922,6 +1939,7 @@ function returnToTitle() {
 
   startScreen.classList.remove("hidden");
   [startBtn, createBtn, joinBtn].forEach((b) => (b.disabled = false));
+  try { updateDailyBtn(); refreshStagePicker(); } catch {}   // 데일리 완료 상태 · 이어하기 선택기 갱신
   startErr.textContent = "";
   statusEl.textContent = "";
 }
@@ -2136,6 +2154,7 @@ function hideBoonPick() { boonPickEl.classList.add("hidden"); lastBoonKey = ""; 
 function pickBoon(id) {
   if (!room || pickSent || !boonOfferList.includes(id)) return;
   pickSent = true; lastBoonKey = "";   // 즉시 "대기중"으로 전환(다음 렌더에서 반영)
+  if (state && state.daily) saveDailyBoon(id);   // 데일리 시작 버프 → 오늘 일반 플레이에 이월(그날 하루만)
   room.send("boon", { id });           // 서버가 이 버프를 적용(코옵은 전원 선택/시간초과 후 스테이지 시작)
 }
 
@@ -3621,7 +3640,8 @@ function drawHud() {
   }).join("");
   rankEl.classList.toggle("hidden", state.phase === "lobby" || ranked.length === 0);
   // 클리어 화면에 버프 선택창이 떠 있으면 "다음" 버튼 대신 버프 카드로 진행하므로 버튼은 숨긴다.
-  restartBtn.style.display = (state.phase === "lost" || (state.phase === "won" && !state.boonOffers)) ? "" : "none";
+  // 데일리는 단일 스테이지(다음/이어하기 없음) → 결과 화면에선 "다음/재시작" 숨기고 메인으로/공유만.
+  restartBtn.style.display = (!state.daily && (state.phase === "lost" || (state.phase === "won" && !state.boonOffers))) ? "" : "none";
   shareBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
   titleBtn.style.display = (state.phase === "won" || state.phase === "lost") ? "" : "none";
   // 클리어(승리) 화면에서는 채팅 입력창을 숨긴다

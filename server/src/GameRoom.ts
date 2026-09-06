@@ -31,14 +31,18 @@ export class GameRoom extends Room<GameState> {
   private imageSeq: string[] = [];   // 스테이지별 배경 이미지 순서(랜덤 셔플, 한 바퀴 동안 비중복)
   private enemySeq = 0;              // 적 스폰 id 카운터(라운드 넘어가도 재사용 안 함 → 전역 유일)
   private userIds = new Map<string, string>();   // sessionId → Supabase user id (토큰 검증됨). 도감 기록용.
-  private isDaily = false;    // 데일리 챌린지 방(솔로, 날짜 시드, 이어하기 없음, 랭킹 제출)
+  private isDaily = false;    // 데일리 챌린지 방(솔로, 날짜 시드, 이어하기 없음, 단일 스테이지, 랭킹 제출)
   private dailyDay = "";      // 이 데일리 방의 날짜 키(KST "YYYY-MM-DD")
+  private dailyStartPick = false;  // 데일리: 단일 스테이지 시작 전 버프 1개를 고르는 중
+  private carriedBoon = "";        // 오늘의 데일리에서 얻어 이 일반 런에 이월 적용할 버프(그날 하루만)
   private scoreMult = 1;      // 로그라이트 "점수" 버프 누적 배수
   private bonusLives = 0;     // 로그라이트 "생명" 버프 누적(매 스테이지 기본 목숨에 가산)
   private boonStacks: Record<string, number> = {};   // 적용된 버프 id → 스택 수(클라 표시용)
 
-  async onCreate(options: { level?: number; private?: boolean; daily?: boolean; token?: string; resume?: boolean } = {}) {
+  async onCreate(options: { level?: number; private?: boolean; daily?: boolean; token?: string; resume?: boolean; dailyBoon?: string } = {}) {
     this.isDaily = !!options.daily;
+    // 일반 방: 오늘의 데일리에서 얻은 버프(클라가 전달)를 이 런에 이월 적용한다(유효한 버프 id만).
+    this.carriedBoon = (!this.isDaily && typeof options.dailyBoon === "string" && (BOON_IDS as readonly string[]).includes(options.dailyBoon)) ? options.dailyBoon : "";
     // 시작 레벨 결정:
     //   데일리 → 항상 1
     //   dev 서버 → 방을 만든 클라가 고른 스테이지(테스트용)
@@ -103,7 +107,8 @@ export class GameRoom extends Room<GameState> {
       // can admire the picture as long as they like). On a loss, Enter restarts: prod from
       // level 1, dev from the room's chosen start level so testing stays put.
       // 클리어 화면: 버프를 아직 안 골랐으면(=선택창이 떠 있으면) restart 로는 진행하지 않는다.
-      if (this.state.phase === "won") this.beginStagePick();   // 클리어 → 다음 스테이지 시작(버프 선택) 화면
+      // 일반: 클리어 → 다음 스테이지(버프 선택). 데일리는 단일 스테이지라 진행 없음(완료 → 메인으로).
+      if (this.state.phase === "won" && !this.isDaily) this.beginStagePick();
       // 이어하기(현재 스테이지 재도전). 데일리는 공정성을 위해 이어하기 없음(1회 시도).
       // 이어하기(현재 스테이지 재도전)는 MAX_CONTINUES 회까지. 초과하면 처음 스테이지부터 새 런.
       else if (this.state.phase === "lost" && !this.isDaily) {
@@ -234,8 +239,15 @@ export class GameRoom extends Room<GameState> {
     this.runScore = 0; this.continues = 0; this.state.continues = 0;   // 새 런 시작 → 누적 점수·이어하기 초기화
     this.scoreMult = 1; this.bonusLives = 0; this.boonStacks = {}; this.sim.mods = freshMods();  // 버프 초기화
     this.state.boons = ""; this.state.boonOffers = "";
-    this.startRound(this.startLevel);   // phase 를 "playing" 으로 전환
     this.lock();                        // 이후 새 플레이어 입장 차단
+    if (this.isDaily) {
+      // 데일리: 단일 스테이지 전에 버프 1개를 고른다(그 버프는 오늘 일반 플레이에도 이월 적용됨).
+      this.dailyStartPick = true;
+      this.beginStagePick();            // phase="pick" + 3택 (솔로라 타이머 없음)
+      return;
+    }
+    if (this.carriedBoon) this.applyBoon(this.carriedBoon);   // 오늘의 데일리 버프 이월 적용(HUD에도 표시)
+    this.startRound(this.startLevel);   // phase 를 "playing" 으로 전환
   }
 
   // 버프 후보 N개를 등급 가중치대로(비중복) 뽑아 콤마 문자열로 반환. 흔한 건 자주, 전설은 드물게(BOON_WEIGHT).
@@ -265,7 +277,8 @@ export class GameRoom extends Room<GameState> {
       if (!p.boonPicked && p.boonOffers) { this.applyBoon(p.boonOffers.split(",")[0]); p.boonPicked = 1; p.boonOffers = ""; }
     });
     this.state.pickEndsIn = -1; this.pickEndsAt = 0;
-    this.startRound(this.sim.level + 1);   // 모든 선택이 적용된 채 다음 스테이지 생성 → phase="playing"
+    if (this.dailyStartPick) { this.dailyStartPick = false; this.startRound(1); }   // 데일리: 단일 스테이지(레벨1) 시작
+    else this.startRound(this.sim.level + 1);   // 일반: 선택 적용된 채 다음 스테이지 생성 → phase="playing"
   }
 
   // 아직 선택 안 한(후보가 남은) 플레이어가 없으면 true.
@@ -312,6 +325,7 @@ export class GameRoom extends Room<GameState> {
     this.scoreMult = 1; this.bonusLives = 0; this.boonStacks = {};
     this.sim.mods = freshMods();
     this.state.boons = ""; this.state.boonOffers = "";
+    if (this.carriedBoon) this.applyBoon(this.carriedBoon);   // 오늘의 데일리 버프는 새 런에도 유지
     this.startRound(this.startLevel);
   }
 

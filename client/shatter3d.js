@@ -160,16 +160,17 @@ export function spawnReveal(sx, sy, n, cellPx) {
   overlay.style.display = "block";
   const px = cellPx > 0 ? cellPx : 3.2;
   const count = Math.max(6, Math.min(26, Math.round(6 + n * 0.22)));
-  const spread = Math.min(150, Math.sqrt(Math.max(1, n)) * px * 0.55);   // 점유 영역 크기만큼 흩뿌림
+  const reach = Math.min(150, Math.sqrt(Math.max(1, n)) * px * 0.55);   // 점유 영역 크기 → 바깥으로 퍼질 거리
   for (let i = 0; i < count; i++) {
     const c = getChunk(); if (!c) break;
     const scl = px * (0.5 + Math.random() * 1.0);
     c.mesh.scale.setScalar(Math.max(2, scl));
-    c.mesh.position.set(sx + (Math.random() - 0.5) * 2 * spread, sy + (Math.random() - 0.5) * 2 * spread, (Math.random() - 0.5) * 40);
+    // 차지한 영역의 "중앙"에서 시작해 바깥으로 터진다(중심에서 파편이 방사).
+    c.mesh.position.set(sx + (Math.random() - 0.5) * px, sy + (Math.random() - 0.5) * px, (Math.random() - 0.5) * 10);
     c.mesh.rotation.set(Math.random() * 6.28, Math.random() * 6.28, Math.random() * 6.28);
-    const ang = Math.random() * 6.283, sp = 60 + Math.random() * 160;
-    c.vx = Math.cos(ang) * sp;
-    c.vy = -Math.abs(Math.sin(ang) * sp) - (140 + Math.random() * 220);   // 대체로 위로 튄다(껍질이 벗겨지듯)
+    const ang = Math.random() * 6.283, out = 70 + reach * (1.0 + Math.random() * 1.4);   // 방사 속도(영역 크기 비례)
+    c.vx = Math.cos(ang) * out;
+    c.vy = Math.sin(ang) * out * 0.5 - (150 + Math.random() * 220);   // 방사 + 위로(껍질이 중앙에서 벗겨져 솟는 느낌)
     c.vz = (Math.random() - 0.5) * 100;
     c.ax = (Math.random() - 0.5) * 20; c.ay = (Math.random() - 0.5) * 20; c.az = (Math.random() - 0.5) * 20;
     c.life = 0.5 + Math.random() * 0.45; c.ttl = c.life;
@@ -394,13 +395,18 @@ export function renderShatter(dt) {
       sp.rotation.z = b.aim; sp.rotation.x = Math.sin(b.t * 7) * 0.12;
       const lunge = Math.max(0, Math.sin(b.t * 2.2));
       ox = Math.cos(b.aim) * lunge * sz * 0.55; oy = Math.sin(b.aim) * lunge * sz * 0.55;
-    } else {                                      // boss_cross: 90°씩 끊어 도는 계단 회전(느리게) + 팔 맥동
-      if (b.crossPhase == null) b.crossPhase = 0;
-      // 레이저 발사(예고 포함) 중엔 회전을 멈춘다. 평소엔 천천히 진행(예전 0.9 → 0.4). 회전 뒤 오래 대기.
-      if (!b.firing) b.crossPhase += dt * (0.4 + fast * 0.5);
-      const seg = Math.floor(b.crossPhase), frac = b.crossPhase - seg;
-      const e = frac < 0.4 ? frac / 0.4 : 1, es = e * e * (3 - 2 * e);   // 앞 40%에만 회전, 뒤 60% 대기(기계적)
-      sp.rotation.z = (seg + es) * (Math.PI / 2);
+    } else {                                      // boss_cross: 90°씩 끊어 도는 계단 회전(좌우 랜덤, 느리게) · 발사 중 정지
+      if (b.crossRot == null) { b.crossRot = 0; b.crossTarget = 0; b.crossWait = 0.6; }
+      if (!b.firing) {
+        b.crossWait -= dt;
+        if (b.crossWait <= 0 && Math.abs(b.crossTarget - b.crossRot) < 0.01) {
+          b.crossTarget += (Math.random() < 0.5 ? 1 : -1) * (Math.PI / 2);   // 다음 스텝: 좌/우 랜덤 90°
+          b.crossWait = 1.4 + Math.random() * 1.2;                            // 스텝 사이 대기(자주 안 돎)
+        }
+        const d = b.crossTarget - b.crossRot;                                 // 목표까지 스텝 회전(부드럽게)
+        b.crossRot += Math.sign(d) * Math.min(Math.abs(d), dt * (3.0 + fast * 1.5));
+      }
+      sp.rotation.z = b.crossRot;
       const ap = 1 + 0.11 * Math.sin(b.t * 3.4); sp.scale.set(ap, ap, 1);
     }
     b.group.position.set(b.baseX + ox, b.baseY + oy, 0);

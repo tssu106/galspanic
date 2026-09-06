@@ -105,6 +105,9 @@ const ITEM_BLINK_SEC = 2.2;  // 소멸 직전 깜빡이기 시작하는 남은 �
 const ITEM_SPAWN_MIN = 6;    // 다음 아이템까지 최소 간격(초)
 const ITEM_SPAWN_MAX = 14;   // 다음 아이템까지 최대 간격(초)
 const ITEM_MAX_ON_MAP = 3;   // 동시에 존재 가능한 최대 아이템 수
+// 데일리(보스전): 미사일이 핵심 처치 수단이라 아이템을 더 자주·더 많이 뿌린다.
+const DAILY_ITEM_MAX = 6;    // 데일리 동시 아이템 상한(일반 3 → 6)
+const DAILY_ITEM_RATE = 0.45;// 데일리 아이템 간격 배수(<1 = 더 자주)
 // 거미줄(감속 필드)
 const WEB_SLOW = 2.0;      // 거미줄 위 이동 시간 배수(느려짐)
 const WEB_LIFE = 9;        // 거미줄 지속(초)
@@ -408,15 +411,15 @@ export class GalSim {
     }
     // 아이템은 라운드 내내 랜덤 간격으로 하나씩 등장한다. 시작 직후 첫 아이템까지 약간의 딜레이.
     // 행운 버프(itemRate<1)면 간격이 줄어 더 자주 나온다.
-    this.itemSpawnT = (2 + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) * this.mods.itemRate * this.stageItemMul;
+    this.itemSpawnT = (2 + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) * this.mods.itemRate * this.stageItemMul * (this.dailyBoss ? DAILY_ITEM_RATE : 1);
   }
 
   // 맵 위 빈 셀에 아이템 하나를 놓는다(동시 존재 상한 이하일 때만). 점유하며 획득한다.
   private spawnOneItem() {
-    if (this.items.length >= ITEM_MAX_ON_MAP) return;
+    if (this.items.length >= (this.dailyBoss ? DAILY_ITEM_MAX : ITEM_MAX_ON_MAP)) return;
     // 데일리(보스전)에서는 미사일이 훨씬 자주 나오게 한다(보스 처치 핵심 수단).
     const KINDS = this.dailyBoss
-      ? ["missile", "missile", "missile", "missile", "freeze", "life", "bomb", "shield", "sweep", "magnet"]
+      ? ["missile", "missile", "missile", "missile", "missile", "missile", "missile", "freeze", "life", "bomb", "shield", "sweep", "magnet"]
       : ["missile", "freeze", "life", "bomb", "shield", "sweep", "magnet"];
     const [ex, ey] = this.randomEmptySpot();
     const kind = KINDS[Math.floor(this.rng() * KINDS.length)];
@@ -1525,7 +1528,7 @@ export class GalSim {
     this.itemSpawnT -= dtSec;
     if (this.itemSpawnT <= 0) {
       this.spawnOneItem();
-      this.itemSpawnT = (ITEM_SPAWN_MIN + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) * this.mods.itemRate * this.stageItemMul;
+      this.itemSpawnT = (ITEM_SPAWN_MIN + this.rng() * (ITEM_SPAWN_MAX - ITEM_SPAWN_MIN)) * this.mods.itemRate * this.stageItemMul * (this.dailyBoss ? DAILY_ITEM_RATE : 1);
     }
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i]!;
